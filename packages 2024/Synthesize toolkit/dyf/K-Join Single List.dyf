@@ -1,0 +1,164 @@
+{
+  "Uuid": "7402532c-e088-43b0-9930-9ce164043a61",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Join",
+  "Description": "K-Join Single List",
+  "Name": "K-Join Single List",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\n# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nimport math\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\nfrom itertools import compress\nfrom itertools import combinations\n#The inputs to this node will be stored as a list in the IN variables.\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfmas = failuresAccessor.GetFailureMessages()\n\t\tif len(fmas) == 0:\n\t\t\tself.__warn = []\n\t\t\treturn FailureProcessingResult.Continue\n\t\telse:\n\t\t\tprobs = []\n\t\t\tisgood = True\n\t\t\tfor fma in fmas:\n\t\t\t\tsev = str(fma.GetSeverity())\n\t\t\t\tfails = list(fma.GetFailingElementIds())\n\t\t\t\tfelems = []\n\t\t\t\tfor f in fails:\n\t\t\t\t\tfelems.append(doc.GetElement(f))\n\t\t\t\tif str(sev) == \"Warning\": \n\t\t\t\t\tfailuresAccessor.ResolveFailure(fma)\n\t\t\t\t\tfailuresAccessor.DeleteWarning(fma)\n\t\t\t\telse:\n\t\t\t\t\tisgood = False\n\t\t\t\t\tprobs.append(felems) \n\t\t\t\tself.__warn = probs\n\t\tif isgood:\n\t\t\treturn FailureProcessingResult.ProceedWithCommit\n\t\telse:\n\t\t\treturn FailureProcessingResult.ProceedWithRollBack \n\n\t@property\n\tdef warn(self):\n\t\treturn(self.__warn)\n\ndef joinop(trans,notjoined,unjoinmode = False):\n\tif len(notjoined) > 0:\n\t\ttrans.Start()\n\t\twarnhandle = WarnSwallow()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\tcount = 0\n\t\tsubtran = SubTransaction(doc)\n\t\twhile (count < len(notjoined)):\n\t\t\ttry:\n\t\t\t\tsubtran.Start()\n\t\t\t\tif unjoinmode:\n\t\t\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\telse:\n\t\t\t\t\tJoinGeometryUtils.JoinGeometry(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\tif SwitchNewJoined == True:\n\t\t\t\t\tJoinGeometryUtils.SwitchJoinOrder(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\tcount = count + 1\n\t\t\t\tsubtran.Commit()\n\t\t\texcept:\n\t\t\t\tsubtran.RollBack()\n\t\t\t\tcount = count +1\n\t\ttrans.Commit()\n\t\treturn warnhandle.warn\n\telse:\n\t\treturn []\n\ndef removefrompairs(probs,notjoined):\n\tgoodnotjoined = notjoined\n\tif len(probs) != 0:\n\t\tgoodnotjoined = []\n\t\tnotjoinedids = []\n\t\tfor pair in notjoined:\n\t\t\ttmp = []\n\t\t\tfor p in pair:\n\t\t\t\ttmp.append(p.Id)\n\t\t\tnotjoinedids.append(tmp)\n\t\tproblems = flatten(probs)\n\t\tdangerpairs = []\n\t\tfor prob in problems:\n\t\t\tdangercount = 0\n\t\t\tfor eachpair in notjoinedids:\t\n\t\t\t\tif prob.Id in eachpair:\n\t\t\t\t\tdangerpairs.append(dangercount)\n\t\t\t\tdangercount += 1\n\t\tgoodcount = 0\n\t\tfor pair in notjoined:\n\t\t\tif goodcount not in dangerpairs:\n\t\t\t\tgoodnotjoined.append(pair)\n\t\t\tgoodcount += 1\n\treturn goodnotjoined\n\t\ndef masterjoinop(trans,notjoined,unjoinmode = False):\n\tprobs = joinop(trans,notjoined,unjoinmode)\n\tnotjoined = removefrompairs(probs,notjoined)\n\tprobs = joinop(trans,notjoined,unjoinmode)\n\tnotjoined = removefrompairs(probs,notjoined)\n\tif len(notjoined) != 0:\n\t\thosts = []\n\t\tprobs = flatten(probs)\n\t\tfor pro in probs:\n\t\t\ttry:\n\t\t\t\thost = pro.GetHostIds()\n\t\t\t\tfor h in host:\n\t\t\t\t\thosts.append(doc.GetElement(h))\n\t\t\texcept:\n\t\t\t\tpass\n\t\tnotjoined = removefrompairs(hosts,notjoined)\n\t\tprobs = joinop(trans,notjoined,unjoinmode)\n\t\tif len(probs) > 0:\n\t\t\tprobids = []\n\t\t\tprobs = flatten(probs)\n\t\t\tfor p in probs:\n\t\t\t\tprobids.append(str(p.Id))\n\t\t\tproblem = []\n\t\t\tproblem.append(\"ERROR: Problems Found With Following Ids:\")\n\t\t\tfor r in probids:\n\t\t\t\tproblem.append(r)\n\t\t\treturn popup(\"\\n\".join(problem))\n\telse:\n\t\treturn True\n\nclr.AddReference(\"System.Windows.Forms\")\nfrom System.Windows.Forms import Form,Label\ndef popup(text):\n\tform = Form()\n\tform.Width = 600\n\tform.Height = 600\n\tlabel = Label()\n\tlabel.Text = text\n\tlabel.Width = 600\n\tlabel.Height = 600\n\tlabel.Parent = form\t\n\tform.ShowDialog()\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nelements = UnwrapElement(IN[0])\nallwalls = True\nSwitchAlreadyJoined = False\nConsiderVolume = True\nJoinNew = True\nSwitchNewJoined = False\nCleanUpAllWarn = False\n\nbboxes = []\naccept = []\nfor e in elements:\n\ttry:\n\t\tbb = e.get_BoundingBox(None)\n\t\tbboxes.append(bb.ToProtoType())\n\t\taccept.append(True)\n\texcept:\n\t\taccept.append(False)\n\t\t\nacceptedelements = list(compress(elements, accept))\n\ntocombineraw = combinations(acceptedelements,2)\ntocombinebboxraw = combinations(bboxes,2)\n\ncomb = []\nfor i in list(tocombineraw): \n    comb.append(i)\n\ntocombine = comb\n\ncomb2 = []\nfor i in list(tocombinebboxraw): \n    comb2.append(i)\n\ntocombinebbox = comb2\n\nif allwalls == False:\n\tresult = []\n\tallresult = []\n\tfor eachlist in tocombine:\n\t\ttmplist = []\n\t\tfor each in eachlist:\n\t\t\tif str(each.ToString()) == \"Autodesk.Revit.DB.Wall\":\n\t\t\t\ttmplist.append(True)\n\t\t\telse:\n\t\t\t\ttmplist.append(False)\n\t\tresult.append(tmplist)\n\n\tfor each in result:\n\t\tif all(each) == True:\n\t\t\tallresult.append(False)\n\t\telse:\n\t\t\tallresult.append(True)\n\tfiltered = list(compress(tocombine, allresult))\n\tfilteredbbox = list(compress(tocombinebbox, allresult))\nelse:\n\tfiltered = tocombine\n\tfilteredbbox = tocombinebbox\n\nBBOX1 = [item[0] for item in filteredbbox]\nBBOX2 = [item[1] for item in filteredbbox]\n\nintersects = []\n\ncount = 0\nfor each in BBOX1:\n\tintersects.append(dg.BoundingBox.Intersects(each,BBOX2[count]))\n\tcount = count + 1\n\ncount = 0\nfor each in BBOX1:\n\teach.Dispose()\n\tBBOX2[count].Dispose()\n\tcount = count + 1\n\nintersectingelements = list(compress(filtered, intersects))\n\n##CHECK FOR JOINED ELEMENTS\nlistj = len(intersectingelements)\ncount = 0\narejoined = []\nwhile (count < listj):\n\t\tresult = JoinGeometryUtils.AreElementsJoined(doc, intersectingelements[count][0], intersectingelements[count][1])\n\t\tcount = count + 1\n\t\tarejoined.append(result)\n\njoined = list(compress(intersectingelements, arejoined))\nnotjoined =  list(compress(intersectingelements, [not i for i in arejoined]))\n\n##GET EXISTED WARNINGS\nif CleanUpAllWarn == False:\n\twlist = doc.GetWarnings()\n\twtext, welt, wsev = [], [], []\n\tfor i in wlist:\n\t\twtext.append(i.GetDescriptionText())\n\t\twelt.append(i.GetFailingElements())\n\t\twsev.append(i.GetSeverity())\n\n\texistedwarn = []\n\tcount = 0\n\tfor each in wtext:\n\t\tif each == \"Highlighted elements are joined but do not intersect.\":\n\t\t\texistedwarn.append(welt[count])\n\t\tcount = count + 1\n\nTransactionManager.Instance.ForceCloseTransaction()\ntGroup = TransactionGroup(doc, 'K-Join')\ntGroup.Start()\n\ntrans1 = Transaction(doc, 'Switch Already Joined Elements')\nif SwitchAlreadyJoined == True:\n\ttrans1.Start()\n\tcount = 0\n\twhile (count < len(joined)):\n\t\ttry:\n\t\t\tJoinGeometryUtils.SwitchJoinOrder(doc, joined[count][0], joined[count][1])\n\t\t\tcount = count + 1\n\t\texcept:\n\t\t\tcount = count +1\n\ttrans1.Commit()\n\n##VOLUMENTRIC SORT\nif ConsiderVolume == True:\n\tvolumes = []\n\tfor item in notjoined:\n\t\ttmplist = []\n\t\tfor each in item:\n\t\t\tanothertmp = []\n\t\t\tfor matid in each.GetMaterialIds(False):\n\t\t\t\tanothertmp.append(each.GetMaterialVolume(matid))\n\t\t\ttmplist.append(sum(anothertmp))\n\t\tvolumes.append(tmplist)\n\n\tsortedunjoined = []\n\n\tcount = 0\n\tfor eachtwo in volumes:\n\t\tsortedunjoined.append([x for _,x in sorted(zip(eachtwo,notjoined[count]))])\n\t\tcount = count + 1\n\tnotjoined = sortedunjoined\n\nif SwitchNewJoined == True:\n\ttrans2 = Transaction(doc, 'K-Join And Switch New Elements')\nelse:\n\ttrans2 = Transaction(doc, 'K-Join New Elements')\nif JoinNew == True:\n\tmasterjoinop(trans2,notjoined)\n\n##Get New Warnings\nwlist = doc.GetWarnings()\nwtext, welt, wsev = [], [], []\nfor i in wlist:\n\twtext.append(i.GetDescriptionText())\n\twelt.append(i.GetFailingElements())\n\twsev.append(i.GetSeverity())\n\nnewwarn = []\ncount = 0\nfor each in wtext:\n\tif each == \"Highlighted elements are joined but do not intersect.\":\n\t\tnewwarn.append(welt[count])\n\tcount = count + 1\n\nif CleanUpAllWarn == False:\n\tflattenexis = []\n\tfor eachlist in existedwarn:\n\t\tflattenexis.append(str(eachlist[0]) + str(eachlist[1]))\n\n\tflattennew = []\n\tfor eachlist in newwarn:\n\t\tflattennew.append(str(eachlist[0]) + str(eachlist[1]))\n\t\n\tonlynewwarns = set(flattennew) - set(flattenexis)\n\n\tind = []\n\tfor each in onlynewwarns:\n\t\tind.append(flattennew.index(each))\n\n\tresultwarn = []\n\tfor eachindex in ind:\n\t\tresultwarn.append(newwarn[eachindex])\nelse:\n\tresultwarn = newwarn\n\nwarntounjoin = []\nfor eachlist in resultwarn:\n\ttmplist = []\n\tfor each in eachlist:\n\t\ttmplist.append(doc.GetElement(each))\n\twarntounjoin.append(tmplist)\n\ntrans3 = Transaction(doc, 'Clean Up Non-Intersected Elements')\ntrans3.Start()\ncount = 0\nwhile (count < len(warntounjoin)):\n\ttry:\n\t\tJoinGeometryUtils.UnjoinGeometry(doc, warntounjoin[count][0], warntounjoin[count][1])\n\t\tcount = count + 1\n\texcept:\n\t\tcount = count +1\ntrans3.Commit()\ntGroup.Assimilate()\n\nOUT = \"DONE\"",
+      "VariableInputPorts": true,
+      "Id": "06c046923b624643adad56f34961c126",
+      "Inputs": [
+        {
+          "Id": "c389e8472dc74410a21dad6e10fd6fa4",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "36eb047d10714b6eb5e65b15d03d58ef",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "16e17228ef56435fa235a149c736754a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "817c82d2eb4440aab9819193481b65f8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROut",
+      "Id": "49ac1be058604840bbf2f6494bf93deb",
+      "Inputs": [
+        {
+          "Id": "85997a0551b34d9981aa490390552773",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "36eb047d10714b6eb5e65b15d03d58ef",
+      "End": "85997a0551b34d9981aa490390552773",
+      "Id": "dad0f9eb74a44d2f84d034373f8236da"
+    },
+    {
+      "Start": "817c82d2eb4440aab9819193481b65f8",
+      "End": "c389e8472dc74410a21dad6e10fd6fa4",
+      "Id": "8a9da16ad6f54a44a5367e9e4a37ef73"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "06c046923b624643adad56f34961c126",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "16e17228ef56435fa235a149c736754a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "49ac1be058604840bbf2f6494bf93deb",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 76.8,
+    "Y": 176.0,
+    "Zoom": 1.0
+  }
+}

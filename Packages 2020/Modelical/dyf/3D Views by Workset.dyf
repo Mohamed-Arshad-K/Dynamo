@@ -1,0 +1,104 @@
+<Workspace Version="1.1.0.2094" X="-285.604287133601" Y="-29.7739515130894" zoom="1.13758205229474" Name="3D Views by Workset" Description="Makes a new 3D view for each workset in the model, It leaves only one workset visible." ID="cd91fef5-f042-42a9-aedc-9497b5fe6408" Category="Modelical.Views">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Point" resolvedName="Autodesk.DesignScript.Geometry.Point" assemblyName="ProtoGeometry.dll" />
+    <ClassMap partialName="AxonometricView" resolvedName="Revit.Elements.Views.AxonometricView" assemblyName="RevitNodes.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <PythonNodeModels.PythonNode guid="37d771d5-5dd6-4cad-af67-952c01525fec" type="PythonNodeModels.PythonNode" nickname="Python Script" x="1440.59713789075" y="404.010962896122" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <Script>import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+#The inputs to this node will be stored as a list in the IN variables.
+bool = IN[0]
+output = "Set Toggle to TRUE to create new 3D views"
+
+if bool:
+
+	views = UnwrapElement(IN[1])
+	
+	doc = DocumentManager.Instance.CurrentDBDocument
+	collector = FilteredWorksetCollector(doc)
+	wsIds = collector.OfKind(WorksetKind.UserWorkset).ToWorksetIds()
+	
+	
+	countViews = 0
+	for v in views:
+		count = 0
+		v.Unlock()
+		for w in wsIds:
+			if countViews == count:
+				v.SetWorksetVisibility(w, WorksetVisibility.Visible)
+			else:
+				v.SetWorksetVisibility(w, WorksetVisibility.Hidden)
+			count += 1
+		countViews += 1
+	output = views
+#Assign your output to the OUT variable.
+OUT = output</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="52a8f9d6-fbca-4d5d-8258-770143aff83c" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="726.478585738164" y="496.433632769629" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="p1 = Point.ByCoordinates(-30, -30, 30);&#xA;p2 = Point.ByCoordinates(0, 0, 0);&#xA;axo = AxonometricView.ByEyePointAndTarget(p1, p2, worksetNames);" ShouldFocus="false" />
+    <PythonNodeModels.PythonNode guid="1537f4a6-c843-4fc3-87b0-bf6ff5ac1f56" type="PythonNodeModels.PythonNode" nickname="Python Script" x="565.058780633614" y="493.784804398295" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="1">
+      <Script>import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+doc = DocumentManager.Instance.CurrentDBDocument
+
+bool = IN[0]
+output = "Set Toggle to TRUE to create new 3D views"
+
+if bool == True:
+	wsNames = []
+
+	collector = FilteredWorksetCollector(doc)
+	wsList = collector.OfKind(WorksetKind.UserWorkset)
+	
+	for w in wsList:
+		wsNames.append(w.Name)
+
+OUT = wsNames</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="704a3dae-3b58-4950-88fd-95c935e0ba74" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="306.109949446215" y="404.274002012117" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Toggle : bool = false" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="52a8f9d6-fbca-4d5d-8258-770143aff83c" start_index="2" end="37d771d5-5dd6-4cad-af67-952c01525fec" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="1537f4a6-c843-4fc3-87b0-bf6ff5ac1f56" start_index="0" end="52a8f9d6-fbca-4d5d-8258-770143aff83c" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="704a3dae-3b58-4950-88fd-95c935e0ba74" start_index="0" end="1537f4a6-c843-4fc3-87b0-bf6ff5ac1f56" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="704a3dae-3b58-4950-88fd-95c935e0ba74" start_index="0" end="37d771d5-5dd6-4cad-af67-952c01525fec" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations>
+    <Dynamo.Graph.Annotations.AnnotationModel guid="803e71be-9c7b-4bea-9b2d-0bba83bdc196" annotationText="Applies only one workset visibility to each view" left="1430.59713789075" top="344.010962896122" width="142" height="154" fontSize="14" InitialTop="404.010962896122" InitialHeight="98" TextblockHeight="50" backgrouund="#FFC1D676">
+      <Models ModelGuid="37d771d5-5dd6-4cad-af67-952c01525fec" />
+    </Dynamo.Graph.Annotations.AnnotationModel>
+  </Annotations>
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

@@ -1,0 +1,264 @@
+{
+  "Uuid": "77968617-6a4f-45a0-9924-bdd310fc2fd1",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Lines",
+  "Description": "UV Management Intersects Function",
+  "Name": "UV Management Intersects Function",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\nmasses=UnwrapElement(IN[0])\nintersects = UnwrapElement(IN[1])\ntoggleonoff = IN[2]\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n# Create Empty List\nresult = []\n\nif toggleonoff == True:\n\tTransactionManager.Instance.EnsureInTransaction(doc)\n\n\tfamtypeitr = []\n\n\tfor each in masses:\n\t\tfamtypeitr.append(each.Id)\n \n\tfor item in famtypeitr:\n\t\ttypeID = item\n\t\tsrfObj = doc.GetElement(typeID)\n \n    \t#Get Geometry Elements\n\t\tgeOptions = app.Create.NewGeometryOptions()\n\t\tgeOptions.ComputeReferences = True\n\t\tgeoElem = srfObj.get_Geometry(geOptions)\n\t\ttmpmeasure = []\n\t\tfor es in geoElem:\n\t\t\ttmpmeasure.append(es)\n\t\tif len(tmpmeasure) == 1:\n\t\t\ttmplist = []\n\t\t\tfor e in geoElem:\n\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.GeometryInstance\":\n\t\t\t\t\ttmplist.append(e.GetSymbolGeometry())\n\t\t\tif len(tmplist) == 0:\n\t\t\t\ttmplist = geoElem\n\t\t\tflat = flatten(tmplist)\n\t\t\tgeoElem = flat\n\t\t#For each geometry object in geometry elements\n\t\tfor geObj in geoElem:\n\t\t\ttry:\n\t\t\t\tfor face in geObj.Faces:\n\t\t\t\t\tdivSrf = DividedSurface.GetDividedSurfaceForReference(doc,face.Reference)\n\t\t\t\t\tif divSrf == None:\n\t\t\t\t\t\tdivSrf = DividedSurface.Create(doc,face.Reference)\n\t\t\t\t\t\tresult.append(divSrf)\n\t\t\t\t\t\tsrfU = divSrf.USpacingRule\n\t\t\t\t\t\tsrfU.SetLayoutNone()\n\t\t\t\t\t\tsrfV = divSrf.VSpacingRule\n\t\t\t\t\t\tsrfV.SetLayoutNone()\n\t\t\t\t\telse:\n\t\t\t\t\t\tresult.append(divSrf)\n\t\t\texcept: pass\n\n\tdivsurf = result\n\n\tcount = 0\n\tfor each in divsurf:\n\t\ttry:\n\t\t\talreadyexisted = each.GetAllIntersectionElements()\n\t\t\teach.RemoveAllIntersectionElements()\n\t\t\tfor ii in alreadyexisted:\n\t\t\t\tdoc.Delete(ii)\n\t\texcept: pass\n\t\ttry:\n\t\t\tfor e in intersects[count]:\n\t\t\t\teach.AddIntersectionElement(e.Id)\n\t\texcept: pass\n\t\tcount = count + 1\n\n\t# End the Transaction with Current Document ()\n\tTransactionManager.Instance.TransactionTaskDone()\n\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "ac549136e12048c18411c0dff61b0be6",
+      "Inputs": [
+        {
+          "Id": "a664dbe08e2840a69b304eb046017420",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8908c986963e4d9aa66ed95f43d1bdb3",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ebf3ac7f9e65407194e8f780e7609f2e",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "edb74c9b2a1f4a1fb34222063dac40e0",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "0be56b95d0be4386a0368173ceace168",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ba64175d91f3429ba0758eed432ae123",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIntersects",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "10e5497a277f495fa22e3f3e48721365",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7f7ea640de834644a8152b04b9ca4ea8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDrawIntersectsToggle",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "573438f8067f423db73fe79f196048c6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "25c6d3574d0e44d389fa4df753b013e9",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARDividedSurface",
+      "Id": "334c2141b7d44a60bc2e1327c521f739",
+      "Inputs": [
+        {
+          "Id": "b440a8a8ed514015b3cd2dd7f7bf05a6",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "edb74c9b2a1f4a1fb34222063dac40e0",
+      "End": "b440a8a8ed514015b3cd2dd7f7bf05a6",
+      "Id": "87100b160d504510b7a06f5e2e3e6b57"
+    },
+    {
+      "Start": "ba64175d91f3429ba0758eed432ae123",
+      "End": "a664dbe08e2840a69b304eb046017420",
+      "Id": "735d054f469d4174bec98992fa13fcc9"
+    },
+    {
+      "Start": "7f7ea640de834644a8152b04b9ca4ea8",
+      "End": "8908c986963e4d9aa66ed95f43d1bdb3",
+      "Id": "8059c9a308c5474ab6acdb63402f9c37"
+    },
+    {
+      "Start": "25c6d3574d0e44d389fa4df753b013e9",
+      "End": "ebf3ac7f9e65407194e8f780e7609f2e",
+      "Id": "dbbb86da81b942dea95a13096fd7fd5d"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 95.402084350585938,
+      "EyeY": 39.240283966064453,
+      "EyeZ": -148.56991577148438,
+      "LookX": 17.499113082885742,
+      "LookY": -39.741485595703125,
+      "LookZ": 85.929252624511719,
+      "UpX": 0.04148874431848526,
+      "UpY": 0.978147566318512,
+      "UpZ": 0.20373010635375977
+    },
+    "NodeViews": [
+      {
+        "Id": "ac549136e12048c18411c0dff61b0be6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "0be56b95d0be4386a0368173ceace168",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "10e5497a277f495fa22e3f3e48721365",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 150.0
+      },
+      {
+        "Id": "573438f8067f423db73fe79f196048c6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -83.8536693826712,
+        "Y": 293.291706449386
+      },
+      {
+        "Id": "334c2141b7d44a60bc2e1327c521f739",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 93.456137709079,
+    "Y": 109.329386417892,
+    "Zoom": 0.803321593462598
+  }
+}

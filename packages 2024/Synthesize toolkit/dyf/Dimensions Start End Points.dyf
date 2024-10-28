@@ -1,0 +1,164 @@
+{
+  "Uuid": "60f4a456-ce2e-40de-a874-b9855653eb91",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Dimensions",
+  "Description": "Dimensions Start End Points",
+  "Name": "Dimensions Start End Points",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDimensions",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "3e44d95ead1b42ef9c0e34d550f7ff06",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "220bf86522734da7855bb7e886fa204d",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARStartEndPoints",
+      "Id": "5f9801566ae74389a3fe7a633565f5d5",
+      "Inputs": [
+        {
+          "Id": "0c36919f96994a229d040bfd6bceb06b",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef GetDimensionStartPoint(dim):\n\ttry:\n\t\tp = [dim.Origin]\n\t\tsegs = [None]\n\texcept:\n\t\tp = []\n\t\tsegs = []\n\t\tfor seg in dim.Segments:\n\t\t\tp.append(seg.Origin)\n\t\t\tsegs.append(seg)\n\treturn p,segs\n\ndef GetDimensionPoints(dim,pStart,seg):\n\tdynpoints = []\n\ttry:\n\t\tdimLine = dim.Curve\n\t\tpts = List[XYZ]()\n\t\tdimLine.MakeBound(0,1)\n\t\tpt1 = dimLine.GetEndPoint(0)\n\t\tpt2 = dimLine.GetEndPoint(1)\n\t\tdirection = pt2.Subtract(pt1).Normalize()\n\t\tif(dim.Segments.Size == 0):\n\t\t\tv = 0.5 * dim.Value * direction\n\t\t\tpts.Add( pStart - v )\n\t\t\tpts.Add( pStart + v )\n\t\telse:\n\t\t\tp = pStart\n\t\t\tv = seg.Value * direction\n\t\t\tif pts.Count == 0:\n\t\t\t\tp = pStart-0.5*v\n\t\t\t\tpts.Add(p)\n\t\t\tp  = p.Add(v)\n\t\t\tpts.Add(p)\n\t\tfor e in pts:\n\t\t\tdynpoints.append(e.ToPoint())\n\texcept:\n\t\tdynpoints.append(None)\n\treturn dynpoints\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ndim = UnwrapElement(IN[0])\ndim = tolist(dim)\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nresult = []\n\nfor d in dim:\n\tpStart = GetDimensionStartPoint(d)\n\tcounter = 0\n\ttmplist = []\n\tfor e in pStart[1]:\n\t\tpts = GetDimensionPoints(d,pStart[0][counter],pStart[1][counter])\n\t\ttry:\n\t\t\tprunedpts = dg.Point.PruneDuplicates(pts)\n\t\texcept:\n\t\t\tpass\n\t\tcounter += 1\n\t\tif len(prunedpts) > 1:\n\t\t\ttmplist.append(pts)\n\t\telse:\n\t\t\ttmplist.append(None)\n\tresult.append(tmplist)\n\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "07ce404fa4874143b5b1fa980d5ff3c4",
+      "Inputs": [
+        {
+          "Id": "43e31e8991624cc88b8b88a50ce6fa45",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "77a19edfa80a45b3ab511b21d1f8c578",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "220bf86522734da7855bb7e886fa204d",
+      "End": "43e31e8991624cc88b8b88a50ce6fa45",
+      "Id": "c2d3b3e953144f42988b9d718ccaec7d"
+    },
+    {
+      "Start": "77a19edfa80a45b3ab511b21d1f8c578",
+      "End": "0c36919f96994a229d040bfd6bceb06b",
+      "Id": "af2b8aacb2f04dbf8578807d15c479cd"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 87.425048828125,
+      "EyeY": 268.39901733398438,
+      "EyeZ": 14.586251258850098,
+      "LookX": 3.5610833168029785,
+      "LookY": -268.39901733398438,
+      "LookZ": -45.355438232421875,
+      "UpX": 0.072574503719806671,
+      "UpY": 0.37460657954216003,
+      "UpZ": -0.92433911561965942
+    },
+    "NodeViews": [
+      {
+        "Id": "3e44d95ead1b42ef9c0e34d550f7ff06",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "5f9801566ae74389a3fe7a633565f5d5",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "07ce404fa4874143b5b1fa980d5ff3c4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 231.248490210101,
+        "Y": 1.39854745095525
+      }
+    ],
+    "Annotations": [],
+    "X": 143.2,
+    "Y": 207.2,
+    "Zoom": 1.0
+  }
+}

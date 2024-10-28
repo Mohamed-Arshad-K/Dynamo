@@ -1,0 +1,719 @@
+{
+  "Uuid": "d7189bf9-77e6-4ebd-861a-bd276a0eb804",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Join",
+  "Description": "K-Join Two Categories",
+  "Name": "K-Join Two Categories",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Category": {
+        "Key": "Revit.Elements.Category",
+        "Value": "RevitNodes.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\n\n# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nimport math\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\nimport System\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\nfrom itertools import compress\nfrom itertools import combinations\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nclass WarnSwallowSimple(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfmas = failuresAccessor.GetFailureMessages()\n\t\tif len(fmas) == 0:\n\t\t\tself.__warn = []\n\t\t\treturn FailureProcessingResult.Continue\n\t\telse:\n\t\t\tprobs = []\n\t\t\tisgood = True\n\t\t\tfor fma in fmas:\n\t\t\t\tsev = str(fma.GetSeverity())\n\t\t\t\tfails = list(fma.GetFailingElementIds())\n\t\t\t\tfelems = []\n\t\t\t\tfor f in fails:\n\t\t\t\t\tfelems.append(doc.GetElement(f))\n\t\t\t\tif str(sev) == \"Warning\": \n\t\t\t\t\tfailuresAccessor.ResolveFailure(fma)\n\t\t\t\t\tfailuresAccessor.DeleteWarning(fma)\n\t\t\t\telse:\n\t\t\t\t\tisgood = False\n\t\t\t\t\tprobs.append(felems) \n\t\t\t\tself.__warn = probs\n\t\tif isgood:\n\t\t\treturn FailureProcessingResult.ProceedWithCommit\n\t\telse:\n\t\t\treturn FailureProcessingResult.ProceedWithRollBack \n\n\t@property\n\tdef warn(self):\n\t\treturn(self.__warn)\n\ndef getostcat(catname):\n\tbic = System.Enum.GetValues(BuiltInCategory) \n\tcats, bics = [], []\n\tfor i in bic:\n\t    try:\n\t        cat = Revit.Elements.Category.ById(ElementId(i).IntegerValue)\n\t        cats.append(cat)\n\t        bics.append(i)\n\t    except:\n\t        pass\n\t \n\tfor i, b in zip(cats, bics):\n\t    if catname == str(i): \n\t        ost = b\n\treturn ost\n\ndef joinop(trans,notjoined,unjoinmode = False,simple = False):\n\tif len(notjoined) > 0:\n\t\ttrans.Start()\n\t\tif simple:\n\t\t\twarnhandle = WarnSwallowSimple()\n\t\telse:\n\t\t\twarnhandle = WarnSwallow()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tif simple == False:\n\t\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\tcount = 0\n\t\tsubtran = SubTransaction(doc)\n\t\twhile (count < len(notjoined)):\n\t\t\ttry:\n\t\t\t\tsubtran.Start()\n\t\t\t\tif unjoinmode:\n\t\t\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\telse:\n\t\t\t\t\tif cutelems == False:\n\t\t\t\t\t\tJoinGeometryUtils.JoinGeometry(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\t\t\tif SwitchNewJoined == True:\n\t\t\t\t\t\t\tJoinGeometryUtils.SwitchJoinOrder(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\t\telse:\n\t\t\t\t\t\tif SwitchNewJoined == True:\n\t\t\t\t\t\t\tnotjoined[count].reverse()\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tInstanceVoidCutUtils.AddInstanceVoidCut(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\tSolidSolidCutUtils.AddCutBetweenSolids(doc, notjoined[count][0], notjoined[count][1], False)\n\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\tpass\n\t\t\t\tcount = count + 1\n\t\t\t\tsubtran.Commit()\n\t\t\texcept:\n\t\t\t\tsubtran.RollBack()\n\t\t\t\tcount = count +1\n\t\ttrans.Commit()\n\t\tif simple == False:\n\t\t\treturn warnhandle.warn\n\t\telse:\n\t\t\treturn []\n\telse:\n\t\treturn []\n\ndef removefrompairs(probs,notjoined):\n\tgoodnotjoined = notjoined\n\tif len(probs) != 0:\n\t\tgoodnotjoined = []\n\t\tnotjoinedids = []\n\t\tfor pair in notjoined:\n\t\t\ttmp = []\n\t\t\tfor p in pair:\n\t\t\t\ttmp.append(p.Id)\n\t\t\tnotjoinedids.append(tmp)\n\t\tproblems = flatten(probs)\n\t\tdangerpairs = []\n\t\tfor prob in problems:\n\t\t\tdangercount = 0\n\t\t\tfor eachpair in notjoinedids:\t\n\t\t\t\tif prob.Id in eachpair:\n\t\t\t\t\tdangerpairs.append(dangercount)\n\t\t\t\tdangercount += 1\n\t\tgoodcount = 0\n\t\tfor pair in notjoined:\n\t\t\tif goodcount not in dangerpairs:\n\t\t\t\tgoodnotjoined.append(pair)\n\t\t\tgoodcount += 1\n\treturn goodnotjoined\n\t\ndef masterjoinop(trans,notjoined,unjoinmode = False,simple = False):\n\tprobs = joinop(trans,notjoined,unjoinmode,simple)\n\tif simple == False:\n\t\tnotjoined = removefrompairs(probs,notjoined)\n\t\tprobs = joinop(trans,notjoined,unjoinmode)\n\t\tnotjoined = removefrompairs(probs,notjoined)\n\t\tif len(notjoined) != 0:\n\t\t\thosts = []\n\t\t\tprobs = flatten(probs)\n\t\t\tfor pro in probs:\n\t\t\t\ttry:\n\t\t\t\t\thost = pro.GetHostIds()\n\t\t\t\t\tfor h in host:\n\t\t\t\t\t\thosts.append(doc.GetElement(h))\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\tnotjoined = removefrompairs(hosts,notjoined)\n\t\t\tprobs = joinop(trans,notjoined,unjoinmode)\n\t\t\tif len(probs) > 0:\n\t\t\t\tprobids = []\n\t\t\t\tprobs = flatten(probs)\n\t\t\t\tfor p in probs:\n\t\t\t\t\tprobids.append(str(p.Id))\n\t\t\t\treturn probids\n\t\telse:\n\t\t\treturn True\n\telse:\n\t\treturn True\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nSwitchAlreadyJoined = UnwrapElement(IN[0])\nConsiderVolume = UnwrapElement(IN[1])\nJoinNew = UnwrapElement(IN[2])\nSwitchNewJoined = UnwrapElement(IN[3])\nCleanUpAllWarn = UnwrapElement(IN[4])\ncutelems = IN[5]\nunjoinmode = IN[6]\navoidwarnings = IN[7]\nallwalls = IN[8]\nActiveonly = IN[9]\ncategory1 = getostcat(IN[10].Name)\ncategory2 = getostcat(IN[11].Name)\n\nif avoidwarnings:\n\tsimple = False\nelse:\n\tsimple = True\n\nif unjoinmode:\n\tsimple = True\n\nelements = []\n\nif IN[10].Name != \"Generic Models\":\n\tif Activeonly == True:\n\t\telements.append(FilteredElementCollector(doc,doc.ActiveView.Id).OfCategory(category1).WhereElementIsNotElementType().ToElements())\n\telse:\n\t\telements.append(FilteredElementCollector(doc).OfCategory(category1).WhereElementIsNotElementType().ToElements())\nelse:\n\tif Activeonly == True:\n\t\telements.append([x for x in FilteredElementCollector(doc,doc.ActiveView.Id).OfCategory(category1).WhereElementIsNotElementType().ToElements() if hasattr(x, 'Symbol')])\n\telse:\n\t\telements.append([x for x in FilteredElementCollector(doc).OfCategory(category1).WhereElementIsNotElementType().ToElements() if hasattr(x, 'Symbol')])\n\t\n\nif IN[11].Name != \"Generic Models\":\n\tif Activeonly == True:\n\t\telements.append(FilteredElementCollector(doc,doc.ActiveView.Id).OfCategory(category2).WhereElementIsNotElementType().ToElements())\n\telse:\n\t\telements.append(FilteredElementCollector(doc).OfCategory(category2).WhereElementIsNotElementType().ToElements())\nelse:\n\tif Activeonly == True:\n\t\telements.append([x for x in FilteredElementCollector(doc,doc.ActiveView.Id).OfCategory(category2).WhereElementIsNotElementType().ToElements() if hasattr(x, 'Symbol')])\n\telse:\n\t\telements.append([x for x in FilteredElementCollector(doc).OfCategory(category2).WhereElementIsNotElementType().ToElements() if hasattr(x, 'Symbol')])\n\nelements = flatten(elements)\n\nbboxes = []\naccept = []\nfor e in elements:\n\ttry:\n\t\tbb = e.get_BoundingBox(None)\n\t\tbboxes.append(bb.ToProtoType())\n\t\taccept.append(True)\n\texcept:\n\t\taccept.append(False)\n\t\t\nacceptedelements = list(compress(elements, accept))\n\ntocombineraw = combinations(acceptedelements,2)\ntocombinebboxraw = combinations(bboxes,2)\n\t\ncomb = []\nfor i in list(tocombineraw): \n    comb.append(i)\t\ntocombine = comb\n\t\ncomb2 = []\nfor i in list(tocombinebboxraw): \n    comb2.append(i)\ntocombinebbox = comb2\n\nif allwalls == False:\n\tresult = []\n\tallresult = []\n\tfor eachlist in tocombine:\n\t\ttmplist = []\n\t\tfor each in eachlist:\n\t\t\tif str(each.ToString()) == \"Autodesk.Revit.DB.Wall\":\n\t\t\t\ttmplist.append(True)\n\t\t\telse:\n\t\t\t\ttmplist.append(False)\n\t\tresult.append(tmplist)\n\n\tfor each in result:\n\t\tif all(each) == True:\n\t\t\tallresult.append(False)\n\t\telse:\n\t\t\tallresult.append(True)\n\tfiltered = list(compress(tocombine, allresult))\n\tfilteredbbox = list(compress(tocombinebbox, allresult))\nelse:\n\tfiltered = tocombine\n\tfilteredbbox = tocombinebbox\n\nBBOX1 = [item[0] for item in filteredbbox]\nBBOX2 = [item[1] for item in filteredbbox]\n\nintersects = []\n\ncount = 0\nfor each in BBOX1:\n\tintersects.append(dg.BoundingBox.Intersects(each,BBOX2[count]))\n\tcount = count + 1\n\ncount = 0\nfor each in BBOX1:\n\teach.Dispose()\n\tBBOX2[count].Dispose()\n\tcount = count + 1\n\nintersectingelements = list(compress(filtered, intersects))\n\n##CHECK FOR JOINED ELEMENTS\nlistj = len(intersectingelements)\ncount = 0\narejoined = []\nwhile (count < listj):\n\t\tif unjoinmode == False:\n\t\t\tresult = JoinGeometryUtils.AreElementsJoined(doc, intersectingelements[count][0], intersectingelements[count][1])\n\t\telse:\n\t\t\tresult = False\n\t\tcount = count + 1\n\t\tarejoined.append(result)\n\njoined = list(compress(intersectingelements, arejoined))\nnotjoined =  list(compress(intersectingelements, [not i for i in arejoined]))\n\n##GET EXISTED WARNINGS\nif CleanUpAllWarn == False and cutelems == False:\n\twlist = doc.GetWarnings()\n\twtext, welt, wsev = [], [], []\n\tfor i in wlist:\n\t\twtext.append(i.GetDescriptionText())\n\t\twelt.append(i.GetFailingElements())\n\t\twsev.append(i.GetSeverity())\n\n\texistedwarn = []\n\tcount = 0\n\tfor each in wtext:\n\t\tif each == \"Highlighted elements are joined but do not intersect.\":\n\t\t\texistedwarn.append(welt[count])\n\t\tcount = count + 1\n\nTransactionManager.Instance.ForceCloseTransaction()\ntGroup = TransactionGroup(doc, 'K-Join')\ntGroup.Start()\n\ntrans1 = Transaction(doc, 'Switch Already Joined Elements')\nif SwitchAlreadyJoined == True and cutelems == False:\n\ttrans1.Start()\n\tcount = 0\n\twhile (count < len(joined)):\n\t\ttry:\n\t\t\tJoinGeometryUtils.SwitchJoinOrder(doc, joined[count][0], joined[count][1])\n\t\t\tcount = count + 1\n\t\texcept:\n\t\t\tcount = count +1\n\ttrans1.Commit()\n\n##VOLUMENTRIC SORT\nif ConsiderVolume == True:\n\tvolumes = []\n\tfor item in notjoined:\n\t\ttmplist = []\n\t\tfor each in item:\n\t\t\tanothertmp = []\n\t\t\tfor matid in each.GetMaterialIds(False):\n\t\t\t\tanothertmp.append(each.GetMaterialVolume(matid))\n\t\t\ttmplist.append(sum(anothertmp))\n\t\tvolumes.append(tmplist)\n\n\tsortedunjoined = []\n\n\tcount = 0\n\tfor eachtwo in volumes:\n\t\tsortedunjoined.append([x for _,x in sorted(zip(eachtwo,notjoined[count]))])\n\t\tcount = count + 1\n\tnotjoined = sortedunjoined\n\nif SwitchNewJoined == True and cutelems == False:\n\ttrans2 = Transaction(doc, 'K-Join And Switch New Elements')\nelse:\n\tif unjoinmode:\n\t\ttrans2 = Transaction(doc, 'K-Join Unjoin Elements')\n\telse:\n\t\tif cutelems == False:\n\t\t\ttrans2 = Transaction(doc, 'K-Join New Elements')\n\t\telse:\n\t\t\ttrans2 = Transaction(doc, 'K-Cut Elements')\nif JoinNew == True or cutelems == True or unjoinmode:\n\tmasterjoinop(trans2,notjoined,unjoinmode,simple)\n\nif cutelems == False:\n\t##Get New Warnings\n\twlist = doc.GetWarnings()\n\twtext, welt, wsev = [], [], []\n\tfor i in wlist:\n\t\twtext.append(i.GetDescriptionText())\n\t\twelt.append(i.GetFailingElements())\n\t\twsev.append(i.GetSeverity())\n\t\n\tnewwarn = []\n\tcount = 0\n\tfor each in wtext:\n\t\tif each == \"Highlighted elements are joined but do not intersect.\":\n\t\t\tnewwarn.append(welt[count])\n\t\tcount = count + 1\n\t\n\tif CleanUpAllWarn == False:\n\t\tflattenexis = []\n\t\tfor eachlist in existedwarn:\n\t\t\tflattenexis.append(str(eachlist[0]) + str(eachlist[1]))\n\t\n\t\tflattennew = []\n\t\tfor eachlist in newwarn:\n\t\t\tflattennew.append(str(eachlist[0]) + str(eachlist[1]))\n\t\t\n\t\tonlynewwarns = set(flattennew) - set(flattenexis)\n\t\n\t\tind = []\n\t\tfor each in onlynewwarns:\n\t\t\tind.append(flattennew.index(each))\n\t\n\t\tresultwarn = []\n\t\tfor eachindex in ind:\n\t\t\tresultwarn.append(newwarn[eachindex])\n\telse:\n\t\tresultwarn = newwarn\n\t\n\twarntounjoin = []\n\tfor eachlist in resultwarn:\n\t\ttmplist = []\n\t\tfor each in eachlist:\n\t\t\ttmplist.append(doc.GetElement(each))\n\t\twarntounjoin.append(tmplist)\n\t\n\ttrans3 = Transaction(doc, 'Clean Up Non-Intersected Elements')\n\ttrans3.Start()\n\tcount = 0\n\twhile (count < len(warntounjoin)):\n\t\ttry:\n\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, warntounjoin[count][0], warntounjoin[count][1])\n\t\t\tcount = count + 1\n\t\texcept:\n\t\t\tcount = count +1\n\ttrans3.Commit()\ntGroup.Assimilate()\n\nOUT = \"DONE\"",
+      "VariableInputPorts": true,
+      "Id": "466aca007b0c470ab3f9f1544deb61c0",
+      "Inputs": [
+        {
+          "Id": "96dc2707da2248a998c01f8e3265b688",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "cd57374bc4f8421282c8ebcfd5a31640",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1a1b42322a3d4cfbaf92887c3c30088c",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f4f57ced035943528ad7ec8817280101",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "907adc517422470284f34d65e6f46e6c",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "0eebae61ca37439995946a57f2bf6b64",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "18733abd3a2a4d5da2f5e8f6a68a74bb",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2dd07a5e9fd3475092c656c568679bbf",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b17ee933988045dba220075e828a0e30",
+          "Name": "IN[8]",
+          "Description": "Input #8",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f6ff51ed068a4a7b92adfa17f3d11a87",
+          "Name": "IN[9]",
+          "Description": "Input #9",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f854e9afc1f2496fb93dd805b88c988d",
+          "Name": "IN[10]",
+          "Description": "Input #10",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8a598ae1f977471595075b4fdb66fb09",
+          "Name": "IN[11]",
+          "Description": "Input #11",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0f5baf560fed47c39306c814f27e59ec",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSwitchJoinOrderofAlreadyJoinedElements",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "2d7a8f0aa73e43cf80ede004812c08dc",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b2f733009eb04134bf6cc8742f814be4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARConsiderVolumetricRuleForJoining",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "5c05bd7b00b34a0ca39a8a9293ba311a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7b270fcc318f444d81af01ac7fe11d31",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARStartJoiningNewElements",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "df6858c3b754401792a5b8e0609f2816",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "04d40334f0814dd8b38d91619d9dd583",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSwitchJoinOrderForNewelyJoinedElements",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "e6c73ff8c4c641f597bafa0197aa0c96",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3de3e31a5b064df1b1cca674061b77df",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCleanUpAllTheJoiningWarnings",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "5069ee2bbd6f45fabc68adc883829240",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "9dcb0a6f122344319f90622f3c39c4ce",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCutMode",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "d4a83f904acc4a5c9ebd258c39454559",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "826c5dea7ef7407dbd67927c1e137347",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARUnjoinMode",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "52d925ea498f4e7498018ffe3178a765",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "08fcf2d6ae434c81b33dae37f5d44025",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARAvoidWarnings",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "5ee8cc8a1b8948f1a17aa1e27cff751e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b29be09ed8ea49e69cc93568f0e4ccb3",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIncludeWallsWithWalls",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "ee1529cb827f4a8aafc84b6d618f82f2",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8821cae815ae42918f14369bbeafd8d2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARActiveViewOnly",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "d814b99ebb4c4a5e988539e3d6cc6086",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "772dc5c641294d89b1debf07aa496017",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCategory1",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "Revit.Elements.Category.ByName(\"OST_Walls\")",
+        "Description": ""
+      },
+      "Id": "4a1c258696b3467ca606dd69548d14d7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3f5c9a5a97f1475c8521265d9073aa10",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCategory2",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "Revit.Elements.Category.ByName(\"OST_Floors\")",
+        "Description": ""
+      },
+      "Id": "a43c17b63b1241ed94f133e505138628",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "313eb933eb3f49dfaaed6d0fd3c870f4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROut",
+      "Id": "de7edf77aeba45c4a84052223720994e",
+      "Inputs": [
+        {
+          "Id": "7765895b58eb4a578c23f099175be41a",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "0f5baf560fed47c39306c814f27e59ec",
+      "End": "7765895b58eb4a578c23f099175be41a",
+      "Id": "50032f3570364bfca7aa4b77230addf5"
+    },
+    {
+      "Start": "b2f733009eb04134bf6cc8742f814be4",
+      "End": "96dc2707da2248a998c01f8e3265b688",
+      "Id": "563b0e57dea4451284493f9758118695"
+    },
+    {
+      "Start": "7b270fcc318f444d81af01ac7fe11d31",
+      "End": "cd57374bc4f8421282c8ebcfd5a31640",
+      "Id": "6fcdb8c5527a48a48bda005840da5251"
+    },
+    {
+      "Start": "04d40334f0814dd8b38d91619d9dd583",
+      "End": "1a1b42322a3d4cfbaf92887c3c30088c",
+      "Id": "ef75ca075f8f4ae18ad4150a71f184d7"
+    },
+    {
+      "Start": "3de3e31a5b064df1b1cca674061b77df",
+      "End": "f4f57ced035943528ad7ec8817280101",
+      "Id": "7d50753e9eac4b28b1299e869d181e12"
+    },
+    {
+      "Start": "9dcb0a6f122344319f90622f3c39c4ce",
+      "End": "907adc517422470284f34d65e6f46e6c",
+      "Id": "059efba34adc458bb28bffafa2d58690"
+    },
+    {
+      "Start": "826c5dea7ef7407dbd67927c1e137347",
+      "End": "0eebae61ca37439995946a57f2bf6b64",
+      "Id": "7535722dc3434b98bad5d1548fabbb84"
+    },
+    {
+      "Start": "08fcf2d6ae434c81b33dae37f5d44025",
+      "End": "18733abd3a2a4d5da2f5e8f6a68a74bb",
+      "Id": "4393e14cc392439d8a869525e47c6836"
+    },
+    {
+      "Start": "b29be09ed8ea49e69cc93568f0e4ccb3",
+      "End": "2dd07a5e9fd3475092c656c568679bbf",
+      "Id": "a855435a86ec4dd0bd8143c9d7b990f9"
+    },
+    {
+      "Start": "8821cae815ae42918f14369bbeafd8d2",
+      "End": "b17ee933988045dba220075e828a0e30",
+      "Id": "5ead5053ab3840f2819702dce7034be5"
+    },
+    {
+      "Start": "772dc5c641294d89b1debf07aa496017",
+      "End": "f6ff51ed068a4a7b92adfa17f3d11a87",
+      "Id": "c637ae1890dd461580a1755c68d6e646"
+    },
+    {
+      "Start": "3f5c9a5a97f1475c8521265d9073aa10",
+      "End": "f854e9afc1f2496fb93dd805b88c988d",
+      "Id": "8ca038f5db564d679dd1674b5799f757"
+    },
+    {
+      "Start": "313eb933eb3f49dfaaed6d0fd3c870f4",
+      "End": "8a598ae1f977471595075b4fdb66fb09",
+      "Id": "dc0f20d8a7cd44ae96c8a67073c8b17a"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "466aca007b0c470ab3f9f1544deb61c0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 989.953400452891,
+        "Y": 306.054024271091
+      },
+      {
+        "Id": "2d7a8f0aa73e43cf80ede004812c08dc",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "5c05bd7b00b34a0ca39a8a9293ba311a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 150.0
+      },
+      {
+        "Id": "df6858c3b754401792a5b8e0609f2816",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 300.0
+      },
+      {
+        "Id": "e6c73ff8c4c641f597bafa0197aa0c96",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 450.0
+      },
+      {
+        "Id": "5069ee2bbd6f45fabc68adc883829240",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 600.0
+      },
+      {
+        "Id": "d4a83f904acc4a5c9ebd258c39454559",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 750.0
+      },
+      {
+        "Id": "52d925ea498f4e7498018ffe3178a765",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 900.0
+      },
+      {
+        "Id": "5ee8cc8a1b8948f1a17aa1e27cff751e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 1050.0
+      },
+      {
+        "Id": "ee1529cb827f4a8aafc84b6d618f82f2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 1200.0
+      },
+      {
+        "Id": "d814b99ebb4c4a5e988539e3d6cc6086",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 1348.90403576199
+      },
+      {
+        "Id": "4a1c258696b3467ca606dd69548d14d7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 1500.0
+      },
+      {
+        "Id": "a43c17b63b1241ed94f133e505138628",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 1650.0
+      },
+      {
+        "Id": "de7edf77aeba45c4a84052223720994e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1196.95340045289,
+        "Y": 306.054024271091
+      }
+    ],
+    "Annotations": [],
+    "X": 134.220231067965,
+    "Y": 32.4577254079877,
+    "Zoom": 0.313926758389987
+  }
+}

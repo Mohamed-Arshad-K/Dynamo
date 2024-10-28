@@ -1,0 +1,359 @@
+{
+  "Uuid": "f3fe95cc-46b5-43b6-9d8d-69604966baf2",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.Ampersand.Geometry.Curve",
+  "Description": "Create polycurves from an unordered list of curves.",
+  "Name": "AS.[&] Overkill ByCurves",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Autodesk.Point": {
+        "Key": "Autodesk.DesignScript.Geometry.Point",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.DesignScript.Geometry.Point": {
+        "Key": "Autodesk.DesignScript.Geometry.Point",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.Curve": {
+        "Key": "Autodesk.DesignScript.Geometry.Curve",
+        "Value": "ProtoGeometry.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Assign curves to groups according to whether they are connected via shared start points and end points.  Group numbers are not important.\r\n# Colin McCrone, 2015-09-28\r\n# Improved By Karam Baki\r\nimport clr\r\n\r\nimport math\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n# Determine whether two points are equal\r\ndef PointsEqual(pt1, pt2):\r\n\ttolerance = 0.00001\r\n\t\r\n\tif (math.fabs(pt1.X - pt2.X) < tolerance and\r\n\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\r\n\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n# Get input\r\ncrvs = IN[0]\r\n\r\n# List the group to which each curve belongs\r\ncrvGroup = [-1 for x in range(len(crvs))]\r\ncrvGroup[0] = 0\r\nmaxGroupNum = 1\r\n\r\n\r\n# Find start and end points for each curve\r\nstarts = []\r\nends = []\r\nmids = []\r\nfor crv in crvs:\r\n\tstarts.append(Curve.PointAtParameter(crv,0))\r\n\tends.append(crv.PointAtParameter(1))\r\n\tmids.append(crv.PointAtParameter(0.5))\r\n\r\n# Find connected groups of curves\r\nfor i in range(len(crvs)):\r\n\t# Add i to its own group it not already part of a group\r\n\tif (crvGroup[i] == -1):\r\n\t\tcrvGroup[i] = i\r\n\t\r\n\t# Find connections\r\n\tfor j in range(len(crvs)):\r\n\t\tif (i != j and PointsEqual(mids[i], mids[j]) and ((PointsEqual(starts[i], starts[j]) and PointsEqual(ends[i], ends[j])) or (PointsEqual(starts[i], ends[j]) and PointsEqual(ends[i], starts[j])))):\r\n\t\t\t\r\n\t\t\t# Add j to i group\r\n\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t# Add j group to i group\r\n\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\r\n# Output the (arbitrary) group numbers\r\nOUT = crvGroup",
+      "VariableInputPorts": true,
+      "Id": "166b7f8deb844d1d91dfc0a9892d27d0",
+      "Inputs": [
+        {
+          "Id": "a55dd29ca9c84052a649a1c0dadab112",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1b3982de97c642c892555947f722204c",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARcurves",
+        "TypeName": "Autodesk.DesignScript.Geometry.Curve",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "f07d9f54f6394685b9622e697d232e3d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f2363b11d3c142f7b42bdc9a96682c92",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROverkilled",
+      "Id": "0ec3577a4cca4579ad1e6d05b0319b97",
+      "Inputs": [
+        {
+          "Id": "b03fd08d47d246638cde7eec4a0292a6",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GroupByKey@var[]..[],var[]..[]",
+      "Id": "b515fdb507174218b8ba351b90407e32",
+      "Inputs": [
+        {
+          "Id": "08b1421ac7b64a9fbb79ad1793e8da32",
+          "Name": "list",
+          "Description": "List of items to group as sublists\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fc842263250c4744bc320121aa7b8927",
+          "Name": "keys",
+          "Description": "Key values, one per item in the input list, used for grouping the items\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "17dd95b1c94e46128e6fddd2d3f29edf",
+          "Name": "groups",
+          "Description": "list of sublists, with items grouped by like key values",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "062417ab0da14cd285448d375725986b",
+          "Name": "unique keys",
+          "Description": "key value corresponding to each group",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Group items into sub-lists based on their like key values\n\nList.GroupByKey (list: var[]..[], keys: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.FirstItem@var[]..[]",
+      "Id": "ed0193b8635d47bca13335b2ba62381d",
+      "Inputs": [
+        {
+          "Id": "43e2c9e701754996bcae8454c2e374c1",
+          "Name": "list",
+          "Description": "List to get the first item from.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": true,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "e867832531d544a68555ae3bd9b0c687",
+          "Name": "item",
+          "Description": "First item in the list.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns the first item in a list.\n\nList.FirstItem (list: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.PolyCurve.ByJoinedCurves@Autodesk.DesignScript.Geometry.Curve[],double",
+      "Id": "eb0e1c6ec38b43829183c798b1da97b7",
+      "Inputs": [
+        {
+          "Id": "7255104db6e9477e99f249e2e9290034",
+          "Name": "curves",
+          "Description": "Curves to join into polycurve\n\nCurve[]",
+          "UsingDefaultValue": false,
+          "Level": 1,
+          "UseLevels": true,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b867df441a404c8384c8f2ea36d59aca",
+          "Name": "joinTolerance",
+          "Description": "Tolerance to determine size of gap allowed between curves to be joined\n\ndouble\nDefault value : 0.001",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "058cf3d26afe4fe380b4e07ae9cb26da",
+          "Name": "PolyCurve",
+          "Description": "PolyCurve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Make PolyCurve by joining curves. Flips curve as needed for connectivity. Choose a preferred join tolerance between 1e-6 and 1e-3 units.\n\nPolyCurve.ByJoinedCurves (curves: Curve[], joinTolerance: double = 0.001): PolyCurve"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "1b3982de97c642c892555947f722204c",
+      "End": "fc842263250c4744bc320121aa7b8927",
+      "Id": "dbcc3357d06d47a4bb04333ad28689eb"
+    },
+    {
+      "Start": "f2363b11d3c142f7b42bdc9a96682c92",
+      "End": "a55dd29ca9c84052a649a1c0dadab112",
+      "Id": "fdc839910270419cadb1c8fb08378f5c"
+    },
+    {
+      "Start": "f2363b11d3c142f7b42bdc9a96682c92",
+      "End": "08b1421ac7b64a9fbb79ad1793e8da32",
+      "Id": "a1e442a133c64fc98015468d97191ca5"
+    },
+    {
+      "Start": "17dd95b1c94e46128e6fddd2d3f29edf",
+      "End": "43e2c9e701754996bcae8454c2e374c1",
+      "Id": "2aae6fbed93c4701a95d9bf89b0bdee8"
+    },
+    {
+      "Start": "e867832531d544a68555ae3bd9b0c687",
+      "End": "7255104db6e9477e99f249e2e9290034",
+      "Id": "3e4a36ab8867460d878684ea3d67199b"
+    },
+    {
+      "Start": "058cf3d26afe4fe380b4e07ae9cb26da",
+      "End": "b03fd08d47d246638cde7eec4a0292a6",
+      "Id": "6afe7af41b384e758ffbdb1dabc25673"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 1.3563518524169922,
+      "EyeY": 74.580360412597656,
+      "EyeZ": 102.98825073242188,
+      "LookX": -36.102630615234375,
+      "LookY": -41.778114318847656,
+      "LookZ": -82.988250732421875,
+      "UpX": -0.085662052035331726,
+      "UpY": 0.97667229175567627,
+      "UpZ": -0.19690930843353271
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": false,
+        "Name": "Python Script",
+        "Id": "166b7f8deb844d1d91dfc0a9892d27d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 129.220610630787,
+        "Y": 98.2114952831352
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "f07d9f54f6394685b9622e697d232e3d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -267.524336454334,
+        "Y": -21.0105399110271
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "0ec3577a4cca4579ad1e6d05b0319b97",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1559.83562648168,
+        "Y": -52.9006074145286
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.GroupByKey",
+        "Id": "b515fdb507174218b8ba351b90407e32",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 765.179772832105,
+        "Y": -29.3624825599277
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.FirstItem",
+        "Id": "ed0193b8635d47bca13335b2ba62381d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1148.00270601656,
+        "Y": -27.3224498481209
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "PolyCurve.ByJoinedCurves",
+        "Id": "eb0e1c6ec38b43829183c798b1da97b7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1332.40027874584,
+        "Y": 10.2089743518832
+      }
+    ],
+    "Annotations": [
+      {
+        "Id": "53cd5f573915448f8394357bb4ceb898",
+        "Title": "Assigns curves to groups with unique (arbirary) numbers.",
+        "Nodes": [],
+        "Left": 62.0414462297197,
+        "Top": 43.1760102283539,
+        "Width": 0.0,
+        "Height": 0.0,
+        "FontSize": 36.0,
+        "InitialTop": 0.0,
+        "InitialHeight": 0.0,
+        "TextblockHeight": 0.0,
+        "Background": "#FFC1D676"
+      }
+    ],
+    "X": 108.640828727394,
+    "Y": 251.014042645145,
+    "Zoom": 0.713946015815341
+  }
+}

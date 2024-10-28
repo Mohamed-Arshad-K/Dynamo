@@ -1,0 +1,167 @@
+{
+  "Uuid": "c54d6dce-4532-4fa1-b167-6868ce5f9d28",
+  "IsCustomNode": true,
+  "Category": "Modelical.Actions",
+  "Description": "This node deletes all unused filters in the project file.",
+  "Name": "Cleanup.DeleteUnusedFilters",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# This node has been made by Modelical\r\n# www.modelical.com\r\n\r\n#Note: The methods used in this script has been taken from Paul Wintour's BVN package and reused to achieve the purpose of the same. https://parametricmonkey.com/2016/03/09/get-unused-filters/\r\n\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\nclr.AddReference(\"System.Core\")\r\nimport System.Linq\r\nclr.ImportExtensions(System.Linq)\r\n\r\nclr.AddReference(\"RevitAPI\")\r\nimport Autodesk.Revit\r\nfrom Autodesk.Revit.Exceptions import InvalidOperationException\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB import ElementId\r\nfrom System.Collections.Generic import *\r\n\r\n# Import ToDSType(bool) extension method\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Import DocumentManager\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\nfrom RevitServices.Persistence import DocumentManager\r\n\r\ndef GetFilterIds(view):\r\n  filterIds = None\r\n  try:\r\n    filterIds = view.GetFilters()\r\n  except InvalidOperationException, e:\r\n    filterIds = None\r\n  return filterIds\r\n\r\ndef GetUsedFilterIds(doc):\r\n  views = FilteredElementCollector(doc).OfClass(View).ToElements()\r\n  usedFilterIds = []\r\n  for view in views:\r\n    viewFilterIds = []\r\n    try:\r\n      viewFilterIds = view.GetFilters()\r\n    except InvalidOperationException, e:\r\n      pass # this exception happens when a view doesn't support filters\r\n    usedFilterIds.extend(viewFilterIds)\r\n  return usedFilterIds\r\n\r\ndef GetUnusedFilters(doc):\r\n  usedFilterIds = GetUsedFilterIds(doc).ToList[ElementId]()\r\n  unusedFilters = FilteredElementCollector(doc).OfClass(ParameterFilterElement).Excluding(usedFilterIds).ToElements()\r\n  return list(f.ToDSType(True) for f in unusedFilters)\r\n\r\n#The inputs to this node will be stored as a list in the IN variables.\r\n\r\nbool = IN[0]\r\noutput = \"\"\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nfilters = GetUnusedFilters(doc)\r\nfilters2 = UnwrapElement(filters)\r\nfiltersID = []\r\nfiltersNames = []\r\n\r\nif bool == True:\r\n\tfor f in filters2:\r\n\t\tfiltersID.append(f.Id)\r\n\r\n\tTransactionManager.Instance.EnsureInTransaction(doc)\r\n\r\n\tfor f in filtersID:\r\n\t\tfiltersNames.append(doc.GetElement(f).Name)\r\n\t\tdoc.Delete(f)\r\n\r\n\tTransactionManager.Instance.TransactionTaskDone()\r\n#Assign your output to the OUT variable.\r\nOUT = filtersNames",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "e5dab75d347f4f39a150bff8b33af576",
+      "Inputs": [
+        {
+          "Id": "8411c58ea2a84fa19c2fab0de4731abc",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "44243a2ea3de437ebf4e877c7847a502",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "_bool",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": "Set TRUE to delete unused Filters"
+      },
+      "Id": "32bbaba62da1430586d7390eca437d1e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bae0f9f3411945d7a8500d7bd13ff706",
+          "Name": "",
+          "Description": "Símbolo",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "_info",
+      "Id": "050d3887e943431bade2d123cb85858d",
+      "Inputs": [
+        {
+          "Id": "0ed013476b854b26a5c89f29cfe44396",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "44243a2ea3de437ebf4e877c7847a502",
+      "End": "0ed013476b854b26a5c89f29cfe44396",
+      "Id": "72418f9f0a6e48fe8ba6a6445ae1801d"
+    },
+    {
+      "Start": "bae0f9f3411945d7a8500d7bd13ff706",
+      "End": "8411c58ea2a84fa19c2fab0de4731abc",
+      "Id": "c162e337b4114779a67cd19e50c15970"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.12.0.5650",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "e5dab75d347f4f39a150bff8b33af576",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 839.75107014637922,
+        "Y": 505.34803698139
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "32bbaba62da1430586d7390eca437d1e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 386.56784996155147,
+        "Y": 503.80973674497972
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "050d3887e943431bade2d123cb85858d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 995.0,
+        "Y": 505.0
+      }
+    ],
+    "Annotations": [],
+    "X": -332.31552778282287,
+    "Y": -213.36357910936471,
+    "Zoom": 1.054298215011324
+  }
+}

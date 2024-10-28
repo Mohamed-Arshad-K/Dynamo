@@ -1,0 +1,564 @@
+{
+  "Uuid": "6e4f6aa7-20dd-4420-9296-3ce83033b0b7",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Join",
+  "Description": "K-Join All In One",
+  "Name": "K-Join All In One By Interference Check File",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\n# Parsing Technique Created By Dimitar Venkov\n# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nimport math\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\nimport System\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append(\"%s\\IronPython 2.7\\Lib\" %pf_path)\n\nfrom sgmllib import SGMLParser\nfrom collections import Counter\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\nfrom itertools import compress\nfrom itertools import combinations\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nclass WarnSwallowSimple(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfmas = failuresAccessor.GetFailureMessages()\n\t\tif len(fmas) == 0:\n\t\t\tself.__warn = []\n\t\t\treturn FailureProcessingResult.Continue\n\t\telse:\n\t\t\tprobs = []\n\t\t\tisgood = True\n\t\t\tfor fma in fmas:\n\t\t\t\tsev = str(fma.GetSeverity())\n\t\t\t\tfails = list(fma.GetFailingElementIds())\n\t\t\t\tfelems = []\n\t\t\t\tfor f in fails:\n\t\t\t\t\tfelems.append(doc.GetElement(f))\n\t\t\t\tif str(sev) == \"Warning\": \n\t\t\t\t\tfailuresAccessor.ResolveFailure(fma)\n\t\t\t\t\tfailuresAccessor.DeleteWarning(fma)\n\t\t\t\telse:\n\t\t\t\t\tisgood = False\n\t\t\t\t\tprobs.append(felems) \n\t\t\t\tself.__warn = probs\n\t\tif isgood:\n\t\t\treturn FailureProcessingResult.ProceedWithCommit\n\t\telse:\n\t\t\treturn FailureProcessingResult.ProceedWithRollBack \n\n\t@property\n\tdef warn(self):\n\t\treturn(self.__warn)\n\ndef joinop(trans,notjoined,unjoinmode = False,simple = False):\n\tif len(notjoined) > 0:\n\t\ttrans.Start()\n\t\tif simple:\n\t\t\twarnhandle = WarnSwallowSimple()\n\t\telse:\n\t\t\twarnhandle = WarnSwallow()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tif simple == False:\n\t\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\tcount = 0\n\t\tsubtran = SubTransaction(doc)\n\t\twhile (count < len(notjoined)):\n\t\t\ttry:\n\t\t\t\tsubtran.Start()\n\t\t\t\tif unjoinmode:\n\t\t\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\telse:\n\t\t\t\t\tif cutelems == False:\n\t\t\t\t\t\tJoinGeometryUtils.JoinGeometry(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\t\t\tif SwitchNewJoined == True:\n\t\t\t\t\t\t\tJoinGeometryUtils.SwitchJoinOrder(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\t\telse:\n\t\t\t\t\t\tif SwitchNewJoined == True:\n\t\t\t\t\t\t\tnotjoined[count].reverse()\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tInstanceVoidCutUtils.AddInstanceVoidCut(doc, notjoined[count][0], notjoined[count][1])\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\tSolidSolidCutUtils.AddCutBetweenSolids(doc, notjoined[count][0], notjoined[count][1], False)\n\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\tpass\n\t\t\t\tcount = count + 1\n\t\t\t\tsubtran.Commit()\n\t\t\texcept:\n\t\t\t\tsubtran.RollBack()\n\t\t\t\tcount = count +1\n\t\ttrans.Commit()\n\t\tif simple == False:\n\t\t\treturn warnhandle.warn\n\t\telse:\n\t\t\treturn []\n\telse:\n\t\treturn []\n\ndef removefrompairs(probs,notjoined):\n\tgoodnotjoined = notjoined\n\tif len(probs) != 0:\n\t\tgoodnotjoined = []\n\t\tnotjoinedids = []\n\t\tfor pair in notjoined:\n\t\t\ttmp = []\n\t\t\tfor p in pair:\n\t\t\t\ttmp.append(p.Id)\n\t\t\tnotjoinedids.append(tmp)\n\t\tproblems = flatten(probs)\n\t\tdangerpairs = []\n\t\tfor prob in problems:\n\t\t\tdangercount = 0\n\t\t\tfor eachpair in notjoinedids:\t\n\t\t\t\tif prob.Id in eachpair:\n\t\t\t\t\tdangerpairs.append(dangercount)\n\t\t\t\tdangercount += 1\n\t\tgoodcount = 0\n\t\tfor pair in notjoined:\n\t\t\tif goodcount not in dangerpairs:\n\t\t\t\tgoodnotjoined.append(pair)\n\t\t\tgoodcount += 1\n\treturn goodnotjoined\n\t\ndef masterjoinop(trans,notjoined,unjoinmode = False,simple = False):\n\tprobs = joinop(trans,notjoined,unjoinmode,simple)\n\tif simple == False:\n\t\tnotjoined = removefrompairs(probs,notjoined)\n\t\tprobs = joinop(trans,notjoined,unjoinmode)\n\t\tnotjoined = removefrompairs(probs,notjoined)\n\t\tif len(notjoined) != 0:\n\t\t\thosts = []\n\t\t\tprobs = flatten(probs)\n\t\t\tfor pro in probs:\n\t\t\t\ttry:\n\t\t\t\t\thost = pro.GetHostIds()\n\t\t\t\t\tfor h in host:\n\t\t\t\t\t\thosts.append(doc.GetElement(h))\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\tnotjoined = removefrompairs(hosts,notjoined)\n\t\t\tprobs = joinop(trans,notjoined,unjoinmode)\n\t\t\tif len(probs) > 0:\n\t\t\t\tprobids = []\n\t\t\t\tprobs = flatten(probs)\n\t\t\t\tfor p in probs:\n\t\t\t\t\tprobids.append(str(p.Id))\n\t\t\t\treturn probids\n\t\telse:\n\t\t\treturn True\n\telse:\n\t\treturn True\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nSwitchAlreadyJoined = UnwrapElement(IN[0])\nConsiderVolume = UnwrapElement(IN[1])\nJoinNew = UnwrapElement(IN[2])\nSwitchNewJoined = UnwrapElement(IN[3])\nCleanUpAllWarn = UnwrapElement(IN[4])\ncutelems = IN[5]\nunjoinmode = IN[6]\navoidwarnings = IN[7]\n\nif avoidwarnings:\n\tsimple = False\nelse:\n\tsimple = True\n\nif unjoinmode:\n\tsimple = True\n\nclass ReportParser(SGMLParser):\n\tdef __init__(self, verbose=0):\n\t\tSGMLParser.__init__(self, verbose)\n\t\tself.data1 = []\n\t\tself.temp_data = []\n\tdef handle_data(self, data):\n\t\tif data != \"\\n\" and data not in known_errors:\n\t\t\tself.temp_data.append(data)\n\tdef unknown_starttag(self, tag, attrs):\n\t\tif tag == \"tr\":\n\t\t\tself.data1.append(self.temp_data)\n\t\t\tself.temp_data = []\n\ninterference_cats = {\"Structural Columns\", \"Air Terminals\", \"Assemblies\", \"Cable Tray Fittings\", \"Cable Tray Runs\", \"Cable Trays\", \"Casework\", \"Ceilings\", \"Columns\", \"Conduit Fittings\", \"Conduit Runs\", \"Conduits\", \"Curtain Panels\", \"Curtain Systems\", \"Curtain Wall Mullions\",\"Doors\", \"Ducts\", \"Duct Accessories\", \"Duct Fittings\", \"Duct Insulations\", \"Duct Linings\", \"Duct Placeholders\", \"Duct Systems\", \"Electrical Circuits\", \"Electrical Equipment\", \"Electrical Fixtures\", \"Fabrication Parts\", \"Flex Ducts\", \"Flex Pipes\", \"Floors\", \"Furniture\", \"Furniture Systems\", \"Generic Models\", \"Gutters\", \"Lighting Devices\", \"Lighting Fixtures\", \"Mass Floors\", \"Mass\", \"Mechanical Equipment\", \"Pads\", \"Parts\", \"Pipe Accessories\", \"Pipe Fittings\", \"Pipe Insulations\", \"Pipe Placeholders\", \"Pipes\", \"Piping Systems\",  \"Plumbing Fixtures\", \"Railings\", \"Ramps\", \"Roofs\", \"Roof Soffits\", \"Shaft Openings\", \"Slab Edges\", \"Specialty Equipment\", \"Sprinklers\", \"Stairs\", \"Structural Connections\", \"Structural Foundations\", \"Structural Framing\", \"Structural Trusses\", \"Wall Sweeps\", \"Walls\", \"Windows\", \"Wires\"}\n\ndef getElement(i):\n\ttry: return doc.GetElement(ElementId(i)).ToDSType(1)\n\texcept: return i\n\ndef fetchCat(items, interference_cats=interference_cats):\n\tfor i in items:\n\t\tif i in interference_cats:\n\t\t\treturn i\n\n\n\nreport1, fetch_elements = IN[8], True\n\nif fetch_elements:\t#imports moved here to be able to process externally\n\tclr.AddReference(\"RevitServices\")\n\tfrom RevitServices.Persistence import DocumentManager\n\tdoc = DocumentManager.Instance.CurrentDBDocument\n\tclr.AddReference(\"RevitAPI\")\n\tfrom Autodesk.Revit.DB import ElementId\n\tclr.AddReference('RevitNodes')\n\timport Revit\n\tclr.ImportExtensions(Revit.Elements)\n\nknown_errors = {\"  \", \"td>  \"}\nparser = ReportParser()\nwith System.IO.File.OpenText(report1) as f:\n\twhile not f.EndOfStream:\n\t\tparser.feed(f.ReadLine().replace(\"&\", \"\"))\nparser.data1.append(parser.temp_data)\nreport_data = parser.data1[2:]\nparser.close()\nparser = None\ncases, elements, = [], []\nfor d in report_data:\n\tleft, right = map(str.strip, d[1].split(\" : \")), map(str.strip, d[2].split(\" : \"))\n\tleftId, rightId = int(filter(str.isdigit, left[-1])), int(filter(str.isdigit, right[-1]))\n\tif fetch_elements:\n\t\tleftId, rightId = getElement(leftId), getElement(rightId)\n\telements.append((leftId, rightId))\n\t\n\tleftCat, rightCat = fetchCat(left), fetchCat(right)\n\tcase = \"%s - %s\" % (leftCat, rightCat) if leftCat is not None and rightCat is not None else \"Unidentified\"\n\tcases.append(case)\n\ngroup_cases = Counter(cases).most_common()\nunique_cases, sum_cases = zip(*group_cases)\nsum_cases = list(sum_cases)\nsum_cases.append(\"Total interferences : %s\" % sum(sum_cases) )\n#OUT = cases, elements, unique_cases, sum_cases\nintersectingelements = UnwrapElement(elements)\n\n##CHECK FOR JOINED ELEMENTS\nlistj = len(intersectingelements)\ncount = 0\narejoined = []\nwhile (count < listj):\n\t\tif unjoinmode == False:\n\t\t\tresult = JoinGeometryUtils.AreElementsJoined(doc, intersectingelements[count][0], intersectingelements[count][1])\n\t\telse:\n\t\t\tresult = False\n\t\tcount = count + 1\n\t\tarejoined.append(result)\n\njoined = list(compress(intersectingelements, arejoined))\nnotjoined =  list(compress(intersectingelements, [not i for i in arejoined]))\n\n##GET EXISTED WARNINGS\nif CleanUpAllWarn == False and cutelems == False:\n\twlist = doc.GetWarnings()\n\twtext, welt, wsev = [], [], []\n\tfor i in wlist:\n\t\twtext.append(i.GetDescriptionText())\n\t\twelt.append(i.GetFailingElements())\n\t\twsev.append(i.GetSeverity())\n\n\texistedwarn = []\n\tcount = 0\n\tfor each in wtext:\n\t\tif each == \"Highlighted elements are joined but do not intersect.\":\n\t\t\texistedwarn.append(welt[count])\n\t\tcount = count + 1\n\nTransactionManager.Instance.ForceCloseTransaction()\ntGroup = TransactionGroup(doc, 'K-Join')\ntGroup.Start()\n\ntrans1 = Transaction(doc, 'Switch Already Joined Elements')\nif SwitchAlreadyJoined == True and cutelems == False:\n\ttrans1.Start()\n\tcount = 0\n\twhile (count < len(joined)):\n\t\ttry:\n\t\t\tJoinGeometryUtils.SwitchJoinOrder(doc, joined[count][0], joined[count][1])\n\t\t\tcount = count + 1\n\t\texcept:\n\t\t\tcount = count +1\n\ttrans1.Commit()\n\n##VOLUMENTRIC SORT\nif ConsiderVolume == True:\n\tvolumes = []\n\tfor item in notjoined:\n\t\ttmplist = []\n\t\tfor each in item:\n\t\t\tanothertmp = []\n\t\t\tfor matid in each.GetMaterialIds(False):\n\t\t\t\tanothertmp.append(each.GetMaterialVolume(matid))\n\t\t\ttmplist.append(sum(anothertmp))\n\t\tvolumes.append(tmplist)\n\n\tsortedunjoined = []\n\n\tcount = 0\n\tfor eachtwo in volumes:\n\t\tsortedunjoined.append([x for _,x in sorted(zip(eachtwo,notjoined[count]))])\n\t\tcount = count + 1\n\tnotjoined = sortedunjoined\n\nif SwitchNewJoined == True and cutelems == False:\n\ttrans2 = Transaction(doc, 'K-Join And Switch New Elements')\nelse:\n\tif unjoinmode:\n\t\ttrans2 = Transaction(doc, 'K-Join Unjoin Elements')\n\telse:\n\t\tif cutelems == False:\n\t\t\ttrans2 = Transaction(doc, 'K-Join New Elements')\n\t\telse:\n\t\t\ttrans2 = Transaction(doc, 'K-Cut Elements')\nif JoinNew == True or cutelems == True or unjoinmode:\n\tmasterjoinop(trans2,notjoined,unjoinmode,simple)\n\nif cutelems == False:\n\t##Get New Warnings\n\twlist = doc.GetWarnings()\n\twtext, welt, wsev = [], [], []\n\tfor i in wlist:\n\t\twtext.append(i.GetDescriptionText())\n\t\twelt.append(i.GetFailingElements())\n\t\twsev.append(i.GetSeverity())\n\t\n\tnewwarn = []\n\tcount = 0\n\tfor each in wtext:\n\t\tif each == \"Highlighted elements are joined but do not intersect.\":\n\t\t\tnewwarn.append(welt[count])\n\t\tcount = count + 1\n\t\n\tif CleanUpAllWarn == False:\n\t\tflattenexis = []\n\t\tfor eachlist in existedwarn:\n\t\t\tflattenexis.append(str(eachlist[0]) + str(eachlist[1]))\n\t\n\t\tflattennew = []\n\t\tfor eachlist in newwarn:\n\t\t\tflattennew.append(str(eachlist[0]) + str(eachlist[1]))\n\t\t\n\t\tonlynewwarns = set(flattennew) - set(flattenexis)\n\t\n\t\tind = []\n\t\tfor each in onlynewwarns:\n\t\t\tind.append(flattennew.index(each))\n\t\n\t\tresultwarn = []\n\t\tfor eachindex in ind:\n\t\t\tresultwarn.append(newwarn[eachindex])\n\telse:\n\t\tresultwarn = newwarn\n\t\n\twarntounjoin = []\n\tfor eachlist in resultwarn:\n\t\ttmplist = []\n\t\tfor each in eachlist:\n\t\t\ttmplist.append(doc.GetElement(each))\n\t\twarntounjoin.append(tmplist)\n\t\n\ttrans3 = Transaction(doc, 'Clean Up Non-Intersected Elements')\n\ttrans3.Start()\n\tcount = 0\n\twhile (count < len(warntounjoin)):\n\t\ttry:\n\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, warntounjoin[count][0], warntounjoin[count][1])\n\t\t\tcount = count + 1\n\t\texcept:\n\t\t\tcount = count +1\n\ttrans3.Commit()\ntGroup.Assimilate()\n\nOUT = \"DONE\"",
+      "VariableInputPorts": true,
+      "Id": "8ee66c633ad641be8a381bdcec4521a6",
+      "Inputs": [
+        {
+          "Id": "f993839cb3f14f03a9cc3fe209c6b42c",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "36961d778e6a4c66be6015f5c5570351",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "35c33558c0fc4051934f5139a25609c5",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6fe27592d888471f8fe972b0acc8ffd2",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2927daba633c409aa991742ae0cbb84f",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a266c1edb3544b3aad340b2d881c4d32",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c36af199eb904d6b86b6c117bc126ab5",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "934a2be37f1d43b8b1b5164e5fb9825d",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e2b13a32361c4557a464113b510583bf",
+          "Name": "IN[8]",
+          "Description": "Input #8",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "abc92a227a0e4db282dd9d71e9ac03fe",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSwitchJoinOrderofAlreadyJoinedElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "14a36608f7ef446892511573c5efe3df",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "431b9bda4c9840b18f7f70ac2ca6aa54",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARConsiderVolumetricRuleForJoining",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "424358f7edcd4cbc9496d3885b98aa52",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f04801cb48194b478eca954a7dee6dc2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARStartJoiningNewElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "da8ef3654e3e44b9a164e9aef41281ab",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d225dd5c43904adeb8a3e3507fb289e2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSwitchJoinOrderForNewelyJoinedElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "479636c1bf8e4d5faf72da3d873e4026",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1c9035f18ea7470d9f14b0ef14eb5f2c",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCleanUpAllTheJoiningWarnings",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "a87ede19170c43c0bcfbfcc0136c32b1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "00721cc6248d4c7abf04cb9a96e4b0b0",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROUT",
+      "Id": "e992f1058e5d45998ceed710c7cc0222",
+      "Inputs": [
+        {
+          "Id": "7118eef8c9174896af2e290977ae16a3",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceCheckReport",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "ddd7639c0d2f4b33a2b6c848c6acb303",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0490fe5117d040d6bd0e5f705d186bf6",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCutMode",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "df0e8a7b76bd427384f62760513f4b5d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8db2a80364754bbe95634826abc8416e",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARUnjoinMode",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "e128e99f410944819cade8cdc0216267",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "24cd441cbd0941dcbf7c7c674e9a6bda",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARAvoidWarnings",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "5cc787f1516e453eb464ea63a5995a4c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b5ea9bd3a14b45389a6190eb6aa1f38b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "abc92a227a0e4db282dd9d71e9ac03fe",
+      "End": "7118eef8c9174896af2e290977ae16a3",
+      "Id": "4dbfbc285a364aca95a3d47d1cb1a484"
+    },
+    {
+      "Start": "431b9bda4c9840b18f7f70ac2ca6aa54",
+      "End": "f993839cb3f14f03a9cc3fe209c6b42c",
+      "Id": "df1d24af813f4e57923a9ca684a74c95"
+    },
+    {
+      "Start": "f04801cb48194b478eca954a7dee6dc2",
+      "End": "36961d778e6a4c66be6015f5c5570351",
+      "Id": "bd97672602a14eb5a455b878e3fd9d26"
+    },
+    {
+      "Start": "d225dd5c43904adeb8a3e3507fb289e2",
+      "End": "35c33558c0fc4051934f5139a25609c5",
+      "Id": "c446f3cb4d564e0dac9b1c653b0500de"
+    },
+    {
+      "Start": "1c9035f18ea7470d9f14b0ef14eb5f2c",
+      "End": "6fe27592d888471f8fe972b0acc8ffd2",
+      "Id": "cdaa121f1ea144b1af935270e627d431"
+    },
+    {
+      "Start": "00721cc6248d4c7abf04cb9a96e4b0b0",
+      "End": "2927daba633c409aa991742ae0cbb84f",
+      "Id": "7c6e6b30220944ec94faa230f78a980e"
+    },
+    {
+      "Start": "0490fe5117d040d6bd0e5f705d186bf6",
+      "End": "e2b13a32361c4557a464113b510583bf",
+      "Id": "ec1cde81b58f44639c049b5011f1a926"
+    },
+    {
+      "Start": "8db2a80364754bbe95634826abc8416e",
+      "End": "a266c1edb3544b3aad340b2d881c4d32",
+      "Id": "a716511f63474676b2b4bb8fdd8ef00b"
+    },
+    {
+      "Start": "24cd441cbd0941dcbf7c7c674e9a6bda",
+      "End": "c36af199eb904d6b86b6c117bc126ab5",
+      "Id": "ce47993f6b1544c3805c91417d125fb1"
+    },
+    {
+      "Start": "b5ea9bd3a14b45389a6190eb6aa1f38b",
+      "End": "934a2be37f1d43b8b1b5164e5fb9825d",
+      "Id": "3f5d913381aa4b21946ad6c388424d25"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "8ee66c633ad641be8a381bdcec4521a6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1615.16220357921,
+        "Y": 803.554446474391
+      },
+      {
+        "Id": "14a36608f7ef446892511573c5efe3df",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 911.682118396587,
+        "Y": 685.661285975519
+      },
+      {
+        "Id": "424358f7edcd4cbc9496d3885b98aa52",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 911.682118396587,
+        "Y": 835.661285975519
+      },
+      {
+        "Id": "da8ef3654e3e44b9a164e9aef41281ab",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 911.682118396587,
+        "Y": 985.661285975519
+      },
+      {
+        "Id": "479636c1bf8e4d5faf72da3d873e4026",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 911.682118396587,
+        "Y": 1135.66128597552
+      },
+      {
+        "Id": "a87ede19170c43c0bcfbfcc0136c32b1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 911.682118396587,
+        "Y": 1285.66128597552
+      },
+      {
+        "Id": "e992f1058e5d45998ceed710c7cc0222",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1931.39603777491,
+        "Y": 765.861485608468
+      },
+      {
+        "Id": "ddd7639c0d2f4b33a2b6c848c6acb303",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 928.583375776243,
+        "Y": 1382.97747943433
+      },
+      {
+        "Id": "df0e8a7b76bd427384f62760513f4b5d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 989.345572487486,
+        "Y": 1464.09893592612
+      },
+      {
+        "Id": "e128e99f410944819cade8cdc0216267",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 995.878101945018,
+        "Y": 1569.67498751595
+      },
+      {
+        "Id": "5cc787f1516e453eb464ea63a5995a4c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1009.65665974163,
+        "Y": 1636.4461882325
+      }
+    ],
+    "Annotations": [],
+    "X": -320.591831410532,
+    "Y": -253.379037994966,
+    "Zoom": 0.494003988613898
+  }
+}

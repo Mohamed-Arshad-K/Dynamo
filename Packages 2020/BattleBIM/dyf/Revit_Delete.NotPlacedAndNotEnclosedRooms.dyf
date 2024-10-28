@@ -1,0 +1,83 @@
+<Workspace Version="1.2.0.2514" X="-724" Y="170" zoom="1" Name="Delete.NotPlacedAndNotEnclosedRooms (BattleBIM)" Description="This custom node help you to delete those rooms are Not Placed and Not Enclosed" ID="5dbf478d-5029-4f3c-a126-672743dfcf08" Category="BattleBIM.Revit.Room.Actions">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Category" resolvedName="Revit.Elements.Category" assemblyName="RevitNodes.dll" />
+    <ClassMap partialName="List" resolvedName="DSCore.List" assemblyName="DSCoreNodes.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <DSRevitNodesUI.ElementsOfCategory guid="4ed30ccd-5cb3-4897-bc1d-7cf09cb0ac7c" type="DSRevitNodesUI.ElementsOfCategory" nickname="All Elements of Category" x="544.019966203878" y="4.53201384756753" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </DSRevitNodesUI.ElementsOfCategory>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="1b6c0f5d-57fb-46c7-a24e-f8a6f23cfaee" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="250" y="7.70323448925512" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="Category.ByName(&quot;OST_Rooms&quot;);" ShouldFocus="false" />
+    <PythonNodeModels.PythonNode guid="13eebee2-0437-40c3-9d9a-6f378f44b4bc" type="PythonNodeModels.PythonNode" nickname="Python Script" x="1515.18846609687" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <Script>#Copyright(c) 2015, Konrad Sobon
+# @arch_laboratory, http://archi-lab.net
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+from System.Collections.Generic import *
+
+#The inputs to this node will be stored as a list in the IN variable.
+dataEnteringNode = IN
+deleteBoolean = IN[1]
+#unwrap all elements to use with API
+elements = []
+for i in IN[0]:
+	elements.append(UnwrapElement(i))
+
+idsToDelete = List[Autodesk.Revit.DB.ElementId]()
+for i in elements:
+	idsToDelete.Add(i.Id)
+
+# "Start" the transaction
+TransactionManager.Instance.EnsureInTransaction(doc)
+
+if deleteBoolean:
+	doc.Delete(idsToDelete)
+	message = "You have successfully deleted \n " + str(idsToDelete.Count) + " Rooms from Revit model."
+else:
+	message = "Delete set to false."
+
+# "End" the transaction
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = '\n'.join('{:^35}'.format(s) for s in message.split('\n'))</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="61f4eae5-1482-4d7a-a0bb-2b86b8c19d90" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="745.86511832097" y="7.37586461011739" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="__TryGetValueFromNestedDictionaries(List.FilterByBoolMask(rm, (rm.Area)&gt;0), &quot;out&quot;);" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="1524c0a2-4fff-490c-beb1-8288e58f1aa3" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="1287" y="89" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="reset:bool = true" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="4ed30ccd-5cb3-4897-bc1d-7cf09cb0ac7c" start_index="0" end="61f4eae5-1482-4d7a-a0bb-2b86b8c19d90" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="1b6c0f5d-57fb-46c7-a24e-f8a6f23cfaee" start_index="0" end="4ed30ccd-5cb3-4897-bc1d-7cf09cb0ac7c" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="61f4eae5-1482-4d7a-a0bb-2b86b8c19d90" start_index="0" end="13eebee2-0437-40c3-9d9a-6f378f44b4bc" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="1524c0a2-4fff-490c-beb1-8288e58f1aa3" start_index="0" end="13eebee2-0437-40c3-9d9a-6f378f44b4bc" end_index="1" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

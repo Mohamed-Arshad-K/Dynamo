@@ -1,0 +1,253 @@
+<Workspace Version="1.2.1.3083" X="99.8262258950957" Y="312.484217119075" zoom="0.531828354281922" Name="ElementsInWhichRooms" Description="This node will check if any of the supplied elements are inside any of the supplied rooms. It will return the list of elements, as well as equal length lists of room numbers, room names, or the rooms themselves." ID="ff97f91d-6675-4842-90ff-68859c08d4cd" Category="Crandle.Element Properties">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="5ce9af80-cfa8-4f5f-bfd5-c4d4f03c14bc" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="0" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Elements" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="86ef0ff5-494b-49d4-88a3-d7500f4d91c1" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="0" y="150" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Rooms" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="aadcc600-3e44-4948-8135-40a03663b2ad" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Room Names Out" x="2094.54837897334" y="315.897465553044" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="RoomNames" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <CoreNodeModels.Watch guid="ba6e528e-e93d-4fca-97e0-25f8ab524d41" type="CoreNodeModels.Watch" nickname="Watch" x="402.610080808824" y="-291.432619171484" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </CoreNodeModels.Watch>
+    <PythonNodeModels.PythonNode guid="9ed17df8-2d84-4574-a3fa-00381c5990d7" type="PythonNodeModels.PythonNode" nickname="Python Script" x="258.167985817764" y="164.5825309388" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <Script>#Copyright(c) 2015, Konrad Sobon
+# @arch_laboratory, http://archi-lab.net
+
+# This code is based on Family.InRoom node originally created
+# by Peter Kompolschek and published on Dynamo blog. Big thanks 
+# to Peter for sharing his work so graciously.
+
+import clr
+import sys
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+pyt_path = r'C:\Program Files (x86)\IronPython 2.7\Lib'
+sys.path.append(pyt_path)
+
+# Import ToDSType(bool) extension method
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+#The inputs to this node will be stored as a list in the IN variable.
+dataEnteringNode = IN
+
+def TryGetRoom(room, phase):
+	try:
+		inRoom = room.Room[phase]
+	except:
+		inRoom = None
+		pass
+	return inRoom
+
+#def FamiliesInRoom(_room, _families, _doc):
+#	outList = []
+#	for family in _families:
+#		pt = family.Location.Point
+		# I suppose it first checks to see if the family is in the room in the defaault phase?
+#		if _room.IsPointInRoom(pt):
+#			outList.append(family)
+#		else:
+		#Then if that fails see if its in the room during any of the phases
+#			for phase in _doc.Phases:
+#				inRoom = TryGetRoom(family, phase)
+#				if inRoom != None and inRoom.ToDSType(True).Name == _room.ToDSType(True).Name:
+#					outList.append(family)
+#	return outList
+
+
+#Create a list of rooms that any given family is in.
+def RoomsWithFamily(_rooms, _family, _doc):
+	outList = []
+	for _room in _rooms:
+		pt = family.Location.Point
+		# I suppose it first checks to see if the family is in the room in the defaault phase?
+		if _room.IsPointInRoom(pt):
+			outList.append(_room)
+		else:
+		#Then if that fails see if its in the room during any of the phases
+			for phase in _doc.Phases:
+				inRoom = TryGetRoom(family, phase)
+				if inRoom != None and inRoom.ToDSType(True).Name == _room.ToDSType(True).Name:
+					outList.append(_room)
+	return outList
+
+try:
+	errorReport = None
+	families = []
+	#Unwrap the elements and store them in a array for convenience
+	for i in IN[0]:
+		families.append(UnwrapElement(i))
+	#Unwrap the rooms  and store them in  an array for convenience
+	rooms = []
+	for i in IN[1]:
+		if UnwrapElement(i).Area &gt; 0:
+			rooms.append(UnwrapElement(i))
+	#Create a list of empty lists of lenth of the number of rooms
+	outData = [[] for i in range(len(families))]
+	#huh didnt know you could do this (enumerate) but its cools
+	#Go through all of the rooms input, and check if the elements are in them. if they are,  add em to de list!
+	
+	for index, family in enumerate(families):
+		roomList = RoomsWithFamily(rooms,family,doc);
+		roomNameList = "";
+		roomNumberList = "";		
+		for _room in roomList:
+			if roomNameList == "":
+				roomNameList = roomNameList + _room.LookupParameter("Name").AsString()
+			else:
+				roomNameList = roomNameList + ", " + _room.LookupParameter("Name").AsString()
+				
+			if roomNumberList == "":
+				roomNumberList = roomNumberList + _room.LookupParameter("Number").AsString()
+			else:
+				roomNumberList = roomNumberList + ", " + _room.LookupParameter("Number").AsString()
+		
+		if len(roomNameList)==0:
+			roomNameList="X"
+		if len(roomNumberList)==0:
+			roomNumberList="X"
+		outData[index] = [family,roomNameList,roomNumberList,roomList];#the output will be a 2D array : Element0 | List of Rooms
+		#																									 Element1 | List of Rooms
+		#outData[index].extend([FamiliesInRoom(room, families, doc),room])
+except:
+	# if error accurs anywhere in the process catch it
+	import traceback
+	errorReport = traceback.format_exc()
+
+#Assign your output to the OUT variable
+if errorReport == None:
+	OUT = outData
+else:
+	OUT = errorReport</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="3899e6a0-a4db-4154-bb52-124b036997c9" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.Flatten" x="909.248945723159" y="318.296460337889" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.Flatten@var[]..[],int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Input.DoubleInput guid="437a9106-4d45-418a-a6d0-d70e9ff903c2" type="CoreNodeModels.Input.DoubleInput" nickname="Number" x="554.219150954977" y="318.954906949816" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.Double value="1" />
+    </CoreNodeModels.Input.DoubleInput>
+    <CoreNodeModels.Input.DoubleInput guid="4415fba1-ca5d-49a1-8c0e-818d83833c18" type="CoreNodeModels.Input.DoubleInput" nickname="Number" x="1082.1425625471" y="111.774158667473" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.Double value="1" />
+    </CoreNodeModels.Input.DoubleInput>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="548ca5fa-83e3-45ed-890a-96245290a4ae" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.Flatten" x="1347.95185192868" y="25.0269451626066" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.Flatten@var[]..[],int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Watch guid="0d404d75-9857-45a8-a180-800639dd17bb" type="CoreNodeModels.Watch" nickname="Watch" x="1341.64401324649" y="-374.531905090317" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </CoreNodeModels.Watch>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="408c5567-e2ce-4c52-8957-820e28048197" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.TakeEveryNthItem" x="1572.41385270808" y="498.663481609264" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.TakeEveryNthItem@var[]..[],int,int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="True" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="d714ba5e-ca52-48ae-8498-e2758d0b654d" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.TakeEveryNthItem" x="1575.90552197498" y="68.3064517100589" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.TakeEveryNthItem@var[]..[],int,int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="True" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Input.DoubleInput guid="3519d24b-040b-4c37-9826-6c862c2c83cd" type="CoreNodeModels.Input.DoubleInput" nickname="Number" x="1341.24980056936" y="304.933115153813" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.Double value="4" />
+    </CoreNodeModels.Input.DoubleInput>
+    <CoreNodeModels.Input.DoubleInput guid="9fba084f-83fe-47e7-a363-f543b494ad1e" type="CoreNodeModels.Input.DoubleInput" nickname="Number" x="1265.40172967397" y="451.108171299326" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.Double value="1" />
+    </CoreNodeModels.Input.DoubleInput>
+    <CoreNodeModels.Watch guid="ecc7a366-e4fa-4659-8d45-36a91b5001ca" type="CoreNodeModels.Watch" nickname="Watch" x="2264.20091699874" y="-32.2576670960058" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </CoreNodeModels.Watch>
+    <CoreNodeModels.Watch guid="fe6c357e-bbc0-4bda-b849-8f26c37139f3" type="CoreNodeModels.Watch" nickname="Watch" x="2414.98020691504" y="543.176382840251" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </CoreNodeModels.Watch>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="078cbb41-4ad1-4306-813b-56a7c31d8858" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Elements Out" x="2101.12820418218" y="-20.9487146100129" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Elements" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="a5f48c39-3221-41ad-b955-0de82205d6b4" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Room Numbers Out" x="2051.14945772785" y="598.517459659056" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="RoomsNumbers" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="1eb2264a-c22d-4224-a7f0-d1c51df47c57" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.TakeEveryNthItem" x="1582.93901894174" y="265.670907333411" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.TakeEveryNthItem@var[]..[],int,int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="True" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Input.DoubleInput guid="e0e2a2d2-190d-48f9-a2fc-3c91d5a23637" type="CoreNodeModels.Input.DoubleInput" nickname="Number" x="1271.8643127908" y="562.225911808845" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.Double value="2" />
+    </CoreNodeModels.Input.DoubleInput>
+    <CoreNodeModels.Watch guid="a3b7341d-52a2-4091-a90f-9c8182002571" type="CoreNodeModels.Watch" nickname="Watch" x="2309.08952345886" y="285.795015055297" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </CoreNodeModels.Watch>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="f056b057-c7b3-4f19-9200-c90d233387be" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.TakeEveryNthItem" x="1567.87891106629" y="693.374875149143" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.TakeEveryNthItem@var[]..[],int,int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="True" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Input.DoubleInput guid="53d32d77-2389-4608-915f-2782fc4d339f" type="CoreNodeModels.Input.DoubleInput" nickname="Number" x="1263.26678803218" y="659.641716454236" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.Double value="3" />
+    </CoreNodeModels.Input.DoubleInput>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="675ccf51-6d76-4f9c-93c9-71b80c1a8c35" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Room List Out" x="2043.93612832384" y="775.200036881902" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="RoomList" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <CoreNodeModels.Watch guid="2c047f2d-40f2-4604-bf25-22f578144a47" type="CoreNodeModels.Watch" nickname="Watch" x="2246.60064431083" y="830.363688900973" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+    </CoreNodeModels.Watch>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="5ce9af80-cfa8-4f5f-bfd5-c4d4f03c14bc" start_index="0" end="9ed17df8-2d84-4574-a3fa-00381c5990d7" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="86ef0ff5-494b-49d4-88a3-d7500f4d91c1" start_index="0" end="9ed17df8-2d84-4574-a3fa-00381c5990d7" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9ed17df8-2d84-4574-a3fa-00381c5990d7" start_index="0" end="3899e6a0-a4db-4154-bb52-124b036997c9" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9ed17df8-2d84-4574-a3fa-00381c5990d7" start_index="0" end="ba6e528e-e93d-4fca-97e0-25f8ab524d41" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9ed17df8-2d84-4574-a3fa-00381c5990d7" start_index="0" end="548ca5fa-83e3-45ed-890a-96245290a4ae" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="437a9106-4d45-418a-a6d0-d70e9ff903c2" start_index="0" end="3899e6a0-a4db-4154-bb52-124b036997c9" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="4415fba1-ca5d-49a1-8c0e-818d83833c18" start_index="0" end="548ca5fa-83e3-45ed-890a-96245290a4ae" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="548ca5fa-83e3-45ed-890a-96245290a4ae" start_index="0" end="408c5567-e2ce-4c52-8957-820e28048197" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="548ca5fa-83e3-45ed-890a-96245290a4ae" start_index="0" end="d714ba5e-ca52-48ae-8498-e2758d0b654d" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="548ca5fa-83e3-45ed-890a-96245290a4ae" start_index="0" end="0d404d75-9857-45a8-a180-800639dd17bb" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="548ca5fa-83e3-45ed-890a-96245290a4ae" start_index="0" end="1eb2264a-c22d-4224-a7f0-d1c51df47c57" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="548ca5fa-83e3-45ed-890a-96245290a4ae" start_index="0" end="f056b057-c7b3-4f19-9200-c90d233387be" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="408c5567-e2ce-4c52-8957-820e28048197" start_index="0" end="fe6c357e-bbc0-4bda-b849-8f26c37139f3" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="408c5567-e2ce-4c52-8957-820e28048197" start_index="0" end="a5f48c39-3221-41ad-b955-0de82205d6b4" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d714ba5e-ca52-48ae-8498-e2758d0b654d" start_index="0" end="ecc7a366-e4fa-4659-8d45-36a91b5001ca" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d714ba5e-ca52-48ae-8498-e2758d0b654d" start_index="0" end="078cbb41-4ad1-4306-813b-56a7c31d8858" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3519d24b-040b-4c37-9826-6c862c2c83cd" start_index="0" end="408c5567-e2ce-4c52-8957-820e28048197" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3519d24b-040b-4c37-9826-6c862c2c83cd" start_index="0" end="d714ba5e-ca52-48ae-8498-e2758d0b654d" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3519d24b-040b-4c37-9826-6c862c2c83cd" start_index="0" end="1eb2264a-c22d-4224-a7f0-d1c51df47c57" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3519d24b-040b-4c37-9826-6c862c2c83cd" start_index="0" end="f056b057-c7b3-4f19-9200-c90d233387be" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9fba084f-83fe-47e7-a363-f543b494ad1e" start_index="0" end="d714ba5e-ca52-48ae-8498-e2758d0b654d" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="1eb2264a-c22d-4224-a7f0-d1c51df47c57" start_index="0" end="a3b7341d-52a2-4091-a90f-9c8182002571" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="1eb2264a-c22d-4224-a7f0-d1c51df47c57" start_index="0" end="aadcc600-3e44-4948-8135-40a03663b2ad" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="e0e2a2d2-190d-48f9-a2fc-3c91d5a23637" start_index="0" end="1eb2264a-c22d-4224-a7f0-d1c51df47c57" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="f056b057-c7b3-4f19-9200-c90d233387be" start_index="0" end="675ccf51-6d76-4f9c-93c9-71b80c1a8c35" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="f056b057-c7b3-4f19-9200-c90d233387be" start_index="0" end="2c047f2d-40f2-4604-bf25-22f578144a47" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="53d32d77-2389-4608-915f-2782fc4d339f" start_index="0" end="408c5567-e2ce-4c52-8957-820e28048197" end_index="2" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+</Workspace>

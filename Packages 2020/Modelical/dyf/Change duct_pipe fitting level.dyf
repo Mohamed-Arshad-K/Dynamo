@@ -1,0 +1,108 @@
+<Workspace Version="1.3.0.875" X="0" Y="0" zoom="1" ScaleFactor="1" Name="Change duct_pipe fitting level" Description="Change the level of a pipe/duct fitting(s) to another one, modifying also its offset value." ID="8f554a75-e18c-41eb-bb70-567ff0b0ceca" Category="Modelical.MEP">
+  <NamespaceResolutionMap />
+  <Elements>
+    <PythonNodeModels.PythonNode guid="acf9503c-3aff-4ae9-b9d2-30a98bea6200" type="PythonNodeModels.PythonNode" nickname="Python Script" x="809.714215129909" y="350.642843209043" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <Script># This node has been made by Modelical
+# www.modelical.com
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+#Load Dynamo wrappers
+clr.AddReference("RevitNodes")
+import Revit
+from Revit.Elements import *
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+#Load Revit API
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+import Autodesk
+
+#Load document reference
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+def toList(input):
+	if isinstance(input,list) == False:
+		return [input]
+	else:
+		return input
+
+def flatten(x):
+    result = []
+    for el in x:
+        if hasattr(el, "__iter__") and not isinstance(el, basestring):
+            result.extend(flatten(el))
+        else:
+            result.append(el)
+    return result
+
+fittings = UnwrapElement(flatten(toList(IN[0])))
+destinationLevels = UnwrapElement(flatten(toList(IN[1])))
+
+TransactionManager.Instance.EnsureInTransaction(doc)
+
+if len(destinationLevels) == 1:
+	for f in fittings:
+		startLevelId = f.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM).AsElementId()
+		startLevelElevation = doc.GetElement(startLevelId).Elevation
+		startOffset = f.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).AsDouble()
+		endLevelElevation = destinationLevels[0].Elevation
+		endOffset = startLevelElevation + startOffset - endLevelElevation
+		endLevelId = destinationLevels[0].Id
+		f.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).Set(endOffset)
+		f.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM).Set(endLevelId)
+		f.ToDSType(True)
+
+if len(destinationLevels) &gt; 1:
+	i = 0
+	for f in fittings:
+		startLevelId = f.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM).AsElementId()
+		startLevelElevation = doc.GetElement(startLevelId).Elevation
+		startOffset = f.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).AsDouble()
+		endLevelElevation = destinationLevels[i].Elevation
+		endOffset = startLevelElevation + startOffset - endLevelElevation
+		endLevelId = destinationLevels[i].Id
+		f.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).Set(endOffset)
+		f.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM).Set(endLevelId)
+		f.ToDSType(True)
+		i += 1
+
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = fittings</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="5fdb34f9-2719-4f61-bb0b-847850bed432" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="583" y="351" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Duct/Pipe fitting(s)" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="d068a8f9-3c3f-474c-94e7-4c7d6fcbd0a8" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="648" y="406" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="end Level(s)" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="aa64d91a-4acf-47a2-9ab6-20559ff9ef6e" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="960" y="350" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="fittings" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="acf9503c-3aff-4ae9-b9d2-30a98bea6200" start_index="0" end="aa64d91a-4acf-47a2-9ab6-20559ff9ef6e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="5fdb34f9-2719-4f61-bb0b-847850bed432" start_index="0" end="acf9503c-3aff-4ae9-b9d2-30a98bea6200" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d068a8f9-3c3f-474c-94e7-4c7d6fcbd0a8" start_index="0" end="acf9503c-3aff-4ae9-b9d2-30a98bea6200" end_index="1" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

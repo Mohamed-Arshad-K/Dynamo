@@ -1,0 +1,414 @@
+{
+  "Uuid": "9fae6ba1-0eee-4a22-942f-880c49b71bcb",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Wall",
+  "Description": "Walls By Curves",
+  "Name": "Walls By Profiles",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\nimport sys\nsys.path.append(r'C:\\Program Files (x86)\\IronPython 2.7\\DLLs')\nsys.path.append(r'C:\\Program Files (x86)\\IronPython 2.7\\Lib')\nimport random\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurves = UnwrapElement(IN[0])\nwalltypeid = UnwrapElement(IN[1]).Id\nlevels = UnwrapElement(IN[2])\nlocline = IN[3]\nvectors = UnwrapElement(IN[4])\nbheights = UnwrapElement(IN[5])\nproceed = True\n\nlevelids = []\nfor e in levels:\n\tlevelids.append(e.Id)\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\n# Create Empty List\nresult = []\n\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\tunits = doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits\n\tfactor = UnitUtils.ConvertToInternalUnits(1,units)\nelse:\n\tfactor = UnitUtils.ConvertToInternalUnits(1,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\t\nif proceed == True:\n\t###STEP 1 NEW TYPE###\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttGroup = TransactionGroup(doc, 'Wall By Edge')\n\ttGroup.Start()\n\ttrans1 = Transaction(doc, 'Creating Temporary Wall Type')\n\ttrans1.Start()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\ttrans1.SetFailureHandlingOptions(foptions)\n\texistedwalltype = doc.GetElement(walltypeid)\n\tduplicated = doc.GetElement(walltypeid).Duplicate(\"TMP \" + str(existedwalltype.Id) + \" \" + str(random.randint(1,99999)))\n\tthecompound = CompoundStructure.CreateSingleLayerCompoundStructure(MaterialFunctionAssignment.Structure,existedwalltype.Width/2,FilteredElementCollector(doc).OfClass(Material).FirstElementId())\n\tduplicated.SetCompoundStructure(thecompound)\n\ttrans1.Commit()\n\n\t###STEP 2 CREATE WALLS###\n\t#Revit.Transaction.Transaction.End(doc)\n\ttrans2 = Transaction(doc, 'Creating Walls')\n\ttrans2.Start()\n\tfoptions = trans2.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\ttrans2.SetFailureHandlingOptions(foptions)\n\tcounter = 0\n\tfor c in curves:\n\t\ttry:\n\t\t\tprf = List[Curve]()\n\t\t\tfor minc in c:\n\t\t\t\tprf.Add(minc.ToRevitType())\n\t\t\twallcreate = Wall.Create(doc,prf,existedwalltype.Id,levelids[counter],False,vectors[counter].ToXyz())\n\t\t\tbparam = wallcreate.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET)\n\t\t\tbparam.Set(bheights[counter])\n\t\t\tif locline == 1:\n\t\t\t\tlset = 3\n\t\t\telif locline == 2:\n\t\t\t\tlset = 2\n\t\t\telif locline == 3:\n\t\t\t\tlset = 0\n\t\t\tparam = wallcreate.get_Parameter(BuiltInParameter.WALL_KEY_REF_PARAM).Set(lset)\n\t\t\tresult.append(wallcreate)\n\t\texcept: pass\n\t\tcounter += 1\n\ttrans2.Commit()\n\t#Revit.Transaction.Transaction.End(doc)\n\t\n\tif len(result) > 0:\n\t\t###STEP 3 SET NEW TYPE###\n\t\ttrans3 = Transaction(doc, 'Set to Temporary Wall Type')\n\t\ttrans3.Start()\n\t\tfoptions = trans3.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans3.SetFailureHandlingOptions(foptions)\n\t\tfor e in result:\n\t\t\tWallUtils.DisallowWallJoinAtEnd(e,0)\n\t\t\tWallUtils.DisallowWallJoinAtEnd(e,1)\n\t\t\te.ChangeTypeId(duplicated.Id)\n\t\ttrans3.Commit()\n\t\t\n\t\t#Revit.Transaction.Transaction.End(doc)\n\t\t###STEP 4 SET EXTERIOR LOCATION LINE###\n\t\ttrans4 = Transaction(doc, 'Set Interior Location Line For Walls')\n\t\ttrans4.Start()\n\t\tfoptions = trans4.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans4.SetFailureHandlingOptions(foptions)\n\t\tfor e in result:\n\t\t\tif locline == 1:\n\t\t\t\tlset = 2\n\t\t\telif locline == 2:\n\t\t\t\tlset = 3\n\t\t\telif locline == 3:\n\t\t\t\tlset = 0\n\t\t\te.get_Parameter(BuiltInParameter.WALL_KEY_REF_PARAM).Set(lset)\n\t\ttrans4.Commit()\n\t\t\n\t\t#Revit.Transaction.Transaction.End(doc)\n\t\t###STEP 5 RESTORE EXISTED TYPE###\n\t\ttrans5 = Transaction(doc, 'Restore Correct Wall Type')\n\t\ttrans5.Start()\n\t\tfoptions = trans5.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans5.SetFailureHandlingOptions(foptions)\n\t\tfor e in result:\n\t\t\te.ChangeTypeId(existedwalltype.Id)\n\t\ttrans5.Commit()\n\t\t\n\t\t#Revit.Transaction.Transaction.End(doc)\n\t\t###STEP 6 SET WALL CENTERLINE LOCATION LINE###\n\t\ttrans6 = Transaction(doc, 'Set Wall Centerline Location Line')\n\t\ttrans6.Start()\n\t\tfoptions = trans6.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans6.SetFailureHandlingOptions(foptions)\n\t\tfor e in result:\n\t\t\te.get_Parameter(BuiltInParameter.WALL_KEY_REF_PARAM).Set(0)\n\t\t\t#e.Flip()\n\t\ttrans6.Commit()\n\t\n\t\t#Revit.Transaction.Transaction.End(doc)\n\t\t###STEP 7 SET INTERIOR LOCATION LINE###\n\t\ttrans7 = Transaction(doc, 'Set Interior Location Line')\n\t\ttrans7.Start()\n\t\tfoptions = trans7.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans7.SetFailureHandlingOptions(foptions)\n\t\tfor e in result:\n\t\t\tif locline == 1:\n\t\t\t\tlset = 3\n\t\t\telif locline == 2:\n\t\t\t\tlset = 2\n\t\t\telif locline == 3:\n\t\t\t\tlset = 0\n\t\t\te.get_Parameter(BuiltInParameter.WALL_KEY_REF_PARAM).Set(locline)\n\t\t\tWallUtils.AllowWallJoinAtEnd(e,0)\n\t\t\tWallUtils.AllowWallJoinAtEnd(e,1)\n\t\tdoc.Delete(duplicated.Id)\n\t\ttrans7.Commit()\n\t\ttGroup.Assimilate()\n\t\t# Assign your output to the OUT variable.\n\t\tOUT = result\n\telse:\n\t\ttrans3 = Transaction(doc, 'Deleting Temporary Wall Type')\n\t\ttrans3.Start()\n\t\tfoptions = trans3.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans3.SetFailureHandlingOptions(foptions)\n\t\tdoc.Delete(duplicated.Id)\t\n\t\ttrans3.Commit()\n\t\ttGroup.Assimilate()\n\t\tOUT = None\nelse:\n\tOUT = None",
+      "VariableInputPorts": true,
+      "Id": "53e9d75276bf4f41bcdc484fd2bf8e7f",
+      "Inputs": [
+        {
+          "Id": "b5cfcf1395734c0bb8f7725ac9b1dc5b",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "581f4ec9430d445ab950efb5862ab821",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ff30bb5bba25463ba95540d0341d1f1c",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "666c7b796fdd4eb5a534036a1e4b6768",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "0f1492cb162f43598a1bd2958827dcfd",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "322a708fa1d1489f8072ee2ceb051635",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0024851b7e934ce8a0a15f6de1089e07",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCurves",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "40b889f3465146e08f60598c9ee47198",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8ae74c6a7aa34eac845ced04d86db7c1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARWallType",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "a0d661472a61474db314c90d96025a3f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b7cd39d13a034b6da9c32172aaf77288",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARLevels",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "0ad76ba8ade642f08362015175c3eb3f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f2a86003171948cdac7cfdb353939010",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARLocationLine",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "8ba95b33a63b407db8352db2dc26d9c4",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "56fe98bd58b248b892f2f17ab6c3bfd7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARout",
+      "Id": "094c572ff1044513aa6173c127a4d53b",
+      "Inputs": [
+        {
+          "Id": "126cd82dd7f141318fd95289a53c90fc",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARVector",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "b33d69d4ef514157b9275de3a4163e33",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c0a274085cc749abb6182f3ebbe57e5a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARHeights",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "bd6b734aff1f40dfac08309fee08d6d5",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8bea0ce5023f4b6cb4e93de1f0327050",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "0024851b7e934ce8a0a15f6de1089e07",
+      "End": "126cd82dd7f141318fd95289a53c90fc",
+      "Id": "93707342f38b40239f64cab1e6e06569"
+    },
+    {
+      "Start": "8ae74c6a7aa34eac845ced04d86db7c1",
+      "End": "b5cfcf1395734c0bb8f7725ac9b1dc5b",
+      "Id": "19e2ec5060c745379014f69dda669e3b"
+    },
+    {
+      "Start": "b7cd39d13a034b6da9c32172aaf77288",
+      "End": "581f4ec9430d445ab950efb5862ab821",
+      "Id": "49959e408a9949cfa58effc431db4957"
+    },
+    {
+      "Start": "f2a86003171948cdac7cfdb353939010",
+      "End": "ff30bb5bba25463ba95540d0341d1f1c",
+      "Id": "42cd4058d1cf4885b13a6fff601994e7"
+    },
+    {
+      "Start": "56fe98bd58b248b892f2f17ab6c3bfd7",
+      "End": "666c7b796fdd4eb5a534036a1e4b6768",
+      "Id": "35bb344be3a94e25a933e4e93353449d"
+    },
+    {
+      "Start": "c0a274085cc749abb6182f3ebbe57e5a",
+      "End": "0f1492cb162f43598a1bd2958827dcfd",
+      "Id": "103528679e5c41aca0cd05efc94d0be3"
+    },
+    {
+      "Start": "8bea0ce5023f4b6cb4e93de1f0327050",
+      "End": "322a708fa1d1489f8072ee2ceb051635",
+      "Id": "731189b0fade4b1bba51857fc9f59606"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -4.4682464599609375,
+      "EyeY": 12.565937995910645,
+      "EyeZ": 6.4303689002990723,
+      "LookX": 18.793384552001953,
+      "LookY": -7.5240359306335449,
+      "LookZ": -12.633691787719727,
+      "UpX": 0.086749091744422913,
+      "UpY": 0.99452191591262817,
+      "UpZ": -0.058316335082054138
+    },
+    "NodeViews": [
+      {
+        "Id": "53e9d75276bf4f41bcdc484fd2bf8e7f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 376.512350309309,
+        "Y": 44.0534076969916
+      },
+      {
+        "Id": "40b889f3465146e08f60598c9ee47198",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "a0d661472a61474db314c90d96025a3f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 150.0
+      },
+      {
+        "Id": "0ad76ba8ade642f08362015175c3eb3f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 300.0
+      },
+      {
+        "Id": "8ba95b33a63b407db8352db2dc26d9c4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -21.7378079770651,
+        "Y": 423.932880344023
+      },
+      {
+        "Id": "094c572ff1044513aa6173c127a4d53b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 576.31235030931,
+        "Y": 44.0534076969916
+      },
+      {
+        "Id": "b33d69d4ef514157b9275de3a4163e33",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 27.1650108426014,
+        "Y": 521.974653599742
+      },
+      {
+        "Id": "bd6b734aff1f40dfac08309fee08d6d5",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 29.9628504127072,
+        "Y": 600.795856494733
+      }
+    ],
+    "Annotations": [],
+    "X": 151.595649475485,
+    "Y": 46.7902261869307,
+    "Zoom": 0.775230660981312
+  }
+}

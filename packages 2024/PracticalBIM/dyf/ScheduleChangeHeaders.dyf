@@ -1,0 +1,270 @@
+{
+  "Uuid": "5bbdfa5a-7a48-4e5d-9d24-25ce544ec11b",
+  "IsCustomNode": true,
+  "Category": "PracticalBIM.Revit.View.Schedules",
+  "Description": "Change Schedule Headers",
+  "Name": "ScheduleChangeHeaders",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Revit.Elements.Views.ScheduleView": {
+        "Key": "Revit.Elements.Views.ScheduleView",
+        "Value": "RevitNodes.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "OUT",
+      "Id": "885899457c5f44eeb07303d1469ce772",
+      "Inputs": [
+        {
+          "Id": "d9472e0e6b6e473ab1d637038a084fb5",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "#Copyright(c) 2014, Konrad Sobon\r\n# @arch_laboratory, http://archi-lab.net\r\n\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n# Import DocumentManager and TransactionManager\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Import RevitAPI\r\nclr.AddReference(\"RevitAPI\")\r\nimport Autodesk\r\nfrom Autodesk.Revit.DB import *\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\nuiapp = DocumentManager.Instance.CurrentUIApplication\r\napp = uiapp.Application\r\n\r\nfrom System.Collections.Generic import *\r\n\r\n# Import ToDSType(bool) extension method\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n#The inputs to this node will be stored as a list in the IN variable.\r\ndataEnteringNode = IN\r\n\r\n_keySchedule = UnwrapElement(IN[0])\r\n_paramName = IN[1]\r\n_columnHeading = IN[2]\r\n\r\ndef getField(schedule, name):\r\n\tdefinition = schedule.Definition\r\n\tcount = definition.GetFieldCount()\r\n\tfor i in range(0, count, 1):\r\n\t\tif definition.GetField(i).GetName() == name:\r\n\t\t\tfield = definition.GetField(i)\r\n\treturn field\r\n\r\ndef formatColumn(field, heading):\r\n\tmessage = None\r\n\tif heading != None:\r\n\t\tfield.ColumnHeading = heading\r\n\treturn message\r\n\r\n#\"Start\" the transaction\r\nTransactionManager.Instance.EnsureInTransaction(doc)\r\n\r\nmessage = None\r\nif type(_paramName) == list:\r\n\tfor i, j in zip(_paramName, _columnHeading):\r\n\t\tscheduleField = getField(_keySchedule, i)\r\n\t\tmessage = formatColumn(scheduleField, j)\r\nelse:\r\n\tscheduleField = getField(_keySchedule, _paramName)\r\n\tmessage = formatColumn(scheduleField, _columnHeading, _hidden, _headingOrientation, _horizontalAlignment, _sheetColumnWidth)\r\n\r\n# \"End\" the transaction\r\nTransactionManager.Instance.TransactionTaskDone()\r\n\r\n#Assign your output to the OUT variable\r\nif message == None:\r\n\tOUT = 0\r\nelse:\r\n\tOUT = '\\n'.join('{:^35}'.format(s) for s in message.split('\\n'))",
+      "VariableInputPorts": true,
+      "Id": "65d398ddea87489ea96e95631c988ec7",
+      "Inputs": [
+        {
+          "Id": "fc936ec626db48cbae4ecea4bb010b5e",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "163f5a6bf63a4cb4b763cee7b8eb83dc",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f730d18f6b5c4b73a9c916f635868ae2",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "d833ceb043654a2197257e101534f446",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "schedule",
+        "TypeName": "Revit.Elements.Views.ScheduleView",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "1af5b168fa3a4688b06c456634c5493b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "10e47b4dea104f93870d9a3084bc88bf",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "parametername",
+        "TypeName": "string",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "a23ba5db7cfd4590b28b81ed55b7838c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2e8b16bbf7a74bfe8cec6e877d56d0c1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "columnheading",
+        "TypeName": "string",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "1391377b880b455e88b38ae1dac7ccf6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "18b1e75794224183bbb276f81dbf08f1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "d833ceb043654a2197257e101534f446",
+      "End": "d9472e0e6b6e473ab1d637038a084fb5",
+      "Id": "c2f135e1e5314d01a924e66aa5f97a50"
+    },
+    {
+      "Start": "10e47b4dea104f93870d9a3084bc88bf",
+      "End": "fc936ec626db48cbae4ecea4bb010b5e",
+      "Id": "6f2897e47b184f7fbbcad4fe97b096ca"
+    },
+    {
+      "Start": "2e8b16bbf7a74bfe8cec6e877d56d0c1",
+      "End": "163f5a6bf63a4cb4b763cee7b8eb83dc",
+      "Id": "bea3a84dd9c44ac5911e19c658cf7894"
+    },
+    {
+      "Start": "18b1e75794224183bbb276f81dbf08f1",
+      "End": "f730d18f6b5c4b73a9c916f635868ae2",
+      "Id": "71c647b6daa44157b2897acbfcf7923c"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.6.1.8786",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "885899457c5f44eeb07303d1469ce772",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1131.0,
+        "Y": 259.0
+      },
+      {
+        "Id": "65d398ddea87489ea96e95631c988ec7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 903.39656416713933,
+        "Y": 238.83624278982523
+      },
+      {
+        "Id": "1af5b168fa3a4688b06c456634c5493b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 346.49143817531331,
+        "Y": 174.67243006472074
+      },
+      {
+        "Id": "a23ba5db7cfd4590b28b81ed55b7838c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 492.0,
+        "Y": 285.0
+      },
+      {
+        "Id": "1391377b880b455e88b38ae1dac7ccf6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 476.39656416713956,
+        "Y": 404.05170403769785
+      }
+    ],
+    "Annotations": [],
+    "X": -209.28167684780863,
+    "Y": -16.202219252278724,
+    "Zoom": 0.822695359375
+  }
+}

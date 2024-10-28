@@ -1,0 +1,322 @@
+{
+  "Uuid": "547d17ed-5fc4-4fc7-89e1-4edef938b36f",
+  "IsCustomNode": true,
+  "Category": "RIE.Elements",
+  "Description": "Returns elements contained by input BoundingBox.",
+  "Name": "RIE_ElementsInBBox",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# RETRIEVED FROM EINAR RAKNES ON THE DYNAMOBIM.ORG FORUMS.\n\nimport clr\nclr.AddReference('RevitAPI')\nclr.AddReference('RevitNodes')\nclr.AddReference('RevitServices')\nimport Revit\nimport RevitServices\nfrom Autodesk.Revit.DB import *\nfrom RevitServices.Persistence import DocumentManager\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n\ndoc = DocumentManager.Instance.CurrentDBDocument\n\nif IN[2] != None:\n\tdoc = UnwrapElement(IN[2])\n\ndef tolist(obj):\n\tif isinstance(obj,list):\n\t\treturn UnwrapElement(obj)\n\telse:\n\t\treturn [UnwrapElement(obj)]\n\n#Preparing input from dynamo to revit\nbbs = tolist(IN[0])\nOUT = []\n\nfor bbx in bbs:\n\telems = []\n\tbb = bbx.ToRevitType()\n\toutline = Outline(bb.Min, bb.Max)\n\t#filter = BoundingBoxIntersectsFilter(outline)\n\tif IN[1] == False:\n\t\tfilter = BoundingBoxIntersectsFilter(outline)\n\telse:\n\t\tfilter = BoundingBoxIsInsideFilter(outline)\n\t\n\tcollector = FilteredElementCollector(doc).WherePasses(filter).WhereElementIsNotElementType().WhereElementIsViewIndependent()\n\t\n\telems = [e.ToDSType(True) for e in collector]\n\tOUT.append(elems)\nif len(OUT) == 1:\n\tOUT = OUT[0]",
+      "VariableInputPorts": true,
+      "Id": "c750fd35f8084e0c925d907352f9f566",
+      "Inputs": [
+        {
+          "Id": "cde010af41a74ee99ade454218242cde",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3c961b41e89c4c589005b4476864de4c",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ae6a749038984eb897acc3dac7f512a6",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "7d2d9d26ffdd461ca4aabaf52895c475",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "BBox",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "e8c85b24b3704fcdaca3c59dd4bc2eef",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "46889616276d4e06aae5fd3ee3a8151f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "Elements",
+      "Id": "d6e47d41ea774376b6b6419f40f694b2",
+      "Inputs": [
+        {
+          "Id": "0e533e9edf3642418a30534b2028aa9e",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "OnlyInside",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "69efd8b43832484a8021712da52d725a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b2757629734f4ff8a221e0c13db0def8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "d04f09ff-a04d-42d6-980e-f9fc98e163df",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "e24e4f05c3f1444d95e06b78369f5b37",
+      "Inputs": [
+        {
+          "Id": "1dc5a82654954158b6c3c7085aa9e81d",
+          "Name": "LinkInstance",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4ca82d75510e4fc8851d7b1185f905fc",
+          "Name": "LinkDoc",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Retrieves link Document element from link element."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "LinkOptional",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "0a47980f3dde4226b6977713d3caf264",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d70b110afb0b426cafc1e14fc8afc910",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "7d2d9d26ffdd461ca4aabaf52895c475",
+      "End": "0e533e9edf3642418a30534b2028aa9e",
+      "Id": "4af2538e5dec44619e7b8ac1cec6f94c"
+    },
+    {
+      "Start": "46889616276d4e06aae5fd3ee3a8151f",
+      "End": "cde010af41a74ee99ade454218242cde",
+      "Id": "efa77ebd4c1e4e328781a9196b8ef4b3"
+    },
+    {
+      "Start": "b2757629734f4ff8a221e0c13db0def8",
+      "End": "3c961b41e89c4c589005b4476864de4c",
+      "Id": "b9ec72021b77485bbd36b0050d2f1965"
+    },
+    {
+      "Start": "4ca82d75510e4fc8851d7b1185f905fc",
+      "End": "ae6a749038984eb897acc3dac7f512a6",
+      "Id": "64be9b8c45704d91be174be8e07a4fb2"
+    },
+    {
+      "Start": "d70b110afb0b426cafc1e14fc8afc910",
+      "End": "1dc5a82654954158b6c3c7085aa9e81d",
+      "Id": "8b15148c18c64a1a9ca5cef7c64cb9bd"
+    }
+  ],
+  "Dependencies": [
+    "d04f09ff-a04d-42d6-980e-f9fc98e163df"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "RIE",
+      "Version": "2020.11.18",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "e24e4f05c3f1444d95e06b78369f5b37"
+      ]
+    }
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.3.0.5885",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "c750fd35f8084e0c925d907352f9f566",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "e8c85b24b3704fcdaca3c59dd4bc2eef",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 187.681092653563,
+        "Y": -0.972440894578057
+      },
+      {
+        "Id": "d6e47d41ea774376b6b6419f40f694b2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 373.149610222912,
+        "Y": -0.972440894578028
+      },
+      {
+        "Id": "69efd8b43832484a8021712da52d725a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 8.45692423284487,
+        "Y": 51.8177237406808
+      },
+      {
+        "Id": "e24e4f05c3f1444d95e06b78369f5b37",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "RIE.LinkDocFromLink",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -2.54832464356434,
+        "Y": 110.762743812381
+      },
+      {
+        "Id": "0a47980f3dde4226b6977713d3caf264",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -289.548324643564,
+        "Y": 115.762743812381
+      }
+    ],
+    "Annotations": [],
+    "X": 188.201974951379,
+    "Y": 392.019690393838,
+    "Zoom": 1.05429821501133
+  }
+}

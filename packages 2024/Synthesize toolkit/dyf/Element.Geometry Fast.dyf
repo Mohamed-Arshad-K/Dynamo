@@ -1,0 +1,164 @@
+{
+  "Uuid": "af8f6038-6486-4f88-aab4-eb7281a189c3",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Geometry",
+  "Description": "Element.Geometry Fast",
+  "Name": "Element.Geometry Fast",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki, karam@aecedx.com\n# Inspired By @5devene, dimitar.ven@gmail.com\nimport clr\nimport System\nfrom System.Collections.Generic import *\n\nfrom itertools import repeat\n\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nimport traceback\nimport random\nimport string\n\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\nfrom Autodesk.DesignScript.Geometry import Point as DynPoint\nfrom Autodesk.DesignScript.Geometry import Line as DynLine\nfrom Autodesk.DesignScript.Geometry import Curve as DynCurve\nfrom Autodesk.DesignScript import Geometry as dg\n\nclr.AddReference('RevitServices')\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\ndoc = DocumentManager.Instance.CurrentDBDocument\n\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nfrom Autodesk.Revit.DB.Structure import StructuralType\n\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndef on_dialog_open(sender, event):\n    try:\n        if event.DialogId == 'TaskDialog_Really_Print_Or_Export_Temp_View_Modes':\n            event.OverrideResult(1002) \n    except Exception as e:\n        pass\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    try:\n    \tfor el in x:\n        \tif hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n        \t    result.extend(flatten(el))\n        \telse:\n        \t    result.append(el)\n    except:\n    \tresult = x\n    return result\n\ngeom = UnwrapElement(IN[0])\nif geom != None:\n\tgeom = tolist(geom)\nelse:\n\tpass\n\ndef cleangeomlist(geoms):\n\tfilteredgeoms = []\n\tfor e in geoms:\n\t\tif isinstance(e,str) or isinstance(e,dg.Solid) or isinstance(e,dg.Surface) or isinstance(e,dg.PolySurface) or isinstance(e,dg.Cuboid):\n\t\t\tfilteredgeoms.append(e)\n\treturn filteredgeoms\n\n# Better SAT Import Function\ndef betteimport(doc,sat,temp_path):\n\tgeoms = dg.Geometry.ImportFromSAT(sat)\n\tgeoms = cleangeomlist(geoms)\n\tsat_path = None\n\ttry:\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits),8) * 1000\n\t\telse:\n\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId()),8) * 1000\n\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\tdg.Geometry.ExportToSAT(geoms,sat_path,factor)\n\t\tfor g in geoms:\n\t\t\tg.Dispose()\n\t\tscaledgeoms = dg.Geometry.ImportFromSAT(sat_path)\n\texcept:\n\t\tscaledgeoms = geoms\n\tif sat_path != None:\n\t\tSystem.IO.File.Delete(sat_path)\n\treturn scaledgeoms\n\ntemp_path = System.IO.Path.GetTempPath()\nsatOpt = SATExportOptions()\nopt1 = Options()\n\n#Find a 3D view type\ncollector1 = FilteredElementCollector(doc)\nviewFamilyTypes = collector1.OfClass((ViewFamilyType))\nfor e in viewFamilyTypes:\n\tif str(e.ViewFamily) == \"ThreeDimensional\":\n\t\tviewType = e.Id\n\t\tbreak\n\ndef NewForm_background(s1):\n\tDocumentManager.Instance.CurrentUIApplication.DialogBoxShowing += on_dialog_open\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttry:\n\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\ttrans1 = Transaction(doc, 'Fetching Geometry')\n\t\tfoptions = trans1.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans1.SetFailureHandlingOptions(foptions)\n\t\ttrans1.Start()\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\tstatus = True\n\t\tfinalres = []\n\t\tresultgeom = []\n\t\tthreedeeview = View3D.CreateIsometric(doc, viewType)\n\t\tthreedeeviewid = threedeeview.Id\n\t\ttry:\n\t\t\twantedsub = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Mass)\n\t\t\tthreedeeview.SetCategoryHidden(wantedsub.Id,False)\n\t\texcept:\n\t\t\tpass\n\t\tkilist = List[ElementId]([threedeeviewid])\n\t\ttid = []\n\t\toldvalues = []\n\t\tparams = []\n\t\tfor each in s1:\n\t\t\ttry:\n\t\t\t\toldvalue = 1\n\t\t\t\teparm = each.LookupParameter(\"Visible\")\n\t\t\t\tif eparm != None:\n\t\t\t\t\tif doc.FamilyManager.GetAssociatedFamilyParameter(eparm) != None:\n\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(eparm, None)\n\t\t\t\t\tpname = eparm.Definition.Name\n\t\t\t\t\toldvalue = eparm.AsInteger()\n\t\t\t\t\tif oldvalue == 0:\n\t\t\t\t\t\teparm.Set(1)\n\t\t\texcept:\n\t\t\t\tcontinue\t\n\t\t\ttid.append(each.Id)\n\t\tielements = List[ElementId](tid)\n\t\tthreedeeview.IsolateElementsTemporary(ielements)\n\t\tcollectorinside = FilteredElementCollector(doc,threedeeviewid).ToElements()\n\t\telemento = []\n\t\tfor k in collectorinside:\n\t\t\telemento.append(int(str(k.Id)))\n\t\tfor each in s1:\n\t\t\tbreakme = True\n\t\t\tif int(str(each.Id)) in elemento:\n\t\t\t\tdoc.Export(temp_path, randomname, kilist, satOpt)\n\t\t\t\teachlist = betteimport(doc,sat_path,temp_path)\n\t\t\t\tSystem.IO.File.Delete(sat_path)\n\t\t\t\tif eachlist == []:\n\t\t\t\t\tieach = List[ElementId]([each.Id])\n\t\t\t\t\ttry:\n\t\t\t\t\t\tif PartUtils.AreElementsValidForCreateParts(doc,ieach):\n\t\t\t\t\t\t\tpart = PartUtils.CreateParts(doc,ieach)\n\t\t\t\t\t\t\tthreedeeview.PartsVisibility = PartsVisibility.ShowPartsOnly\n\t\t\t\t\t\t\tdoc.Regenerate()\n\t\t\t\t\t\t\tdoc.Export(temp_path, randomname, kilist, satOpt)\n\t\t\t\t\t\t\teachlist = betteimport(doc,sat_path,temp_path)\n\t\t\t\t\t\t\tSystem.IO.File.Delete(sat_path)\n\t\t\t\t\t\t\tthreedeeview.PartsVisibility = PartsVisibility.ShowOriginalOnly\n\t\t\t\t\t\t\tfetchparts = PartUtils.GetAssociatedParts(doc,each.Id,True,True)\n\t\t\t\t\t\t\tfor fetch in fetchparts:\n\t\t\t\t\t\t\t\tdoc.Delete(fetch)\n\t\t\t\t\t\t\tbreakme = False\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\ttmplist = []\n\t\t\t\tfor e in eachlist:\n\t\t\t\t\ttmplist.append(e)\n\t\t\t\tresultgeom.append(tmplist)\n\t\t\telse:\n\t\t\t\tresultgeom = [None]\n\t\t\tif breakme:\n\t\t\t\tbreak\n\t\tfinalres.append(flatten(resultgeom))\n\t\tcounter = 0\n\t\tfor ov in oldvalues:\n\t\t\tif ov == 0:\n\t\t\t\tparams[counter].Set(0)\n\t\t\tcounter += 1\n\t\ttrans1.RollBack()\n\t\treturn finalres\n\texcept:\n\t\ttrans1.RollBack()\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\treturn traceback.format_exc(),''\n\nresult = NewForm_background(geom)\nOUT = flatten(result)\nsatOpt.Dispose()\nopt1.Dispose()",
+      "VariableInputPorts": true,
+      "Id": "e6799fe65d1643b1afaa81660271e5ae",
+      "Inputs": [
+        {
+          "Id": "0a53292cd1324789bc7f23da8205f33d",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "84df9182b5b04419842c4f2aea8e4267",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARGeometry",
+      "Id": "961778811d5e44c19515b441d0ba2527",
+      "Inputs": [
+        {
+          "Id": "eb31c2c1f8af4494ae61d8064f361fb3",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "d952504335d8494fbef3e8204122d392",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bff1ab40e933443dbc8ddc9ff753d9d2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "84df9182b5b04419842c4f2aea8e4267",
+      "End": "eb31c2c1f8af4494ae61d8064f361fb3",
+      "Id": "cbcf4dbc17d4414f9caf9cfcf5095c23"
+    },
+    {
+      "Start": "bff1ab40e933443dbc8ddc9ff753d9d2",
+      "End": "0a53292cd1324789bc7f23da8205f33d",
+      "Id": "83596b22fe4e454b896fc28f76cd20c1"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "e6799fe65d1643b1afaa81660271e5ae",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "961778811d5e44c19515b441d0ba2527",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "d952504335d8494fbef3e8204122d392",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 23.5999999999999,
+        "Y": 23.9999999999999
+      }
+    ],
+    "Annotations": [],
+    "X": 51.9999999999997,
+    "Y": 244.0,
+    "Zoom": 1.0
+  }
+}

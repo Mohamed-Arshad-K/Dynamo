@@ -1,0 +1,312 @@
+{
+  "Uuid": "9054f020-6e55-4c79-8b5f-70aa2664b48b",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Adaptive",
+  "Description": "Adaptive Match Coordination",
+  "Name": "Adaptive Match Coordination",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\r\n# Enable Python support and load DesignScript library\r\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript import Geometry as dg\r\n\r\n# EXTENSION Enable ToDSType\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Enable Revit Elements\r\nfrom Revit.Elements import *\r\n\r\n# EXTENSION Enable Geometry Conversion Methods\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\n# Enable Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\n\r\n# Enable DocumentManager and TransactionManager\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Enable ICollection List Translate\r\nclr.AddReference(\"System\")\r\nimport System.Collections.Generic\r\nfrom System.Collections.Generic import List\r\nfrom itertools import combinations\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\napp = doc.Application\r\n\r\nfam1 = UnwrapElement(IN[0])\r\nradius = IN[1]\r\nkeepmode = IN[2]\r\n\r\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t#radius = UnitUtils.ConvertFromInternalUnits(radius,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\tprunetol = UnitUtils.ConvertFromInternalUnits(0.0032808399,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\nelse:\r\n\t#radius = UnitUtils.ConvertFromInternalUnits(radius,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\tprunetol = UnitUtils.ConvertFromInternalUnits(0.0032808399,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\r\nif str(DocumentManager.Instance.CurrentUIApplication.Application.SubVersionNumber) == \"2022.0\":\r\n\tprunetol = 0.0032808399\r\n\r\nfilteredfam1 = []\r\nfor each in fam1:\r\n\ttry:\r\n\t\tif AdaptiveComponentInstanceUtils.IsAdaptiveComponentInstance(each) == True:\r\n\t\t\tfilteredfam1.append(each)\r\n\texcept:\r\n\t\tpass\r\nfam1 = filteredfam1\r\n\r\np1lists = []\r\nfor each in fam1:\r\n\tids1 = AdaptiveComponentInstanceUtils.GetInstancePlacementPointElementRefIds(each)\r\n\ttmpl1 = []\r\n\tfor e in ids1:\r\n\t\ttmpl1.append(doc.GetElement(e))\r\n\tp1lists.append(tmpl1)\r\n\r\np1lists = flatten(p1lists)\r\n\r\npts = []\r\nfor each in p1lists:\r\n\tpts.append(each.GetCoordinateSystem().Origin.ToPoint())\r\n\r\nprunedpts = dg.Point.PruneDuplicates(pts, radius)\r\n\r\nboxes = []\r\nfor pp in prunedpts:\r\n\tminp = dg.Point.ByCoordinates((pp.X - radius),(pp.Y - radius),(pp.Z - radius))\r\n\tmaxp = dg.Point.ByCoordinates((pp.X + radius),(pp.Y + radius),(pp.Z + radius))\r\n\tpbbox = dg.BoundingBox.ByCorners(minp, maxp)\r\n\tboxes.append(pbbox)\r\n\tminp.Dispose()\r\n\tmaxp.Dispose()\r\n\r\ngrouped = []\r\ngroupedrefs = []\r\n\r\nfor each in boxes:\r\n\ttmp = []\r\n\ttmp2 = []\r\n\tcount = 0\r\n\tfor e in pts:\r\n\t\tif dg.BoundingBox.Contains(each,e):\r\n\t\t\ttmp.append(e)\r\n\t\t\ttmp2.append(p1lists[count])\r\n\t\tcount = count + 1\r\n\tgrouped.append(tmp)\r\n\tgroupedrefs.append(tmp2)\r\n\r\nnewgrouped = []\r\nnewgroupedrefs = [] \r\n\r\ncount = 0\r\nfor each in grouped:\r\n\tif len(each) > 1:\r\n\t\tnewgrouped.append(each)\r\n\t\tnewgroupedrefs.append(groupedrefs[count])\r\n\tcount = count + 1\r\n\r\ngrouped = newgrouped\r\ngroupedrefs = newgroupedrefs\r\n\r\nfor each in boxes:\r\n\teach.Dispose()\t\r\n\r\nif keepmode:\r\n\tcorlists = []\r\n\treflists = []\r\n\tglobalcount = 0\r\n\tfor eachgroup in grouped:\r\n\t\ttmpgroupbase = []\r\n\t\ttmpgrouptran = []\r\n\t\ttmpref = []\r\n\t\tcount = 0\r\n\t\ttmpcoor = []\r\n\t\tfor eachpt in eachgroup:\r\n\t\t\trefp = groupedrefs[globalcount][count]\r\n\t\t\tcbase = refp.GetCoordinateSystem().ToCoordinateSystem()\r\n\t\t\tcbz = cbase.ZAxis\r\n\t\t\tctrabase = dg.CoordinateSystem.Translate(cbase,cbz)\r\n\t\t\tcbaseorigin = cbase.Origin\r\n\t\t\tctraorigin = ctrabase.Origin\r\n\t\t\ttmpgroupbase.append(cbaseorigin)\r\n\t\t\ttmpgrouptran.append(ctraorigin)\r\n\t\t\ttmpref.append(refp)\r\n\t\t\tcount = count + 1\r\n\t\ttry:\r\n\t\t\ttry:\r\n\t\t\t\tpolyg = dg.Polygon.ByPoints(tmpgroupbase)\r\n\t\t\t\tmidp = polyg.Center()\r\n\t\t\t\tpolyg.Dispose()\r\n\t\t\texcept:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tpruned = dg.Point.PruneDuplicates(tmpgroupbase,prunetol)\r\n\t\t\t\t\tpolyc = dg.PolyCurve.ByPoints(pruned)\r\n\t\t\t\t\tmidp = dg.Curve.PointAtParameter(polyc,0.5)\r\n\t\t\t\t\tpolyc.Dispose()\r\n\t\t\t\texcept:\r\n\t\t\t\t\tmidp = tmpgroupbase[0]\r\n\t\t\ttry:\r\n\t\t\t\tpolygtop = dg.Polygon.ByPoints(tmpgrouptran)\r\n\t\t\t\tmidptop = polygtop.Center()\r\n\t\t\t\tpolygtop.Dispose()\r\n\t\t\texcept:\r\n\t\t\t\tprunedtop = dg.Point.PruneDuplicates(tmpgrouptran,prunetol)\r\n\t\t\t\tif len(prunedtop) > 1:\r\n\t\t\t\t\tpolyctop = dg.PolyCurve.ByPoints(prunedtop)\r\n\t\t\t\t\tmidptop = dg.Curve.PointAtParameter(polyctop,0.5)\r\n\t\t\t\t\tpolyctop.Dispose()\r\n\t\t\tvec = dg.Vector.ByTwoPoints(midp, midptop)\r\n\t\t\tmidptop.Dispose()\r\n\t\t\tfor eachpt in eachgroup:\r\n\t\t\t\tplane = dg.Plane.ByOriginNormal(eachpt,vec)\r\n\t\t\t\tcoor = dg.CoordinateSystem.ByPlane(plane)\r\n\t\t\t\ttmpcoor.append(coor)\r\n\t\t\tmidp.Dispose()\r\n\t\t\tvec.Dispose()\r\n\t\t\tplane.Dispose()\r\n\t\t\treflists.append(tmpref)\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tglobalcount = globalcount + 1\r\n\t\tcorlists.append(tmpcoor)\r\n\t\r\n\tTransactionManager.Instance.EnsureInTransaction(doc)\r\n\tcounter = 0\r\n\tfor eachlist in reflists:\r\n\t\ttry:\r\n\t\t\tminicounter = 0\r\n\t\t\tfor eachref in eachlist:\r\n\t\t\t\tskp = SketchPlane.Create(doc, corlists[counter][minicounter].XYPlane.ToPlane()).GetPlaneReference()\r\n\t\t\t\txcoor = corlists[counter][minicounter].XAxis.ToXyz()\r\n\t\t\t\torcoor = corlists[counter][minicounter].Origin.ToXyz()\r\n\t\t\t\tdynpoints = PointOnPlane.NewPointOnPlane(doc,skp,orcoor,xcoor)\r\n\t\t\t\teachref.SetPointElementReference(dynpoints)\r\n\t\t\t\tminicounter += 1\r\n\t\t\tcounter = counter + 1\r\n\t\texcept:\r\n\t\t\tcounter = counter + 1\r\n\tTransactionManager.Instance.TransactionTaskDone()\r\n\t\r\n\tOUT = \"Done, Remember to have your Adaptive Points orientation set to Host\"\r\nelse:\r\n\tcorlists = []\r\n\treflists = []\r\n\tglobalcount = 0\r\n\tfor eachgroup in grouped:\r\n\t\ttmpgroupbase = []\r\n\t\ttmpgrouptran = []\r\n\t\ttmpref = []\r\n\t\tcount = 0\r\n\t\tfor eachpt in eachgroup:\r\n\t\t\trefp = groupedrefs[globalcount][count]\r\n\t\t\tcbase = refp.GetCoordinateSystem().ToCoordinateSystem()\r\n\t\t\tcbz = cbase.ZAxis\r\n\t\t\tctrabase = dg.CoordinateSystem.Translate(cbase,cbz)\r\n\t\t\tcbaseorigin = cbase.Origin\r\n\t\t\tctraorigin = ctrabase.Origin\r\n\t\t\ttmpgroupbase.append(cbaseorigin)\r\n\t\t\ttmpgrouptran.append(ctraorigin)\r\n\t\t\ttmpref.append(refp)\r\n\t\t\tcount = count + 1\r\n\t\r\n\t\ttry:\r\n\t\t\ttry:\r\n\t\t\t\tpolyg = dg.Polygon.ByPoints(tmpgroupbase)\r\n\t\t\t\tmidp = polyg.Center()\r\n\t\t\t\tpolyg.Dispose()\r\n\t\t\texcept:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tpruned = dg.Point.PruneDuplicates(tmpgroupbase,prunetol)\r\n\t\t\t\t\tpolyc = dg.PolyCurve.ByPoints(pruned)\r\n\t\t\t\t\tmidp = dg.Curve.PointAtParameter(polyc,0.5)\r\n\t\t\t\t\tpolyc.Dispose()\r\n\t\t\t\texcept:\r\n\t\t\t\t\tmidp = tmpgroupbase[0]\r\n\t\t\ttry:\r\n\t\t\t\tpolygtop = dg.Polygon.ByPoints(tmpgrouptran)\r\n\t\t\t\tmidptop = polygtop.Center()\r\n\t\t\t\tpolygtop.Dispose()\r\n\t\t\texcept:\r\n\t\t\t\tprunedtop = dg.Point.PruneDuplicates(tmpgrouptran,prunetol)\r\n\t\t\t\tif len(prunedtop) > 1:\r\n\t\t\t\t\tpolyctop = dg.PolyCurve.ByPoints(prunedtop)\r\n\t\t\t\t\tmidptop = dg.Curve.PointAtParameter(polyctop,0.5)\r\n\t\t\t\t\tpolyctop.Dispose()\r\n\t\t\tvec = dg.Vector.ByTwoPoints(midp, midptop)\r\n\t\t\tmidptop.Dispose()\r\n\t\t\tplane = dg.Plane.ByOriginNormal(midp,vec)\r\n\t\t\tmidp.Dispose()\r\n\t\t\tvec.Dispose()\r\n\t\t\tcoor = dg.CoordinateSystem.ByPlane(plane)\r\n\t\t\tplane.Dispose()\r\n\t\t\tcorlists.append(coor)\r\n\t\t\treflists.append(tmpref)\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tglobalcount = globalcount + 1\r\n\t\r\n\tTransactionManager.Instance.EnsureInTransaction(doc)\r\n\tcounter = 0\r\n\tfor eachlist in reflists:\r\n\t\ttry:\r\n\t\t\tskp = SketchPlane.Create(doc, corlists[counter].XYPlane.ToPlane()).GetPlaneReference()\r\n\t\t\txcoor = corlists[counter].XAxis.ToXyz()\r\n\t\t\torcoor = corlists[counter].Origin.ToXyz()\r\n\t\t\tdynpoints = PointOnPlane.NewPointOnPlane(doc,skp,orcoor,xcoor)\r\n\t\t\tfor eachref in eachlist:\r\n\t\t\t\teachref.SetPointElementReference(dynpoints)\r\n\t\t\tcounter = counter + 1\r\n\t\texcept:\r\n\t\t\tcounter = counter + 1\r\n\tTransactionManager.Instance.TransactionTaskDone()\r\n\t\r\n\tOUT = \"Done, Remember to have your Adaptive Points orientation set to Host\"",
+      "VariableInputPorts": true,
+      "Id": "f2b8f25088b84c65bf06b37d953d8e9c",
+      "Inputs": [
+        {
+          "Id": "754b3824dd654cf5897da2629956ff95",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8d37202d5d5c476fbf86104cb4ea6bc4",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3cafbcdd9dcd4c8084d7fb525ffc5d7f",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3d53cf013ac8409e93bb76a2d0998dcb",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "f3a9f5596a0d4067bedc93b35f492326",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0482f6691c55410180cfb90c79479b09",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSnappingTolleranceInMeters",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.01",
+        "Description": ""
+      },
+      "Id": "cdb40d89443e4a0abde11aaa46e46772",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "68441d3ecba94cd78c68ab8022d0959e",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROutput",
+      "Id": "a9f7afa8555044e0b5d1e01896444ea0",
+      "Inputs": [
+        {
+          "Id": "b2375b85a61d47bd8f8f1195348e7726",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARKeepSamePositions",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "8e47c3b5b07543b8973a70332b96f987",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2ffe776cff384796a7d8098f5f7f3214",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "38233cfd-3624-47e5-bbea-ba4bf44721f3",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "990257ecdbf942e7adbda5517812f58e",
+      "Inputs": [
+        {
+          "Id": "bdc7cf07a2e44fe18b1e7bb43db54010",
+          "Name": "VARInput",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "eb0016af4187494abc9072eb08c6bbc4",
+          "Name": "VAROutput",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "MetersInput"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "3d53cf013ac8409e93bb76a2d0998dcb",
+      "End": "b2375b85a61d47bd8f8f1195348e7726",
+      "Id": "a0df4945ce624932846ff383e3354c2c"
+    },
+    {
+      "Start": "0482f6691c55410180cfb90c79479b09",
+      "End": "754b3824dd654cf5897da2629956ff95",
+      "Id": "c8799da8c71a4e58bb96d92f8d3c5db2"
+    },
+    {
+      "Start": "68441d3ecba94cd78c68ab8022d0959e",
+      "End": "bdc7cf07a2e44fe18b1e7bb43db54010",
+      "Id": "92c4795332d74064845c832efc88c77d"
+    },
+    {
+      "Start": "2ffe776cff384796a7d8098f5f7f3214",
+      "End": "3cafbcdd9dcd4c8084d7fb525ffc5d7f",
+      "Id": "b5aae084ca544a05a824581038a77f69"
+    },
+    {
+      "Start": "eb0016af4187494abc9072eb08c6bbc4",
+      "End": "8d37202d5d5c476fbf86104cb4ea6bc4",
+      "Id": "a095c833b1874cd1818322c79533c7b6"
+    }
+  ],
+  "Dependencies": [
+    "38233cfd-3624-47e5-bbea-ba4bf44721f3"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -3.9863054752349854,
+      "EyeY": 19.356279373168945,
+      "EyeZ": -38.521331787109375,
+      "LookX": -18.22150993347168,
+      "LookY": -19.244556427001953,
+      "LookZ": -14.488523483276367,
+      "UpX": -0.35778135061264038,
+      "UpY": 0.8894163966178894,
+      "UpZ": -0.28448379039764404
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "f2b8f25088b84c65bf06b37d953d8e9c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 311.511879049676,
+        "Y": 13.1317494600432
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "f3a9f5596a0d4067bedc93b35f492326",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -334.3050761107,
+        "Y": 17.0488176287053
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "cdb40d89443e4a0abde11aaa46e46772",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -396.472508715339,
+        "Y": 171.423456771313
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "a9f7afa8555044e0b5d1e01896444ea0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 554.853995680346,
+        "Y": 27.645788336933
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "8e47c3b5b07543b8973a70332b96f987",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -388.992893332437,
+        "Y": 273.39787048769
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "MillimetersInput",
+        "Id": "990257ecdbf942e7adbda5517812f58e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 21.693042751846,
+        "Y": 106.583849674445
+      }
+    ],
+    "Annotations": [],
+    "X": 550.107907571789,
+    "Y": 164.38572590083197,
+    "Zoom": 1.08570356044718
+  }
+}

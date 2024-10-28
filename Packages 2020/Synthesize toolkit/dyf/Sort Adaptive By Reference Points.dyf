@@ -1,0 +1,262 @@
+{
+  "Uuid": "2c8143a4-de5a-456e-984c-95cb41f7c67f",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Adaptive",
+  "Description": "Sort Adaptive By Points",
+  "Name": "Sort Adaptive By Reference Points",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\nclr.AddReference(\"RevitAPIUI\")\nfrom Autodesk.Revit.UI import TaskDialog\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nelement = UnwrapElement(flatten(tolist(IN[0])))\nsourceRefs = UnwrapElement(flatten(tolist(IN[1])))\n\nfiltered = []\nfor source in sourceRefs:\n\tif hasattr(source, 'GetCoordinatePlaneReferenceXY'):\n\t\tfiltered.append(source)\n\nisgood = True\nnumbers = []\nfor filt in filtered:\n\ttry:\n\t\tnumbers.append(int(filter(str.isdigit, filt.LookupParameter(\"Name\").AsString())))\n\texcept:\n\t\tisgood = False\n\t\tTaskDialog.Show(\"AECedx - Karam\", \"One or more Reference Points don't have number in 'Name' parameter to indicate it's order\")\n\t\tbreak\n\t\t \nif isgood:\n\tsourceRefs = [x for _, x in sorted(zip(numbers, filtered))]\n\t\n\t# Choose The Current Document\n\tdoc = DocumentManager.Instance.CurrentDBDocument\n\tuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\n\tuiapp = DocumentManager.Instance.CurrentUIApplication\n\tapp = uiapp.Application\n\t\n\t# Create Empty List\n\tresult = []\n\t\n\tdef getNearestId(sp,pts,ids):\n\t\tdises = []\n\t\tfor pt in pts:\n\t\t\tdises.append(dg.Geometry.DistanceTo(pt,sp))\n\t\tmindis = min(dises)\n\t\tcount = 0\n\t\tfor dis in dises:\n\t\t\tif dis == mindis:\n\t\t\t\twantedid = ids[count]\n\t\t\t\tbreak\n\t\t\tcount += 1\n\t\treturn wantedid\n\t\n\t\n\tTransactionManager.Instance.EnsureInTransaction(doc)\n\tfor each in element:\n\t\ttry:\n\t\t\tids = AdaptiveComponentInstanceUtils.GetInstancePlacementPointElementRefIds(each)\n\t\t\ttmp = []\n\t\t\tpts = []\n\t\t\tfor e in ids:\n\t\t\t\trefpt = doc.GetElement(e)\n\t\t\t\telemref = refpt.GetPointElementReference()\n\t\t\t\tif elemref == None:\n\t\t\t\t\tcoor = refpt.GetCoordinateSystem().ToCoordinateSystem()\n\t\t\t\t\tpts.append(coor.Origin)\n\t\t\t\telse:\n\t\t\t\t\tcoor = refpt.GetCoordinateSystem().ToCoordinateSystem()\n\t\t\t\t\tpts.append(coor.Origin)\n\t\t\tsortedIds = []\n\t\t\tsortedTmp = []\n\t\t\tfor source in sourceRefs:\n\t\t\t\tsp = source.GetCoordinateSystem().ToCoordinateSystem().Origin\n\t\t\t\tnearestId = getNearestId(sp,pts,ids)\n\t\t\t\trefpt = doc.GetElement(nearestId)\n\t\t\t\telemref = refpt.GetPointElementReference()\n\t\t\t\tif elemref == None:\n\t\t\t\t\tcoor = refpt.GetCoordinateSystem().ToCoordinateSystem()\n\t\t\t\t\tskp = SketchPlane.Create(doc, coor.XYPlane.ToPlane()).GetPlaneReference()\n\t\t\t\t\txcoor = coor.XAxis.ToXyz()\n\t\t\t\t\torcoor = coor.Origin.ToXyz()\n\t\t\t\t\tdynpoints = PointOnPlane.NewPointOnPlane(doc,skp,orcoor,xcoor)\n\t\t\t\t\tsortedTmp.append(dynpoints)\n\t\t\t\telse:\n\t\t\t\t\tsortedTmp.append(elemref)\n\t\t\tcount = 0\n\t\t\tfor id in ids:\n\t\t\t\trefpt = doc.GetElement(id)\n\t\t\t\trefpt.SetPointElementReference(sortedTmp[count])\n\t\t\t\tcount += 1\n\t\t\tresult.append(each)\n\t\texcept:\n\t\t\tresult.append(None)\n\tTransactionManager.Instance.TransactionTaskDone()\n\t\n\tOUT = result",
+      "VariableInputPorts": true,
+      "Id": "40307d793622419696059bfff64183ec",
+      "Inputs": [
+        {
+          "Id": "5fec7130f6214c63b856bcf802f0e21b",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "683e00137a7b4212ab5d58fe542feae1",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "6078d6361a5e4e5e9e6f1966933887d2",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "3a9a9e10-38a8-4cc8-b2ba-3840c413407a",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "cdd7f262581f461a9ec982ba3bc3cecf",
+      "Inputs": [
+        {
+          "Id": "01926fe196a94444ab83b7c52e8b531c",
+          "Name": "VARFamilyInstances",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "2dbbf0d15c9e480c8bf4653a2e45e9ae",
+          "Name": "VARAdaptiveFamilyInstances",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Filter Adaptive Component FamilyInstances"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARAdaptiveComponents",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "d966aafff82545f692aa3199560c2590",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "577a2158e2a5448d8a7db0fdade24e14",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARAdaptiveComponents",
+      "Id": "5df91ec7ea28495c909107a3ffc2b4fb",
+      "Inputs": [
+        {
+          "Id": "ada6ddf6d8f34a6bb506eae24d2f2fb2",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARReferencePoints",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "1ec12adad9124c278de7b5fa24ad91f1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bacca6c2cb654e6fa9fb0c41934e602b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "6078d6361a5e4e5e9e6f1966933887d2",
+      "End": "ada6ddf6d8f34a6bb506eae24d2f2fb2",
+      "Id": "d1d2746a89f949bb8bfd3f626efc8617"
+    },
+    {
+      "Start": "2dbbf0d15c9e480c8bf4653a2e45e9ae",
+      "End": "5fec7130f6214c63b856bcf802f0e21b",
+      "Id": "d31485617ed44147ad823228174a803d"
+    },
+    {
+      "Start": "577a2158e2a5448d8a7db0fdade24e14",
+      "End": "01926fe196a94444ab83b7c52e8b531c",
+      "Id": "e8e6a99a062e4d1ba00a78cd0d6b040c"
+    },
+    {
+      "Start": "bacca6c2cb654e6fa9fb0c41934e602b",
+      "End": "683e00137a7b4212ab5d58fe542feae1",
+      "Id": "e79a730953c64263ab0ee94b9bcb2a25"
+    }
+  ],
+  "Dependencies": [
+    "3a9a9e10-38a8-4cc8-b2ba-3840c413407a"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "40307d793622419696059bfff64183ec",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 763.998481379905,
+        "Y": 94.2320269207169
+      },
+      {
+        "Id": "cdd7f262581f461a9ec982ba3bc3cecf",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Filter Adaptive Component FamilyInstances",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "d966aafff82545f692aa3199560c2590",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -69.6,
+        "Y": -124.4
+      },
+      {
+        "Id": "5df91ec7ea28495c909107a3ffc2b4fb",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 963.798481379905,
+        "Y": 0.0
+      },
+      {
+        "Id": "1ec12adad9124c278de7b5fa24ad91f1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -48.8,
+        "Y": 168.8
+      }
+    ],
+    "Annotations": [],
+    "X": 257.616754451038,
+    "Y": 174.433905,
+    "Zoom": 0.70823125
+  }
+}

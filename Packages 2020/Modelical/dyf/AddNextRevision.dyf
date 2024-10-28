@@ -1,0 +1,305 @@
+<Workspace Version="1.3.1.1736" X="-2155.65752692757" Y="-1653.15342952656" zoom="0.866374122327715" ScaleFactor="1" Name="Add Next Revision" Description="Add the next revision to the selected sheets. Switch to manual run to use this node." ID="d4c55ad1-36b4-489c-b24c-614be6853264" Category="Modelical.Sheets">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Revit.Sheet" resolvedName="Revit.Elements.Views.Sheet" assemblyName="RevitNodes.dll" />
+    <ClassMap partialName="DSCore.List" resolvedName="DSCore.List" assemblyName="DSCoreNodes.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="db3f82f9-2a6c-4e46-b16d-4442ebd6cce2" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="doc.Revisions" x="3015.45741353976" y="2591.06273566914" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="l[0];&#xA;l[1];" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+    <PythonNodeModels.PythonNode guid="2823e1a2-8542-497f-a278-d5f808c26eef" type="PythonNodeModels.PythonNode" nickname="Python Script" x="3275.253360739" y="2555.03004797837" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="3">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <Script># This node has been made by Modelical
+# www.modelical.com
+
+
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+clr.AddReference('DScoreNodes')
+import DSCore
+from DSCore import *
+
+#Load Dynamo wrappers
+clr.AddReference("RevitNodes")
+import Revit
+from Revit.Elements import *
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+#Load Revit API
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+#Load document reference
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+def toList(input):
+	if isinstance(input,list) == False:
+		return [input]
+	else:
+		return input
+
+def flatten(x):
+    result = []
+    for el in x:
+        if hasattr(el, "__iter__") and not isinstance(el, basestring):
+            result.extend(flatten(el))
+        else:
+            result.append(el)
+    return result
+
+
+
+selectedSheets = flatten(toList(IN[0]))
+revE = flatten(toList(IN[1]))
+revSeqE = flatten(toList(IN[2]))
+
+sheets = UnwrapElement(selectedSheets)
+
+
+revIDE = []
+for s in sheets:
+	revIDE.append(s.GetCurrentRevision())
+
+revN = []	
+for e in revIDE:
+	revN.append(doc.GetElement(e))
+	
+revSeqN = []
+for r in revN:
+	try:
+		revSeqN.append(str(r.SequenceNumber + 1))
+	except:
+		revSeqN.append("1")
+
+revision = []
+
+for r in revSeqN:
+	rev = []
+	count = 0
+	flag = 0
+	for e in revSeqE:
+		if r == str(e):
+			rev.append(revE[count])
+			flag = 1
+			break
+		count +=1
+	if flag == 0:
+		rev.append(revE[len(revSeqE)-1])
+	revision.append(rev)
+	
+
+revFlat = List.Flatten(revision,2)
+
+revIDN = []
+for i in revFlat:
+	revIDN.append(i.Id)
+
+
+OUT = revFlat</Script>
+    </PythonNodeModels.PythonNode>
+    <PythonNodeModels.PythonNode guid="8f3c833e-3596-4587-b237-3ff68518df49" type="PythonNodeModels.PythonNode" nickname="Python Script" x="2866.15568457332" y="2588.64480868702" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="1">
+      <PortInfo index="0" default="False" />
+      <Script># This node has been made by Modelical
+# www.modelical.com
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+#Load Dynamo wrappers
+clr.AddReference("RevitNodes")
+import Revit
+from Revit.Elements import *
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+#Load Revit API
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+#Load document reference
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+def toList(input):
+	if isinstance(input,list) == False:
+		return [input]
+	else:
+		return input
+
+def flatten(x):
+    result = []
+    for el in x:
+        if hasattr(el, "__iter__") and not isinstance(el, basestring):
+            result.extend(flatten(el))
+        else:
+            result.append(el)
+    return result
+
+rev = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Revisions).WhereElementIsNotElementType().ToElements()
+
+revName = []	
+for e in rev:
+	revName.append(e.Name)
+	
+Sequence = []
+
+for r in rev:
+	Sequence.append(r.SequenceNumber)
+	
+
+OUT = rev, Sequence</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="6f7cbc4a-efd2-4230-93fc-30df38d12e44" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="2866.40386957069" y="2465.76908331138" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Sheets: var[]" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="85359747-1336-4832-8f05-6a97293c6331" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="3785.66720664112" y="2467.1659434319" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Sheets" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="d6578269-7f49-4db5-bf67-484965e1f73c" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="3184.2216045176" y="2678.78999886271" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Toggle : bool = false" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <PythonNodeModels.PythonNode guid="79e92104-3cca-475c-a1bf-65faa071b86e" type="PythonNodeModels.PythonNode" nickname="Python Script" x="3472.40536956889" y="2466.90481885114" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="3">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <Script># This node has been made by Modelical
+# www.modelical.com
+
+
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+clr.AddReference('DScoreNodes')
+import DSCore
+from DSCore import *
+
+clr.AddReference('System.Core')
+from System.Collections.Generic import *
+
+#Load Dynamo wrappers
+clr.AddReference("RevitNodes")
+import Revit
+from Revit.Elements import *
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+#Load Revit API
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference('RevitAPI')
+import Autodesk
+from Autodesk.Revit.DB import *
+
+clr.AddReference('RevitAPI')
+import Autodesk
+from Autodesk.Revit.DB import *
+from System.Collections.Generic import *
+
+#Load document reference
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+def toList(input):
+	if isinstance(input,list) == False:
+		return [input]
+	else:
+		return input
+
+def flatten(x):
+    result = []
+    for el in x:
+        if hasattr(el, "__iter__") and not isinstance(el, basestring):
+            result.extend(flatten(el))
+        else:
+            result.append(el)
+    return result
+
+
+selectedSheets = flatten(toList(IN[0]))
+revision = flatten(toList(IN[1]))
+bool = IN[2]
+
+sheets = UnwrapElement(selectedSheets)
+rev = UnwrapElement(revision)
+
+TransactionManager.Instance.EnsureInTransaction(doc)
+if bool == True:
+	count = 0
+	for s in sheets:
+		revOnSheet = List[Autodesk.Revit.DB.ElementId]()	
+		revOnSheet.Add(rev[count].Id)
+		s.SetAdditionalRevisionIds(revOnSheet)
+		revOnSheet.Clear()
+		count +=1
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = sheets, str('It just works on MANUAL mode')</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="be70dfd7-4fde-4e34-9aee-392df7fb8522" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="3787.49426906113" y="2520.82982747368" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="info" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="cd0c7fd6-b906-4f26-ac44-45eb9a23687c" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Sheets" x="3642.9291839873" y="2470.99658775858" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="l[0];&#xA;l[1];" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="db3f82f9-2a6c-4e46-b16d-4442ebd6cce2" start_index="0" end="2823e1a2-8542-497f-a278-d5f808c26eef" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="db3f82f9-2a6c-4e46-b16d-4442ebd6cce2" start_index="1" end="2823e1a2-8542-497f-a278-d5f808c26eef" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="2823e1a2-8542-497f-a278-d5f808c26eef" start_index="0" end="79e92104-3cca-475c-a1bf-65faa071b86e" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="8f3c833e-3596-4587-b237-3ff68518df49" start_index="0" end="db3f82f9-2a6c-4e46-b16d-4442ebd6cce2" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="6f7cbc4a-efd2-4230-93fc-30df38d12e44" start_index="0" end="2823e1a2-8542-497f-a278-d5f808c26eef" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="6f7cbc4a-efd2-4230-93fc-30df38d12e44" start_index="0" end="79e92104-3cca-475c-a1bf-65faa071b86e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d6578269-7f49-4db5-bf67-484965e1f73c" start_index="0" end="79e92104-3cca-475c-a1bf-65faa071b86e" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="79e92104-3cca-475c-a1bf-65faa071b86e" start_index="0" end="cd0c7fd6-b906-4f26-ac44-45eb9a23687c" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="cd0c7fd6-b906-4f26-ac44-45eb9a23687c" start_index="0" end="85359747-1336-4832-8f05-6a97293c6331" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="cd0c7fd6-b906-4f26-ac44-45eb9a23687c" start_index="1" end="be70dfd7-4fde-4e34-9aee-392df7fb8522" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations>
+    <Dynamo.Graph.Annotations.AnnotationModel guid="fc2256b1-d2c3-4bd5-9c40-f96d8992f391" annotationText="doc revisions" left="2856.15568457332" top="2542.64480868702" width="264.301728966448" height="126.417926982128" fontSize="30" InitialTop="2588.64480868702" InitialHeight="193.9076597308" TextblockHeight="36" backgrouund="#FFFFB8D8">
+      <Models ModelGuid="8f3c833e-3596-4587-b237-3ff68518df49" />
+      <Models ModelGuid="db3f82f9-2a6c-4e46-b16d-4442ebd6cce2" />
+    </Dynamo.Graph.Annotations.AnnotationModel>
+    <Dynamo.Graph.Annotations.AnnotationModel guid="f375da8d-ffaf-4153-8cc5-54e8e2f371c9" annotationText="Revisions from sheet + 1" left="3265.253360739" top="2437.03004797837" width="144" height="238" fontSize="30" InitialTop="2555.03004797837" InitialHeight="150" TextblockHeight="108" backgrouund="#FFBB87C6">
+      <Models ModelGuid="2823e1a2-8542-497f-a278-d5f808c26eef" />
+    </Dynamo.Graph.Annotations.AnnotationModel>
+    <Dynamo.Graph.Annotations.AnnotationModel guid="29037a6a-8b7f-4aaf-990b-0db8786773bc" annotationText="sheets" left="2856.40386957069" top="2419.76908331138" width="157" height="114" fontSize="30" InitialTop="2465.76908331138" InitialHeight="258.326622037348" TextblockHeight="36" backgrouund="#FFC1D676">
+      <Models ModelGuid="6f7cbc4a-efd2-4230-93fc-30df38d12e44" />
+    </Dynamo.Graph.Annotations.AnnotationModel>
+  </Annotations>
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-23.2977046966553" eyeY="143.940414428711" eyeZ="112.605575561523" lookX="23.2977046966553" lookY="-143.940414428711" lookZ="-112.605575561523" upX="0.127503842115402" upY="0.777145981788635" upZ="-0.616268575191498" />
+  </Cameras>
+</Workspace>

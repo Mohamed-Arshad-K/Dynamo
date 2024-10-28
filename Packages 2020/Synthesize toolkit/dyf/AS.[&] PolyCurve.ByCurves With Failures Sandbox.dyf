@@ -1,0 +1,607 @@
+{
+  "Uuid": "4f2ce29d-6510-45df-83c8-21c78b6538c9",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.Ampersand.Geometry.Curve",
+  "Description": "Create polycurves from an unordered list of curves.",
+  "Name": "AS.[&] PolyCurve.ByCurves With Failures Sandbox",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Autodesk.Point": {
+        "Key": "Autodesk.DesignScript.Geometry.Point",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.DesignScript.Geometry.Point": {
+        "Key": "Autodesk.DesignScript.Geometry.Point",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.Curve": {
+        "Key": "Autodesk.DesignScript.Geometry.Curve",
+        "Value": "ProtoGeometry.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.PolyCurve.ByJoinedCurves@Autodesk.DesignScript.Geometry.Curve[],double",
+      "Id": "fcf12cbbb8dd44cc8b30d88f5c897fb8",
+      "Inputs": [
+        {
+          "Id": "97af1df56b394f87898985f1362d98d2",
+          "Name": "curves",
+          "Description": "Curves to join into polycurve\n\nCurve[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "35b40899d7c34075a29e437598128fc8",
+          "Name": "joinTolerance",
+          "Description": "Tolerance to determine size of gap allowed between curves to be joined\n\ndouble\nDefault value : 0.001",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1b99ba1c99f445cd83429f470b4a15a1",
+          "Name": "PolyCurve",
+          "Description": "PolyCurve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Make PolyCurve by joining curves. Flips curve as needed for connectivity. Choose a preferred join tolerance between 1e-6 and 1e-3 units.\n\nPolyCurve.ByJoinedCurves (curves: Curve[], joinTolerance: double = 0.001): PolyCurve"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Assign curves to groups according to whether they are connected via shared start points and end points.  Group numbers are not important.\r\n# Colin McCrone, 2015-09-28\r\n# Improved By Karam Baki\r\nimport clr\r\n\r\nimport math\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n# Determine whether two points are equal\r\ndef PointsEqual(pt1, pt2):\r\n\ttolerance = 0.00001\r\n\t\r\n\tif (math.fabs(pt1.X - pt2.X) < tolerance and\r\n\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\r\n\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n# Get input\r\ncrvs = IN[0]\r\n\r\n# List the group to which each curve belongs\r\ncrvGroup = [-1 for x in range(len(crvs))]\r\ncrvGroup[0] = 0\r\nmaxGroupNum = 1\r\n\r\n\r\n# Find start and end points for each curve\r\nstarts = []\r\nends = []\r\nfor crv in crvs:\r\n\tstarts.append(Curve.PointAtParameter(crv,0))\r\n\tends.append(crv.PointAtParameter(1))\r\n\r\n\r\n# Find connected groups of curves\r\nfor i in range(len(crvs)):\r\n\t# Add i to its own group it not already part of a group\r\n\tif (crvGroup[i] == -1):\r\n\t\tcrvGroup[i] = i\r\n\t\r\n\t# Find connections\r\n\tfor j in range(len(crvs)):\r\n\t\tif (i != j and\r\n\t\t\t(PointsEqual(starts[i], starts[j]) or\r\n\t\t\tPointsEqual(starts[i], ends[j]) or\r\n\t\t\tPointsEqual(ends[i], starts[j]) or\r\n\t\t\tPointsEqual(ends[i], ends[j]))):\r\n\t\t\t\r\n\t\t\t# Add j to i group\r\n\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t# Add j group to i group\r\n\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\r\n\r\n# Output the (arbitrary) group numbers\r\nOUT = crvGroup",
+      "VariableInputPorts": true,
+      "Id": "166b7f8deb844d1d91dfc0a9892d27d0",
+      "Inputs": [
+        {
+          "Id": "84afc02b5b734e02aaedffec6ef5ef3b",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "fffb863095a145198bbaca9e95eff200",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARcurves",
+        "TypeName": "Autodesk.DesignScript.Geometry.Curve",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "f07d9f54f6394685b9622e697d232e3d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0777a955e71f41cca712599a48542362",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARpolyCurve",
+      "Id": "0ec3577a4cca4579ad1e6d05b0319b97",
+      "Inputs": [
+        {
+          "Id": "6b2996f5aceb47d78366ac6d6e6e6131",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GroupByKey@var[]..[],var[]..[]",
+      "Id": "b515fdb507174218b8ba351b90407e32",
+      "Inputs": [
+        {
+          "Id": "a412baa1da0f4082ac064ddc7b98539d",
+          "Name": "list",
+          "Description": "List of items to group as sublists\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "7dcd94bd6eed48c38754d65110d5a53b",
+          "Name": "keys",
+          "Description": "Key values, one per item in the input list, used for grouping the items\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "bd95b467395c409098538a0843716a79",
+          "Name": "groups",
+          "Description": "list of sublists, with items grouped by like key values",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e7c8cc9f52f147a78bfe099740197633",
+          "Name": "unique keys",
+          "Description": "key value corresponding to each group",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Group items into sub-lists based on their like key values\n\nList.GroupByKey (list: var[]..[], keys: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.FilterByBoolMask@var[]..[],var[]..[]",
+      "Id": "3b4f32a2e3624268b56b5f5da0c383f9",
+      "Inputs": [
+        {
+          "Id": "e48daadea0d64345a59916623a00d7ec",
+          "Name": "list",
+          "Description": "List to filter.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c05a260ddad64fcd8a67ea213be5cda8",
+          "Name": "mask",
+          "Description": "List of booleans representing a mask.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "703379dfc27c469db19dae1e5da0802d",
+          "Name": "in",
+          "Description": "Items whose mask index is true.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "19698944e4a74a3e87f356efb700f49d",
+          "Name": "out",
+          "Description": "Items whose mask index is false.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Filters a sequence by looking up corresponding indices in a separate list of booleans.\n\nList.FilterByBoolMask (list: var[]..[], mask: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "bac1e2b8-8d84-4926-a69a-45ec48f7747e",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "f271c535476f4417a0eee0de7f0d568d",
+      "Inputs": [
+        {
+          "Id": "fc1ee9d98727465cbd83a9a522967e28",
+          "Name": "VARIn",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fc68d05bdb3646cca7b0c703ba325edc",
+          "Name": "VAROut",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "25e27f9b4d4046a68e8046ec50cbc1be",
+          "Name": "VARmask",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "329d0ba3f6784add8ab5c1e8bc3e84e1",
+          "Name": "VARlist",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Merge two lists by a boolean mask list. The true count in the mask should be the same as the length of the true list and vice versa for the false list."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.FilterByBoolMask@var[]..[],var[]..[]",
+      "Id": "2c0f2e0ee1314e4085eaf465d108c2ac",
+      "Inputs": [
+        {
+          "Id": "6cba361e69524db4bf95b3c30e6ec2ee",
+          "Name": "list",
+          "Description": "List to filter.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9356526558d9475696dc17eb2910e6cd",
+          "Name": "mask",
+          "Description": "List of booleans representing a mask.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "7676961d581f46d7b3e7649c6101ff13",
+          "Name": "in",
+          "Description": "Items whose mask index is true.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ec2521516eaf4f5b808b54295566e58d",
+          "Name": "out",
+          "Description": "Items whose mask index is false.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Filters a sequence by looking up corresponding indices in a separate list of booleans.\n\nList.FilterByBoolMask (list: var[]..[], mask: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.Object.IsNull@var",
+      "Id": "68e463398b8541bc881b6b52207e5987",
+      "Inputs": [
+        {
+          "Id": "a87ab0eb350147dba2351ed564e8b8d6",
+          "Name": "obj",
+          "Description": "Object to test.\n\nvar",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "ac96ae91db8c4c8c8499b684a9d67b3a",
+          "Name": "bool",
+          "Description": "Whether object is null.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Determines the if the given object is null.\n\nObject.IsNull (obj: var): bool"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFailures",
+      "Id": "af31e91abcf34974844cb72dbebdd574",
+      "Inputs": [
+        {
+          "Id": "b6a7a1fe79bb4b0184b8ff99b5591a90",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "1b99ba1c99f445cd83429f470b4a15a1",
+      "End": "6cba361e69524db4bf95b3c30e6ec2ee",
+      "Id": "b9ee937f3ae947dda84a80ecb47ac538"
+    },
+    {
+      "Start": "1b99ba1c99f445cd83429f470b4a15a1",
+      "End": "a87ab0eb350147dba2351ed564e8b8d6",
+      "Id": "ed373758060c44afab5f94b5b3a1ac79"
+    },
+    {
+      "Start": "fffb863095a145198bbaca9e95eff200",
+      "End": "7dcd94bd6eed48c38754d65110d5a53b",
+      "Id": "01f2d434b633427dbb081c7445816754"
+    },
+    {
+      "Start": "0777a955e71f41cca712599a48542362",
+      "End": "84afc02b5b734e02aaedffec6ef5ef3b",
+      "Id": "6cbcb1fb535b44c98e84e8dc104fcaab"
+    },
+    {
+      "Start": "0777a955e71f41cca712599a48542362",
+      "End": "a412baa1da0f4082ac064ddc7b98539d",
+      "Id": "e903b10849cc42ab8597ef626bbe5b92"
+    },
+    {
+      "Start": "bd95b467395c409098538a0843716a79",
+      "End": "97af1df56b394f87898985f1362d98d2",
+      "Id": "1c4267ffe1fe4a168c4f60969d662335"
+    },
+    {
+      "Start": "bd95b467395c409098538a0843716a79",
+      "End": "e48daadea0d64345a59916623a00d7ec",
+      "Id": "3707c65477e242f8823d6f326ea389fe"
+    },
+    {
+      "Start": "703379dfc27c469db19dae1e5da0802d",
+      "End": "fc1ee9d98727465cbd83a9a522967e28",
+      "Id": "de44b3a1724648e4a9a925f6ec5cbc1b"
+    },
+    {
+      "Start": "329d0ba3f6784add8ab5c1e8bc3e84e1",
+      "End": "6b2996f5aceb47d78366ac6d6e6e6131",
+      "Id": "8b4c4ae84bdb42b18c2784ce1cac939a"
+    },
+    {
+      "Start": "ec2521516eaf4f5b808b54295566e58d",
+      "End": "fc68d05bdb3646cca7b0c703ba325edc",
+      "Id": "394ffa66e1174bc0bc8b24c6f2ebbe21"
+    },
+    {
+      "Start": "ac96ae91db8c4c8c8499b684a9d67b3a",
+      "End": "c05a260ddad64fcd8a67ea213be5cda8",
+      "Id": "bab180f7db1146ecb5a5adc36a6c5817"
+    },
+    {
+      "Start": "ac96ae91db8c4c8c8499b684a9d67b3a",
+      "End": "25e27f9b4d4046a68e8046ec50cbc1be",
+      "Id": "50c5d69effff4ee6978042afbc14a48c"
+    },
+    {
+      "Start": "ac96ae91db8c4c8c8499b684a9d67b3a",
+      "End": "9356526558d9475696dc17eb2910e6cd",
+      "Id": "41288efc24b9405b9c5274947e670d00"
+    },
+    {
+      "Start": "ac96ae91db8c4c8c8499b684a9d67b3a",
+      "End": "b6a7a1fe79bb4b0184b8ff99b5591a90",
+      "Id": "5cc7236581f54355803ced55f162b315"
+    }
+  ],
+  "Dependencies": [
+    "bac1e2b8-8d84-4926-a69a-45ec48f7747e"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "PolyCurve.ByJoinedCurves",
+        "Id": "fcf12cbbb8dd44cc8b30d88f5c897fb8",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1055.80014114762,
+        "Y": -20.1150378127145
+      },
+      {
+        "ShowGeometry": false,
+        "Name": "Python Script",
+        "Id": "166b7f8deb844d1d91dfc0a9892d27d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 129.220610630787,
+        "Y": 98.2114952831352
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "f07d9f54f6394685b9622e697d232e3d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -267.524336454334,
+        "Y": -21.0105399110271
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "0ec3577a4cca4579ad1e6d05b0319b97",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2378.38577998188,
+        "Y": 16.4730750710468
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.GroupByKey",
+        "Id": "b515fdb507174218b8ba351b90407e32",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 765.179772832105,
+        "Y": -29.3624825599277
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.FilterByBoolMask",
+        "Id": "3b4f32a2e3624268b56b5f5da0c383f9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1621.77018072602,
+        "Y": -128.215048108778
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "SP.List.MergeByBoolMask",
+        "Id": "f271c535476f4417a0eee0de7f0d568d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1940.8521440476,
+        "Y": -26.849442662993
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.FilterByBoolMask",
+        "Id": "2c0f2e0ee1314e4085eaf465d108c2ac",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1605.60049745296,
+        "Y": -4.1625907604963
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Object.IsNull",
+        "Id": "68e463398b8541bc881b6b52207e5987",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1350.81315808109,
+        "Y": 85.8904367772448
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "af31e91abcf34974844cb72dbebdd574",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2515.42246490346,
+        "Y": 243.632622415437
+      }
+    ],
+    "Annotations": [
+      {
+        "Id": "53cd5f573915448f8394357bb4ceb898",
+        "Title": "Assigns curves to groups with unique (arbirary) numbers.",
+        "Nodes": [],
+        "Left": 62.0414462297197,
+        "Top": 43.1760102283539,
+        "Width": 0.0,
+        "Height": 0.0,
+        "FontSize": 36.0,
+        "InitialTop": 0.0,
+        "InitialHeight": 0.0,
+        "TextblockHeight": 0.0,
+        "Background": "#FFC1D676"
+      }
+    ],
+    "X": 184.032063991954,
+    "Y": 209.461492006294,
+    "Zoom": 0.469824559616581
+  }
+}

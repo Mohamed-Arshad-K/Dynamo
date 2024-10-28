@@ -1,0 +1,164 @@
+{
+  "Uuid": "2e376240-2dd5-4fab-95c7-6f9a260294cd",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.Springs.Geometry",
+  "Description": "Converts a Dynamo mesh to a polysurface. Uses multithreading - optimized for 4 cores.",
+  "Name": "SP.Mesh.ToPolySurface",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "#Copyright(c) 2016, Dimitar Venkov\r\n# @5devene, dimitar.ven@gmail.com\r\nimport clr\r\nfrom System.Threading import Thread, ThreadStart\r\n\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\ndef tolist(obj1):\r\n\tif hasattr(obj1,'__iter__'): return obj1\r\n\telse: return [obj1]\r\n\r\ndef output1(l1):\r\n\tif len(l1) == 1: return l1[0]\r\n\telse: return l1\r\n\r\ndef chop1(l1, n):\r\n\treturn [l1[x:x+n] for x in xrange(0, len(l1), n)]\r\n\r\ndef mesh2ps(topo, f_chop = chop1,\r\n\t\t\tf_ps1 = PolySurface.ByJoinedSurfaces):\r\n\tvp = topo.VertexPositions\r\n\tfi = topo.FaceIndices\r\n\txr1 = xrange(len(fi) )\r\n\tind = [(fi[i].A, fi[i].B, fi[i].C) for i in xr1]\r\n\tptslist = [ map(vp.__getitem__, ind[i]) for i in xr1]\r\n\tlen1 = int(round(len(ptslist) ) ) / 4 + 1\r\n\tsurf = [None, None, None, None]\r\n\r\n\tdef ps_generator(i, ptslist,\r\n\t\t\t\t\t chop1=chop1,\r\n\t\t\t\t\t f_ps1 = PolySurface.ByJoinedSurfaces,\r\n\t\t\t\t\t f_sf1 = Surface.ByPerimeterPoints):\r\n\t\tsflist = [f_sf1(pts) for pts in ptslist[i] ]\r\n\t\twhile len(sflist) > 10 :\r\n\t\t\tsflist = chop1(sflist,10)\r\n\t\t\tsflist = [f_ps1(sf1) for sf1 in sflist]\r\n\t\tsurf[i] = sflist\r\n\t\treturn\r\n\tif len(ptslist) > 7 :\r\n\t\tptslist = f_chop(ptslist, len1)\r\n\t\tdef threaded_ps0(): return ps_generator(0, ptslist)\r\n\t\tdef threaded_ps1(): return ps_generator(1, ptslist)\r\n\t\tdef threaded_ps2(): return ps_generator(2, ptslist)\r\n\t\tdef threaded_ps3(): return ps_generator(3, ptslist)\r\n\t\tthreads = (Thread(ThreadStart(threaded_ps0) ),\r\n\t\t\t\t   Thread(ThreadStart(threaded_ps1) ),\r\n\t\t\t\t   Thread(ThreadStart(threaded_ps2) ),\r\n\t\t\t\t   Thread(ThreadStart(threaded_ps3) ) )\r\n\t\tfor t in threads: t.Start()\r\n\t\tfor t in threads: t.Join()\r\n\t\treturn f_ps1(surf[0] + surf[1] + surf[2] + surf[3])\r\n\telse:\r\n\t\tps_generator(0, (ptslist, ) )\r\n\t\treturn  f_ps1(surf[0])\r\n\t\t\r\nmeshes = tolist(IN[0])\r\nOUT = output1(map(mesh2ps,meshes) )",
+      "VariableInputPorts": true,
+      "Id": "774a37af9038419d81a1d74c0608d122",
+      "Inputs": [
+        {
+          "Id": "8ea9ddf3203b486bb1e2787e41734460",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "50589e8206994956acf5626b72c6ce97",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARmesh",
+        "TypeName": "var",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "78634f4b14ef479cbc52b6e49c04a6e3",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4f7386e56bc84ec4b12742de38364975",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPolySurface",
+      "Id": "715d68dade034f26a687f3f8bcf4baa1",
+      "Inputs": [
+        {
+          "Id": "a7d60a9216f64eefa957b1c7bf9cf1ac",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "50589e8206994956acf5626b72c6ce97",
+      "End": "a7d60a9216f64eefa957b1c7bf9cf1ac",
+      "Id": "ca71423b6a0c4225b6e0b9e2f0af3e4c"
+    },
+    {
+      "Start": "4f7386e56bc84ec4b12742de38364975",
+      "End": "8ea9ddf3203b486bb1e2787e41734460",
+      "Id": "783e0ea7bdb7481e9abeac93014a7a88"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -93.352035522460938,
+      "EyeY": 25.989137649536133,
+      "EyeZ": 56.251853942871094,
+      "LookX": -3.7914855480194092,
+      "LookY": -25.989137649536133,
+      "LookZ": -13.300749778747559,
+      "UpX": -0.20876629650592804,
+      "UpY": 0.64811986684799194,
+      "UpZ": -0.73236411809921265
+    },
+    "NodeViews": [
+      {
+        "Id": "774a37af9038419d81a1d74c0608d122",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "78634f4b14ef479cbc52b6e49c04a6e3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 102.224484744322,
+        "Y": 0.0
+      },
+      {
+        "Id": "715d68dade034f26a687f3f8bcf4baa1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 392.402031599546,
+        "Y": -1.19560800870553
+      }
+    ],
+    "Annotations": [],
+    "X": 27.6669907119192,
+    "Y": 214.617394913586,
+    "Zoom": 1.07925372895183
+  }
+}

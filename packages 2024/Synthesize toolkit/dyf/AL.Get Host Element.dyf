@@ -1,0 +1,164 @@
+{
+  "Uuid": "005e7f9f-a5e0-49eb-aa2e-77d0c26be557",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.archilab.Revit.Elements",
+  "Description": "This node will retrieve a host element from hosted element. Ex. feed in door, get wall.",
+  "Name": "AL.Get Host Element",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "#Copyright(c) 2015, Konrad K Sobon\r\n# @arch_laboratory, http://archi-lab.net\r\n\r\nimport clr\r\nimport sys\r\n\r\npyt_path = r'C:\\Program Files (x86)\\IronPython 2.7\\Lib'\r\nsys.path.append(pyt_path)\r\n\r\n# Import Element wrapper extension methods\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Import DocumentManager and TransactionManager\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# Import RevitAPI\r\nclr.AddReference(\"RevitAPI\")\r\nimport Autodesk\r\nfrom Autodesk.Revit.DB import *\r\n\r\n#The inputs to this node will be stored as a list in the IN variable.\r\ndataEnteringNode = IN\r\n\r\nif isinstance(IN[0], list):\r\n\telements = []\r\n\tfor i in IN[0]:\r\n\t\telements.append(UnwrapElement(i))\r\nelse:\r\n\telements = IN[0]\r\n\r\ndef GetHostElement(element):\r\n\tdoc = DocumentManager.Instance.CurrentDBDocument\r\n\ttry:\r\n\t\thost = element.Host\r\n\t\treturn host\r\n\texcept:\r\n\t\ttry:\r\n\t\t\thostIds = []\r\n\t\t\tfor i in element.GetHostIds():\r\n\t\t\t\thostIds.append(doc.GetElement(i))\r\n\t\t\treturn hostIds\r\n\t\texcept:\r\n\t\t\treturn None\r\n\r\ndef ProcessList(_func, _list):\r\n\treturn map( lambda x: ProcessList(_func, x) if type(x) == list else _func(x), _list )\r\n\r\ntry:\r\n\terrorReport = None\r\n\tif isinstance(elements, list):\r\n\t\toutput = ProcessList(GetHostElement, elements)\r\n\telse:\r\n\t\toutput = GetHostElement(elements)\r\nexcept:\r\n\t# if error accurs anywhere in the process catch it\r\n\timport traceback\r\n\terrorReport = traceback.format_exc()\r\n\r\n#Assign your output to the OUT variable\r\nif errorReport == None:\r\n\tOUT = output\r\nelse:\r\n\tOUT = errorReport",
+      "VariableInputPorts": true,
+      "Id": "d229a211fd394f7bb1b9cb9dc63ce6f2",
+      "Inputs": [
+        {
+          "Id": "a67a7f6025514b3d8c469f788fdafd1b",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "dda029d1b8e1463e87f13cade56ac68f",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARhostedElement",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "ca313b39f3b544f69372b7b5b5189f26",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e54dbeb77e684508ba69977b315d3985",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARhostElement",
+      "Id": "eb1f809bb0b84ba7b037fcc11243aab3",
+      "Inputs": [
+        {
+          "Id": "6e819821dc30488983f05cd4570238a2",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "dda029d1b8e1463e87f13cade56ac68f",
+      "End": "6e819821dc30488983f05cd4570238a2",
+      "Id": "5e992ac809a846d0825c90b9cc02b72a"
+    },
+    {
+      "Start": "e54dbeb77e684508ba69977b315d3985",
+      "End": "a67a7f6025514b3d8c469f788fdafd1b",
+      "Id": "b85d22e49a0c4be6bada087ad40087b0"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "d229a211fd394f7bb1b9cb9dc63ce6f2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 446.0,
+        "Y": 301.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "ca313b39f3b544f69372b7b5b5189f26",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 283.438974441255,
+        "Y": 300.20275718826
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "eb1f809bb0b84ba7b037fcc11243aab3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 602.469795007208,
+        "Y": 302.449026525037
+      }
+    ],
+    "Annotations": [],
+    "X": -30.2513470105395,
+    "Y": -62.8206675803044,
+    "Zoom": 0.888789228297157
+  }
+}

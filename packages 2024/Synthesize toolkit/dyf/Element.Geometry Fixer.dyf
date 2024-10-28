@@ -1,0 +1,264 @@
+{
+  "Uuid": "b05d396b-a5d8-476e-870c-6ccfe90b80e3",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Fixers",
+  "Description": "Element.Geometry Fixer",
+  "Name": "Element.Geometry Fixer",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElement",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "50687d817fdf4bab9d318fb1215ac39f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e397ed8f3f2245b5a0e61a2b4c81b192",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROut",
+      "Id": "09c71e08e011451eb0afad2883db9880",
+      "Inputs": [
+        {
+          "Id": "869d0e5631234b409647e7a5ddb14bef",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki, karam@aecedx.com\n# Inspired By @5devene, dimitar.ven@gmail.com\nimport clr\nimport System\nfrom System.Collections.Generic import *\n\nfrom itertools import repeat\n\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nimport traceback\nimport random\nimport string\n\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\nfrom Autodesk.DesignScript.Geometry import Point as DynPoint\nfrom Autodesk.DesignScript.Geometry import Line as DynLine\nfrom Autodesk.DesignScript.Geometry import Curve as DynCurve\nfrom Autodesk.DesignScript import Geometry as dg\n\n\nclr.AddReference('RevitServices')\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\ndoc = DocumentManager.Instance.CurrentDBDocument\n\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nfrom Autodesk.Revit.DB.Structure import StructuralType\n\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n\ndef on_dialog_open(sender, event):\n    try:\n        if event.DialogId == 'TaskDialog_Really_Print_Or_Export_Temp_View_Modes':\n            event.OverrideResult(1002) \n    except Exception as e:\n        pass\n\ndef cleangeomlist(geoms):\n\tfilteredgeoms = []\n\tfor e in geoms:\n\t\tif isinstance(e,str) or isinstance(e,dg.Solid) or isinstance(e,dg.Surface) or isinstance(e,dg.PolySurface) or isinstance(e,dg.Cuboid):\n\t\t\tfilteredgeoms.append(e)\n\treturn filteredgeoms\n\n# Better SAT Import Function\ndef betteimport(doc,sat,temp_path):\n\tgeoms = dg.Geometry.ImportFromSAT(sat)\n\tsat_path = None\n\ttry:\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits),8) * 1000\n\t\telse:\n\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId()),8) * 1000\n\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\tdg.Geometry.ExportToSAT(geoms,sat_path,factor)\n\t\tfor g in geoms:\n\t\t\tg.Dispose()\n\t\tscaledgeoms = dg.Geometry.ImportFromSAT(sat_path)\n\texcept:\n\t\tscaledgeoms = geoms\n\tif sat_path != None:\n\t\tSystem.IO.File.Delete(sat_path)\n\treturn scaledgeoms\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    try:\n    \tfor el in x:\n        \tif hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n        \t    result.extend(flatten(el))\n        \telse:\n        \t    result.append(el)\n    except:\n    \tresult = x\n    return result\n    \ndef analgeom(elem):\n\tresult = []\n\ttry:\n\t\tbreakstatus = False\n\t\tgeoms = elem.get_Geometry(opt1)\n\t\textracted = []\n\t\tfor e in geoms:\n\t\t\tif e.ToString() == \"Autodesk.Revit.DB.GeometryInstance\":\n\t\t\t\ttry:\n\t\t\t\t\textracted.append(e.GetInstanceGeometry())\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\telif e.ToString() == \"Autodesk.Revit.DB.Solid\":\n\t\t\t\textracted.append(e)\n\t\tif len(extracted) == 0:\n\t\t\tbreakstatus = True\n\t\telse:\n\t\t\textracted = flatten(extracted)\n\t\t\tgeoms = extracted\n\t\tif breakstatus == False:\n\t\t\tfor e in geoms:\n\t\t\t\ttry:\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Solid\":\n\t\t\t\t\t\tattempt = e.ToProtoType()\n\t\t\t\t\t\tif attempt == None:\n\t\t\t\t\t\t\tif len(result) != 0:\n\t\t\t\t\t\t\t\tfor r in result:\n\t\t\t\t\t\t\t\t\ttry: r.Dispose()\n\t\t\t\t\t\t\t\t\texcept: pass\n\t\t\t\t\t\t\treturn False\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tresult.append(attempt)\t\n\t\t\t\texcept:\n\t\t\t\t\tif len(result) != 0:\n\t\t\t\t\t\tfor r in result:\n\t\t\t\t\t\t\ttry: r.Dispose()\n\t\t\t\t\t\t\texcept: pass\n\t\t\t\t\t\tresult = []\n\t\t\t\t\t\tbreak\n\t\tif len(result) == 0:\n\t\t\treturn False\n\t\telse:\n\t\t\tnewresult = []\n\t\t\tfor e in result:\n\t\t\t\tif e != None:\n\t\t\t\t\tnewresult.append(e)\n\t\t\tif len(newresult) == 0:\n\t\t\t\treturn False\n\t\t\telse:\n\t\t\t\treturn newresult\n\texcept:\n\t\treturn \"Fail\"\n\ngeom = UnwrapElement(IN[0])\noriginalnotjoinedgeom = IN[1]\nincludehiddengeom = IN[2]\n\nif geom != None:\n\tgeom = tolist(geom)\nelse:\n\tpass\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\n\nif originalnotjoinedgeom == True:\n\tfrom itertools import compress\n\tfrom itertools import combinations\n\t\n\telements = flatten(geom)\n\tallwalls = True\n\t\n\tbboxes = []\n\taccept = []\n\tfor e in elements:\n\t\ttry:\n\t\t\tbb = e.get_BoundingBox(None)\n\t\t\tbboxes.append(bb.ToProtoType())\n\t\t\taccept.append(True)\n\t\texcept:\n\t\t\taccept.append(False)\n\t\t\t\n\tacceptedelements = list(compress(elements, accept))\n\t\n\ttocombineraw = combinations(acceptedelements,2)\n\ttocombinebboxraw = combinations(bboxes,2)\n\t\n\tcomb = []\n\tfor i in list(tocombineraw): \n\t    comb.append(i)\n\t\n\ttocombine = comb\n\t\n\tcomb2 = []\n\tfor i in list(tocombinebboxraw): \n\t    comb2.append(i)\n\t\n\ttocombinebbox = comb2\n\t\n\tif allwalls == False:\n\t\tresult = []\n\t\tallresult = []\n\t\tfor eachlist in tocombine:\n\t\t\ttmplist = []\n\t\t\tfor each in eachlist:\n\t\t\t\tif str(each.ToString()) == \"Autodesk.Revit.DB.Wall\":\n\t\t\t\t\ttmplist.append(True)\n\t\t\t\telse:\n\t\t\t\t\ttmplist.append(False)\n\t\t\tresult.append(tmplist)\n\t\n\t\tfor each in result:\n\t\t\tif all(each) == True:\n\t\t\t\tallresult.append(False)\n\t\t\telse:\n\t\t\t\tallresult.append(True)\n\t\tfiltered = list(compress(tocombine, allresult))\n\t\tfilteredbbox = list(compress(tocombinebbox, allresult))\n\telse:\n\t\tfiltered = tocombine\n\t\tfilteredbbox = tocombinebbox\n\t\n\tBBOX1 = [item[0] for item in filteredbbox]\n\tBBOX2 = [item[1] for item in filteredbbox]\n\t\n\tintersects = []\n\t\n\tcount = 0\n\tfor each in BBOX1:\n\t\tintersects.append(dg.BoundingBox.Intersects(each,BBOX2[count]))\n\t\tcount = count + 1\n\t\n\tcount = 0\n\tfor each in BBOX1:\n\t\teach.Dispose()\n\t\tBBOX2[count].Dispose()\n\t\tcount = count + 1\n\t\n\tintersectingelements = list(compress(filtered, intersects))\n\t\n\tlistj = len(intersectingelements)\n\tcount = 0\n\tarejoined = []\n\twhile (count < listj):\n\t\t\tresult = JoinGeometryUtils.AreElementsJoined(doc, intersectingelements[count][0], intersectingelements[count][1])\n\t\t\tcount = count + 1\n\t\t\tarejoined.append(result)\n\t\n\tjoined = list(compress(intersectingelements, arejoined))\n\ntemp_path = System.IO.Path.GetTempPath()\nsatOpt = SATExportOptions()\nopt1 = Options()\n\nif includehiddengeom == True:\n\topt1.IncludeNonVisibleObjects = True\n\n#Find a 3D view type\ncollector1 = FilteredElementCollector(doc)\nviewFamilyTypes = collector1.OfClass((ViewFamilyType))\nfor e in viewFamilyTypes:\n\tif str(e.ViewFamily) == \"ThreeDimensional\":\n\t\tviewType = e.Id\n\t\tbreak\n\ndef NewForm_background(s1):\n\tDocumentManager.Instance.CurrentUIApplication.DialogBoxShowing += on_dialog_open\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttry:\n\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\ttrans1 = Transaction(doc, 'Fetching Geometry')\n\t\tfoptions = trans1.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans1.SetFailureHandlingOptions(foptions)\n\t\ttrans1.Start()\n\t\tif originalnotjoinedgeom == True:\n\t\t\tjointcount = 0\n\t\t\twhile (jointcount < len(joined)):\n\t\t\t\ttry:\n\t\t\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, joined[jointcount][0], joined[jointcount][1])\n\t\t\t\t\tjointcount = jointcount + 1\n\t\t\t\texcept:\n\t\t\t\t\tjointcount = jointcount +1\n\t\t\tdoc.Regenerate()\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\tstatus = True\n\t\tfinalres = []\n\t\tfor each in s1:\n\t\t\ttry:\n\t\t\t\toldvalue = 1\n\t\t\t\teparm = each.LookupParameter(\"Visible\")\n\t\t\t\tif eparm != None:\n\t\t\t\t\tif doc.FamilyManager.GetAssociatedFamilyParameter(eparm) != None:\n\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(eparm, None)\n\t\t\t\t\tpname = eparm.Definition.Name\n\t\t\t\t\toldvalue = eparm.AsInteger()\n\t\t\t\t\tif oldvalue == 0:\n\t\t\t\t\t\teparm.Set(1)\n\t\t\texcept:\n\t\t\t\tcontinue\n\t\t\tif each.ToString() == \"Autodesk.Revit.DB.ImportInstance\":\n\t\t\t\tif \"export_to_revit\" in each.LookupParameter(\"Name\").AsString():\n\t\t\t\t\topt1.IncludeNonVisibleObjects = True\n\t\t\t\telse:\n\t\t\t\t\tif includehiddengeom == True:\n\t\t\t\t\t\topt1.IncludeNonVisibleObjects = True\n\t\t\t\t\telse:\n\t\t\t\t\t\topt1.IncludeNonVisibleObjects = False\n\t\t\tresultgeom = analgeom(each)\n\t\t\tif resultgeom == \"Fail\":\n\t\t\t\tfinalres.append([None])\n\t\t\t\tcontinue\n\t\t\telif resultgeom == False:\n\t\t\t\tresultgeom = []\n\t\t\t\tthreedeeview = View3D.CreateIsometric(doc, viewType)\n\t\t\t\tthreedeeviewid = threedeeview.Id\n\t\t\t\ttry:\n\t\t\t\t\twantedsub = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Mass)\n\t\t\t\t\tthreedeeview.SetCategoryHidden(wantedsub.Id,False)\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\t\tkilist = List[ElementId]([threedeeviewid])\n\t\t\t\ttid = []\n\t\t\t\ttid = [each.Id]\n\t\t\t\tielements = List[ElementId](tid)\n\t\t\t\tthreedeeview.IsolateElementsTemporary(ielements)\n\t\t\t\tcollectorinside = FilteredElementCollector(doc,threedeeviewid).ToElements()\n\t\t\t\telemento = []\n\t\t\t\tfor k in collectorinside:\n\t\t\t\t\telemento.append(int(str(k.Id)))\n\t\t\t\tif int(str(each.Id)) in elemento:\n\t\t\t\t\tdoc.Export(temp_path, randomname, kilist, satOpt)\n\t\t\t\t\teachlist = betteimport(doc,sat_path,temp_path)\n\t\t\t\t\ttmplist = []\n\t\t\t\t\tfor e in eachlist:\n\t\t\t\t\t\ttmplist.append(e)\n\t\t\t\t\tresultgeom.append(tmplist)\n\t\t\t\t\tSystem.IO.File.Delete(sat_path)\n\t\t\t\telse:\n\t\t\t\t\tresultgeom = [None]\n\t\t\t\tdoc.Delete(threedeeview.Id)\n\t\t\tfinalres.append(flatten(resultgeom))\n\t\t\tif oldvalue == 0:\n\t\t\t\teparm.Set(0)\n\t\ttrans1.RollBack()\n\t\treturn finalres\n\texcept:\n\t\ttrans1.RollBack()\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\treturn traceback.format_exc(),''\n\nresult = NewForm_background(geom)\nOUT = result\nsatOpt.Dispose()\nopt1.Dispose()",
+      "VariableInputPorts": true,
+      "Id": "817faf7fcc8e4d5ba735a0f7d62823ba",
+      "Inputs": [
+        {
+          "Id": "2a9638ba9d174bfdb1e3927ebced0295",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "abe31debb7a948859af73d19ae03afca",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "282b8e039f2a4757b7896494e9d0429b",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "c9ba14cdcab94c6092ebaf3bddd8d6da",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFullUnjoinedGeometry",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "14b1f892db724cc595969aedebd26047",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "13ff7641948e474e8630358907581411",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIncludeHiddenGeometry",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "098a48a0caa04029a1d389182b2d6aa7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ad3af37ed910457e9b475fe045cf98e2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "e397ed8f3f2245b5a0e61a2b4c81b192",
+      "End": "2a9638ba9d174bfdb1e3927ebced0295",
+      "Id": "8770300380b044a48af6cfe24fc334c4"
+    },
+    {
+      "Start": "c9ba14cdcab94c6092ebaf3bddd8d6da",
+      "End": "869d0e5631234b409647e7a5ddb14bef",
+      "Id": "80d580d658194ba897a32cac427f37a3"
+    },
+    {
+      "Start": "13ff7641948e474e8630358907581411",
+      "End": "abe31debb7a948859af73d19ae03afca",
+      "Id": "0a15ec2ef2074a629522c715781eba05"
+    },
+    {
+      "Start": "ad3af37ed910457e9b475fe045cf98e2",
+      "End": "282b8e039f2a4757b7896494e9d0429b",
+      "Id": "d029412bc7664788a98b30ff63378eff"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "50687d817fdf4bab9d318fb1215ac39f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -21.2947025588195,
+        "Y": -12.2854053223959
+      },
+      {
+        "Id": "09c71e08e011451eb0afad2883db9880",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 521.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "817faf7fcc8e4d5ba735a0f7d62823ba",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 244.775956062097,
+        "Y": 69.0510535070885
+      },
+      {
+        "Id": "14b1f892db724cc595969aedebd26047",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -204.658159876634,
+        "Y": 61.7703780961461
+      },
+      {
+        "Id": "098a48a0caa04029a1d389182b2d6aa7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -204.973400817748,
+        "Y": 148.283242579167
+      }
+    ],
+    "Annotations": [],
+    "X": 141.448757592878,
+    "Y": 130.053341472196,
+    "Zoom": 1.00600419002725
+  }
+}

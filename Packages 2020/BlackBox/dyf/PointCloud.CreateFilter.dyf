@@ -1,0 +1,97 @@
+<Workspace Version="1.0.0.1180" X="410.217955727294" Y="208.748167147277" zoom="0.808219866393029" Name="PointCloud.CreateFilter" Description="" ID="5e387bac-db93-4ba6-8045-dd9b2962d112" Category="BlackBox.PointCloud">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="312217fa-9e7c-410a-892f-12c32740785e" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Flatten" x="163.211138960471" y="15.81841712857" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="BuiltIn" function="Flatten@var[]..[]" />
+    <CoreNodeModels.CreateList guid="c2a262ce-50c8-4db3-a68c-b5637e11a4b5" type="CoreNodeModels.CreateList" nickname="List.Create" x="9.026362838719" y="16.6685009172229" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2" />
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="969497f5-0063-4a4c-a3c6-ea5c3e6936e6" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.Empty" x="-228.770043962479" y="71.0073670049586" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.Empty" />
+    <PythonNodeModels.PythonNode guid="80c65681-382e-4620-a313-896ba82f0b2b" type="PythonNodeModels.PythonNode" nickname="pointcloudfilter" x="638.150318817938" y="15.4509794682862" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <Script>#Copyright(c) 2014, Jason Andersen, jason@serialnonstandard.com
+
+# Default imports
+import clr
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.PointClouds import *
+import System.Collections.Generic
+from System.Collections.Generic import List
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+clr.ImportExtensions(Revit.GeometryConversion)
+
+doc =  DocumentManager.Instance.CurrentDBDocument
+app =  DocumentManager.Instance.CurrentUIApplication.Application
+
+#elements coming in
+elements = UnwrapElement(IN[0])
+midpoint = UnwrapElement(IN[1])
+
+# global variables
+v_filters = []
+v_planes = []
+
+# work though each bounding box and make a filetr for each
+for f in elements:
+
+	# X boundaries
+	v_planes.Add(app.Create.NewPlane(XYZ.BasisX, f.MinPoint.ToRevitType()))
+	v_planes.Add(app.Create.NewPlane(-XYZ.BasisX, f.MaxPoint.ToRevitType()))
+	# Y boundaries
+	v_planes.Add(app.Create.NewPlane(XYZ.BasisY, f.MinPoint.ToRevitType()))
+	v_planes.Add(app.Create.NewPlane(-XYZ.BasisY, f.MaxPoint.ToRevitType()))
+	# Z boundaries
+	v_planes.Add(app.Create.NewPlane(XYZ.BasisZ, f.MinPoint.ToRevitType()))
+	v_planes.Add(app.Create.NewPlane(-XYZ.BasisZ, f.MaxPoint.ToRevitType()))	
+	
+	# create filters based on bounding box planes
+	v_filters.append(PointCloudFilterFactory.CreateMultiPlaneFilter(v_planes))
+	
+# output filters
+OUT = v_filters
+</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="a4b473da-022b-4200-bb7b-8e7a174a5c89" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="BoundingBox.MaxPoint" x="7.17606360916716" y="115.922787972891" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="ProtoGeometry.dll" function="Autodesk.DesignScript.Geometry.BoundingBox.MaxPoint" />
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="f37ffdc0-e801-4c30-9040-7005575bd6ac" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Line.ByStartPointEndPoint" x="221.243683741236" y="141.502267692188" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="ProtoGeometry.dll" function="Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point" />
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="9a22a32e-9a5a-4409-8a04-ba202cf68966" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Curve.PointAtParameter" x="425.783267957566" y="141.502267692188" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="ProtoGeometry.dll" function="Autodesk.DesignScript.Geometry.Curve.PointAtParameter@double">
+      <PortInfo index="1" default="True" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="acd50cc3-b3d4-4a94-a3a2-c816266d7eeb" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="BoundingBox.MinPoint" x="9.58787263707211" y="203.953817491411" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="ProtoGeometry.dll" function="Autodesk.DesignScript.Geometry.BoundingBox.MinPoint" />
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="16679ee2-81a6-4861-b104-09d0c28f5603" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="426.436530020472" y="254.198484082421" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="0.5;" ShouldFocus="false" />
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="dd99f958-9dd6-4d1b-808f-00431d02d9f4" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-293.153197824096" y="12.918637781882" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Bounding Box" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="d6f89908-f48f-41f7-aca0-72ea4a0f4981" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="904.40753807761" y="14.4708261152882" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <Symbol value="PointCloudFilter" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="312217fa-9e7c-410a-892f-12c32740785e" start_index="0" end="80c65681-382e-4620-a313-896ba82f0b2b" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="c2a262ce-50c8-4db3-a68c-b5637e11a4b5" start_index="0" end="312217fa-9e7c-410a-892f-12c32740785e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="969497f5-0063-4a4c-a3c6-ea5c3e6936e6" start_index="0" end="c2a262ce-50c8-4db3-a68c-b5637e11a4b5" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="80c65681-382e-4620-a313-896ba82f0b2b" start_index="0" end="d6f89908-f48f-41f7-aca0-72ea4a0f4981" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="a4b473da-022b-4200-bb7b-8e7a174a5c89" start_index="0" end="f37ffdc0-e801-4c30-9040-7005575bd6ac" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="f37ffdc0-e801-4c30-9040-7005575bd6ac" start_index="0" end="9a22a32e-9a5a-4409-8a04-ba202cf68966" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9a22a32e-9a5a-4409-8a04-ba202cf68966" start_index="0" end="80c65681-382e-4620-a313-896ba82f0b2b" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="acd50cc3-b3d4-4a94-a3a2-c816266d7eeb" start_index="0" end="f37ffdc0-e801-4c30-9040-7005575bd6ac" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="16679ee2-81a6-4861-b104-09d0c28f5603" start_index="0" end="9a22a32e-9a5a-4409-8a04-ba202cf68966" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="dd99f958-9dd6-4d1b-808f-00431d02d9f4" start_index="0" end="c2a262ce-50c8-4db3-a68c-b5637e11a4b5" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="dd99f958-9dd6-4d1b-808f-00431d02d9f4" start_index="0" end="a4b473da-022b-4200-bb7b-8e7a174a5c89" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="dd99f958-9dd6-4d1b-808f-00431d02d9f4" start_index="0" end="acd50cc3-b3d4-4a94-a3a2-c816266d7eeb" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

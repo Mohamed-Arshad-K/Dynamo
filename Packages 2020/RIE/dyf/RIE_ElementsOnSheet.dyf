@@ -1,0 +1,165 @@
+{
+  "Uuid": "dd373cdf-0d82-4aaa-8346-f5a9164b15fe",
+  "IsCustomNode": true,
+  "Category": "RIE.Views",
+  "Description": "Input Sheet and retrieve all elements. This nodes get all elementIds by performing a deletion of the sheet, then undoing the transaction whilst retrieving all deleted elementIds, then retrieves all the elements that were restored.\r\nTherefore the sheets you input must be closed in the UI, or they cannot be deleted, hence this node will output null.",
+  "Name": "RIE_ElementsOnSheet",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\n\n# Import ToDSType(bool) extension method\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Import DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Import RevitAPI\nclr.AddReference('RevitAPI')\nimport Autodesk\nfrom Autodesk.Revit.DB import *\n\n\ndoc = DocumentManager.Instance.CurrentDBDocument\n\n#The inputs to this node will be stored as a list in the IN variable.\ndataEnteringNode = IN\n\nOUT = []\nelements = []\ninputids = []\n\ndef tolist(obj):\n\tif isinstance(obj,list):\n\t\treturn obj\n\telse:\n\t\treturn [obj]\n\nfor i in tolist(IN[0]):\n\telements.append(UnwrapElement(i))\n\nTransactionManager.Instance.EnsureInTransaction(doc)\n\nschName, schId, ids = [], [], []\nfor i in elements:\n\ttry:\n\t\ttrans = SubTransaction(doc)\n\t\tinputids.append(i.Id)\n\t\ttrans.Start()\n\t\tids.append(doc.Delete(i.Id))\n\t\ttrans.RollBack()\n\texcept:\n\t\tids.append([])\n\t\tcontinue\n\n\t\t\nTransactionManager.Instance.TransactionTaskDone()\n\n\n\nfor i in ids:\n\telementsOnSheet = []\n\telementsOnSheet1 = []\n\tif len(i) == 0:\n\t\tOUT.append([])\n\tfor j in i:\n\t\telementsOnSheet.append(doc.GetElement(j).GetType())\n\t\telementsOnSheet1.append(doc.GetElement(j))\n\tOUT.append(elementsOnSheet1)",
+      "VariableInputPorts": true,
+      "Id": "016e0999fd6d4209bfff9fb958cbdbed",
+      "Inputs": [
+        {
+          "Id": "ab160859301c49cf908ba13c0b648a1c",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "82c8baa6f5964536b543bf354d3f94b6",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "Elements",
+      "Id": "528bd36053e34d368b0b0b3a73e7668c",
+      "Inputs": [
+        {
+          "Id": "e96e0be0ea29425ab1f559bda6de823b",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "sheets",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "c02e05d7deab4d0cb265cf9a8827ce3c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "84cbff28978944be8afed56181df37a2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "82c8baa6f5964536b543bf354d3f94b6",
+      "End": "e96e0be0ea29425ab1f559bda6de823b",
+      "Id": "8aa3e61ddb954fa1be4b69f5f04de887"
+    },
+    {
+      "Start": "84cbff28978944be8afed56181df37a2",
+      "End": "ab160859301c49cf908ba13c0b648a1c",
+      "Id": "ec848623ac584a5493adf827015bbd6f"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.3.0.5885",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Elements On Sheet [Python]",
+        "Id": "016e0999fd6d4209bfff9fb958cbdbed",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "528bd36053e34d368b0b0b3a73e7668c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 445.205183585313,
+        "Y": -0.863930885529157
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "c02e05d7deab4d0cb265cf9a8827ce3c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 164.14686825054,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": -265.62929558633846,
+    "Y": 206.11868557248539,
+    "Zoom": 1.7433199287549717
+  }
+}

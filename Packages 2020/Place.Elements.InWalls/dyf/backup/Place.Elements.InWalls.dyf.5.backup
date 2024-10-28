@@ -1,0 +1,76 @@
+<Workspace Version="0.7.2.1825" X="208" Y="102" zoom="1" Description="places one element of any family type in a list of walls" Category="KOP" Name="Place.Elements.InWalls" ID="c8bcc81f-2ae0-45cc-88a2-854a5f9f02e3">
+  <Elements>
+    <DSIronPythonNode.PythonNode type="DSIronPythonNode.PythonNode" guid="003e6e27-34ca-4b47-91df-8900dd59bf68" nickname="Python Script" x="250" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" inputcount="2">
+      <Script>import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+# Import RevitAPI
+clr.AddReference('RevitAPI')
+import Autodesk
+
+# Import DocumentManager and TransactionManager
+clr.AddReference('RevitServices')
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import ToDSType(bool) extension method
+clr.AddReference('RevitNodes')
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+walls = UnwrapElement(IN[0])
+windowfamily = UnwrapElement(IN[1])
+#SillHeight = IN[2]/0.3048
+
+wall = []
+
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+TransactionManager.Instance.EnsureInTransaction(doc)
+
+for i in range (0,len(walls)):
+	
+	wall = walls[i]
+	#search for existing windows and delete
+	elList = wall.FindInserts(True, False, False, False)
+	for elemId in elList:
+		doc.Delete(elemId)
+	# extract wall geometry and calculate middlepoint
+	locCurve = wall.Location
+	wallLength = locCurve.Curve.Length
+
+	start = locCurve.Curve.GetEndPoint(0)
+	end = locCurve.Curve.GetEndPoint(1)
+
+	mittex = (start.X + end.X)/2
+	mittey = (start.Y + end.Y)/2
+	
+	location = Autodesk.Revit.DB.XYZ(mittex,mittey,start.Z)
+
+	famInst = doc.Create.NewFamilyInstance(location, windowfamily, wall, Autodesk.Revit.DB.Structure.StructuralType.NonStructural)
+	#famInst.get_Parameter('Sill Height').Set(SillHeight)
+
+# End Transaction
+TransactionManager.Instance.TransactionTaskDone()</Script>
+    </DSIronPythonNode.PythonNode>
+    <Dynamo.Nodes.Symbol type="Dynamo.Nodes.Symbol" guid="1864f3e9-2cc6-40a4-93ea-6042b564f190" nickname="Input" x="0" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled">
+      <Symbol value="Walls" />
+    </Dynamo.Nodes.Symbol>
+    <Dynamo.Nodes.Symbol type="Dynamo.Nodes.Symbol" guid="cb0a9e87-df2e-4027-937f-47328676bf56" nickname="Input" x="0" y="150" isVisible="true" isUpstreamVisible="true" lacing="Disabled">
+      <Symbol value="Family Type" />
+    </Dynamo.Nodes.Symbol>
+    <Dynamo.Nodes.Output type="Dynamo.Nodes.Output" guid="f8c8d34a-cc13-4f87-9ca8-71791b507bba" nickname="Output" x="449" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled">
+      <Symbol value="OUT" />
+    </Dynamo.Nodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Models.ConnectorModel start="003e6e27-34ca-4b47-91df-8900dd59bf68" start_index="0" end="f8c8d34a-cc13-4f87-9ca8-71791b507bba" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="1864f3e9-2cc6-40a4-93ea-6042b564f190" start_index="0" end="003e6e27-34ca-4b47-91df-8900dd59bf68" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="cb0a9e87-df2e-4027-937f-47328676bf56" start_index="0" end="003e6e27-34ca-4b47-91df-8900dd59bf68" end_index="1" portType="0" />
+  </Connectors>
+  <Notes />
+</Workspace>

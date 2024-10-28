@@ -1,0 +1,98 @@
+<Workspace Version="1.0.0.1180" X="127.629332776425" Y="-14.0915010080049" zoom="0.943084670293634" Name="Optimize Fabrication Part(s) Length" Description="Optimize fabrication part(s) Length" ID="66434b09-48e7-4d70-9ce2-63e2d16d3792" Category="DynaFabrication2017.Parts">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="30a122bc-afec-4a79-9b72-a0693bb37f70" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="148.535520142691" y="358.062338621021" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Fab ID(s)" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="2ba9a031-3830-47fd-8725-a434e8ae908e" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Count" x="352.825064837266" y="275.512702774568" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="BuiltIn" function="Count@var[]..[]" />
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="4c2351a2-94b2-4530-ad0a-1ae650bd0d5d" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="755.029552100621" y="415.4311654012" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <Symbol value="ID(s)" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="d88ee429-ca5d-449b-9c77-2a1af334bb0e" type="PythonNodeModels.PythonNode" nickname="Python Script" x="363.696050089408" y="477.251078268731" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="1">
+      <Script>import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+items = UnwrapElement(IN[0])
+
+elementlist = list()
+unmatched = list()
+for item in items:
+	try: 
+		elementlist.append(doc.GetElement(item).ToDSType(True))
+	except:
+		unmatched.append(item)
+OUT = elementlist</Script>
+    </PythonNodeModels.PythonNode>
+    <PythonNodeModels.PythonNode guid="8f9fbc5c-1bf8-422a-9a8d-acf0ef1bf359" type="PythonNodeModels.PythonNode" nickname="Fabrication Optimize Length" x="534.828213073534" y="377.376350015968" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <Script>#Copyright(c) 2016, Nathan Chapman
+# nchapman@generalheating.com
+
+import clr
+import System
+clr.AddReference("System.Core")
+from System.Collections.Generic import HashSet
+
+import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitNodes")
+import Revit
+import Autodesk
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+Doc = DocumentManager.Instance.CurrentDBDocument
+
+PartsId = UnwrapElement(IN[0])
+Cnt= UnwrapElement(IN[1])
+OptPart = list()
+MyHashSet = HashSet[Autodesk.Revit.DB.ElementId]()
+
+TransactionManager.Instance.EnsureInTransaction(Doc)
+
+if Cnt &gt; 1: 
+	for Item in PartsId:
+		if Item.IsAStraight():
+			MyHashSet.Add(Item.Id)
+			Item.OptimizeLengths(Doc, MyHashSet)
+
+else:
+	if PartsId.IsAStraight():
+		MyHashSet.Add(PartsId.Id)
+		PartsId.OptimizeLengths(Doc, MyHashSet)
+
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = MyHashSet</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="6241cf93-02b4-4cd2-b085-82e828dc45fb" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Flatten" x="235.733427117469" y="461.389576865385" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="BuiltIn" function="Flatten@var[]..[]" />
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="30a122bc-afec-4a79-9b72-a0693bb37f70" start_index="0" end="6241cf93-02b4-4cd2-b085-82e828dc45fb" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="2ba9a031-3830-47fd-8725-a434e8ae908e" start_index="0" end="8f9fbc5c-1bf8-422a-9a8d-acf0ef1bf359" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d88ee429-ca5d-449b-9c77-2a1af334bb0e" start_index="0" end="2ba9a031-3830-47fd-8725-a434e8ae908e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d88ee429-ca5d-449b-9c77-2a1af334bb0e" start_index="0" end="8f9fbc5c-1bf8-422a-9a8d-acf0ef1bf359" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="8f9fbc5c-1bf8-422a-9a8d-acf0ef1bf359" start_index="0" end="4c2351a2-94b2-4530-ad0a-1ae650bd0d5d" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="6241cf93-02b4-4cd2-b085-82e828dc45fb" start_index="0" end="d88ee429-ca5d-449b-9c77-2a1af334bb0e" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

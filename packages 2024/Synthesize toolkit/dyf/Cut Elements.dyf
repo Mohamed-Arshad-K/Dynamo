@@ -1,0 +1,153 @@
+{
+  "Uuid": "adbfca98-9d94-4ac7-af9d-c7900e65e27f",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "Cut Elements",
+  "Name": "Cut Elements",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\nclr.AddReference(\"RevitAPI\")\r\nimport Autodesk\r\nfrom Autodesk.Revit.DB import *\r\n\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\nfrom System.Collections.Generic import *\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\nfrom itertools import combinations\r\n\r\nclass WarnSwallow(IFailuresPreprocessor):\r\n\tdef PreprocessFailures(self, failuresAccessor):\r\n\t\tfmas = failuresAccessor.GetFailureMessages()\r\n\t\tif len(fmas) == 0:\r\n\t\t\tself.__warn = []\r\n\t\t\treturn FailureProcessingResult.Continue\r\n\t\telse:\r\n\t\t\tprobs = []\r\n\t\t\tisgood = True\r\n\t\t\tfor fma in fmas:\r\n\t\t\t\tsev = str(fma.GetSeverity())\r\n\t\t\t\tfails = list(fma.GetFailingElementIds())\r\n\t\t\t\tfelems = []\r\n\t\t\t\tfor f in fails:\r\n\t\t\t\t\tfelems.append(doc.GetElement(f))\r\n\t\t\t\tif str(sev) == \"Warning\": \r\n\t\t\t\t\tfailuresAccessor.ResolveFailure(fma)\r\n\t\t\t\t\tfailuresAccessor.DeleteWarning(fma)\r\n\t\t\t\telse:\r\n\t\t\t\t\tisgood = False\r\n\t\t\t\t\tprobs.append(felems) \r\n\t\t\t\tself.__warn = probs\r\n\t\tif isgood:\r\n\t\t\treturn FailureProcessingResult.ProceedWithCommit\r\n\t\telse:\r\n\t\t\treturn FailureProcessingResult.ProceedWithRollBack \r\n\r\ndef tolist(obj1):\r\n\tif hasattr(obj1,'__iter__'): return obj1\r\n\telse: return [obj1]\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nvoids = UnwrapElement(flatten(tolist(IN[0])))\r\nelements = UnwrapElement(flatten(tolist(IN[1])))\r\n\r\nacceptedVoids = []\r\nvoidsBBOXes = []\r\nfor void in voids:\r\n\ttry:\r\n\t\tvoidsBBOXes.append(void.get_BoundingBox(None).ToProtoType())\r\n\t\tacceptedVoids.append(void)\r\n\texcept:\r\n\t\tpass\r\nvoids = acceptedVoids\r\n\r\nacceptedElements = []\r\nelementsBBOXes = []\r\nfor element in elements:\r\n\ttry:\r\n\t\telementsBBOXes.append(element.get_BoundingBox(None).ToProtoType())\r\n\t\tacceptedElements.append(element)\r\n\texcept:\r\n\t\tpass\r\nelements = acceptedElements\r\n\r\nTransactionManager.Instance.ForceCloseTransaction()\r\ntGroup = TransactionGroup(doc, 'Cut Elements')\r\ntGroup.Start()\r\n\r\nresult = []\r\nvoidCount = 0\r\nfor void in voids:\r\n\ttmp = []\r\n\tvoidBBox = voidsBBOXes[voidCount]\r\n\telementsCount = 0\r\n\tfor e in elements:\r\n\t\telementBBox = elementsBBOXes[elementsCount]\r\n\t\tif BoundingBox.Intersects(voidBBox, elementBBox) and Autodesk.Revit.DB.InstanceVoidCutUtils.CanBeCutWithVoid(e):\r\n\t\t\ttry:\r\n\t\t\t\ttrans1 = Transaction(doc, 'Cut Elements Operation')\r\n\t\t\t\ttrans1.Start()\r\n\t\t\t\twarnhandle = WarnSwallow()\r\n\t\t\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\t\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\t\t\tAutodesk.Revit.DB.InstanceVoidCutUtils.AddInstanceVoidCut(doc, e, void)\r\n\t\t\t\ttrans1.Commit()\r\n\t\t\t\ttmp.append(True)\r\n\t\t\texcept:\r\n\t\t\t\ttrans1.Commit()\r\n\t\t\t\ttmp.append(False)\r\n\t\telse:\r\n\t\t\ttmp.append(False)\r\n\t\telementsCount += 1\r\n\tresult.append(tmp)\r\n\tvoidCount += 1\r\ntGroup.Assimilate()\r\n\r\nOUT = result",
+      "Engine": "IronPython2",
+      "EngineName": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "5f4dfdc2bb4e4d4c8362bd106efe9e2a",
+      "Inputs": [
+        {
+          "Id": "c96f3c2f1d9445769997dd7226d97c1e",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "882c166ce58c47b386be4484b91567b9",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "f3aff01c4ee9422980d293849a43f758",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARVoids",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "92dd15c234bd4f609b713e1aa129d4a4",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5a9b965b7dd9442082080e0bb08cae75",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "0ad3c6763f3147d29a3e66da129edb4e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "875237c98f4d4055a20c8dc39e3c0fce",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROut",
+      "Id": "977c5a87e22145c9b719c86d9f802f7c",
+      "Inputs": [
+        {
+          "Id": "adf6c0c2fa474c57b56ea2e1a76a4e45",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "f3aff01c4ee9422980d293849a43f758",
+      "End": "adf6c0c2fa474c57b56ea2e1a76a4e45",
+      "Id": "ed328bdb5f0048f6b10390072a93e462",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "5a9b965b7dd9442082080e0bb08cae75",
+      "End": "c96f3c2f1d9445769997dd7226d97c1e",
+      "Id": "3d2c30adf4134ae880bca95bb421dbfe",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "875237c98f4d4055a20c8dc39e3c0fce",
+      "End": "882c166ce58c47b386be4484b91567b9",
+      "Id": "ffb761bbab19448ca0f59ac2c41f8048",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": []
+}

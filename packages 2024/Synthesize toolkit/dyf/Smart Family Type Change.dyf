@@ -1,0 +1,314 @@
+{
+  "Uuid": "1446132c-fcc7-4a28-b5fa-1256c08052c2",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "Smart Family Type Change",
+  "Name": "Smart Family Type Change",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\n# Simple Warning Swallow Class\nclass WarnSwallowSimple(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\n# Get ElementId or Value String\ndef bestparamvalue(famdoc,famtype,famparam):\n\tif famdoc == None and famtype == None:\n\t\tParamValueString = famparam.AsElementId()\n\t\tif ParamValueString.ToString() == \"-1\":\n\t\t\tstoragetype = str(famparam.StorageType)\n\t\t\ttry:\n\t\t\t\tif storagetype == \"Integer\":\n\t\t\t\t\tParamValueString = famparam.AsInteger()\n\t\t\t\telif storagetype == \"Double\":\n\t\t\t\t\tParamValueString = famparam.AsDouble()\n\t\t\t\telif storagetype == \"String\":\n\t\t\t\t\tParamValueString = famparam.AsString()\n\t\t\texcept:\n\t\t\t\tParamValueString = famparam.AsValueString()\n\t\telse:\n\t\t\ttry:\n\t\t\t\tParamValueString = famparam.AsValueString()\n\t\t\texcept:\n\t\t\t\tParamValueString = None\n\telse:\n\t\tParamValueString = famtype.AsElementId(famparam)\n\t\tif ParamValueString.ToString() == \"-1\":\n\t\t\tstoragetype = str(famparam.StorageType)\n\t\t\ttry:\n\t\t\t\tif storagetype == \"Integer\":\n\t\t\t\t\tParamValueString = famtype.AsInteger(famparam)\n\t\t\t\telif storagetype == \"Double\":\n\t\t\t\t\tParamValueString = famtype.AsDouble(famparam)\n\t\t\t\telif storagetype == \"String\":\n\t\t\t\t\tParamValueString = famtype.AsString(famparam)\n\t\t\texcept:\n\t\t\t\tParamValueString = famtype.AsValueString(famparam)\n\t\telse:\n\t\t\ttry:\n\t\t\t\tif famdoc != None:\n\t\t\t\t\tParamValueString = famdoc.GetElement(ParamValueString).Name\n\t\t\t\telse:\n\t\t\t\t\tParamValueString = famtype.AsValueString(famparam)\n\t\t\texcept:\n\t\t\t\tParamValueString = famtype.AsValueString(famparam)\n\treturn ParamValueString\n\ndef elemOP(doc,elem,typetochangeto,typetoo):\n\tif typetoo:\n\t\tfamtypeparams = list(elem.Symbol.GetOrderedParameters()) + list(elem.GetOrderedParameters())\n\telse:\n\t\tfamtypeparams = list(elem.GetOrderedParameters())\n\tvals = []\n\tfor famparam in famtypeparams:\n\t\tParamName = famparam.Definition.Name\n\t\tParamValueString = bestparamvalue(None,None,famparam)\n\t\tvals.append([ParamName,ParamValueString])\n\telem.ChangeTypeId(typetochangeto.Id)\n\tif typetoo:\n\t\tnewfamtypeparams = list(typetochangeto.GetOrderedParameters()) + list(elem.GetOrderedParameters())\n\telse:\n\t\tnewfamtypeparams = list(elem.GetOrderedParameters())\n\tfor newfamparam in newfamtypeparams:\n\t\tnametest = newfamparam.Definition.Name\n\t\tfor val in vals:\n\t\t\tif nametest == val[0]:\n\t\t\t\tif bestparamvalue(None,None,newfamparam) != val[1]:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tnewfamparam.Set(val[1])\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\treturn elem\n\t\ndef elemOPForced(doc,each,familytype,typetoo):\n\ttry:\n\t\tids = AdaptiveComponentInstanceUtils.GetInstancePlacementPointElementRefIds(each)\n\t\tif typetoo:\n\t\t\tparams = list(each.Symbol.GetOrderedParameters()) + list(each.GetOrderedParameters())\n\t\telse:\n\t\t\tparams = list(each.GetOrderedParameters())\n\t\tparamsdata = []\n\t\tfor param in params:\n\t\t\tparamsdata.append([param.Definition.Name,bestparamvalue(None,None,param)])\n\t\ttmp = []\n\t\tfor e in ids:\n\t\t\trefpt = doc.GetElement(e)\n\t\t\telemref = refpt.GetPointElementReference()\n\t\t\tif elemref == None:\n\t\t\t\tcoor = refpt.GetCoordinateSystem().ToCoordinateSystem()\n\t\t\t\tskp = SketchPlane.Create(doc, coor.XYPlane.ToPlane()).GetPlaneReference()\n\t\t\t\txcoor = coor.XAxis.ToXyz()\n\t\t\t\torcoor = coor.Origin.ToXyz()\n\t\t\t\tdynpoints = PointOnPlane.NewPointOnPlane(doc,skp,orcoor,xcoor)\n\t\t\t\ttmp.append(dynpoints)\n\t\t\telse:\n\t\t\t\ttmp.append(elemref)\n\t\tnewadapt = AdaptiveComponentInstanceUtils.CreateAdaptiveComponentInstance(doc,familytype)\n\t\tnewparams = newadapt.GetOrderedParameters()\n\t\tfor newparam in newparams:\n\t\t\tfor paramdata in paramsdata:\n\t\t\t\tif paramdata[0].lower() == newparam.Definition.Name.lower():\n\t\t\t\t\tif newparam.IsReadOnly == False:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tnewparam.Set(paramdata[1])\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\tnewids = AdaptiveComponentInstanceUtils.GetInstancePlacementPointElementRefIds(newadapt)\n\t\tcount = 0\n\t\tfor e in newids:\n\t\t\trefpt = doc.GetElement(e)\n\t\t\trefpt.SetPointElementReference(tmp[count])\n\t\t\tcount += 1\n\t\tresult = newadapt\n\t\tdoc.Delete(each.Id)\n\texcept:\n\t\tresult = None\n\treturn result\n\t\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nelements = UnwrapElement(tolist(IN[0]))\ntypetochangeto = UnwrapElement(IN[1])\ntypetoo = IN[2]\nforced = IN[3]\n\nresult = []\n\nTransactionManager.Instance.ForceCloseTransaction()\ntrans1 = Transaction(doc, 'Smart Type Changing')\ntrans1.Start()\nwarnhandle = WarnSwallowSimple()\nfoptions = trans1.GetFailureHandlingOptions()\nfoptions.SetFailuresPreprocessor(warnhandle)\ntrans1.SetFailureHandlingOptions(foptions)\nfor elem in elements:\n\ttry:\n\t\tif forced:\n\t\t\tif AdaptiveComponentInstanceUtils.IsAdaptiveComponentInstance(elem):\n\t\t\t\tresult.append(elemOPForced(doc,elem,typetochangeto,typetoo))\n\t\t\telse:\n\t\t\t\tcontinue\n\t\telse:\n\t\t\tresult.append(elemOP(doc,elem,typetochangeto,typetoo))\n\texcept:\n\t\tresult.append(None)\ntrans1.Commit()\n\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "52443729e83e4c11a579511aa08b1af6",
+      "Inputs": [
+        {
+          "Id": "3faba84dbddf4d90a225b9c7004231d1",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "874f2296d3be4e3cbcc06e4dea10ca9d",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a9424452040b4a3fb8e00727080347d1",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3c8041b9c45444ab8db8fd7e1a7c5903",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "6471494c91cb460681c681045d9da825",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "65b379ba03334bfe86d6bb8489ed91ec",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "643e75aa41e44b5c91eaf6e4739d7009",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARTargetFamilyType",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "4aeef56b5b274c0f8904e6fa33aa3050",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d5c8acaa94144ff3ad93633d7a88f0a5",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARChangeTypeValuesToo",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "2e902db294de46a794f3c21109a02483",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a68d63fc065744b88590716b52336cee",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROutput",
+      "Id": "8bd0fa20415b40ca9871911d796e238e",
+      "Inputs": [
+        {
+          "Id": "ac1b7c08362142488f2ea11b4fc0db1a",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFullReplaceAdaptiveOnly",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "ebbbc7c771c24837a487a7898f0f0e82",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "fc89ef8b33174fc493d6f2be94d31df7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "6471494c91cb460681c681045d9da825",
+      "End": "ac1b7c08362142488f2ea11b4fc0db1a",
+      "Id": "51a7756d63414f3281b0e08d529e4db7"
+    },
+    {
+      "Start": "643e75aa41e44b5c91eaf6e4739d7009",
+      "End": "3faba84dbddf4d90a225b9c7004231d1",
+      "Id": "dc66ff124cf54617af3a6df7af4367e2"
+    },
+    {
+      "Start": "d5c8acaa94144ff3ad93633d7a88f0a5",
+      "End": "874f2296d3be4e3cbcc06e4dea10ca9d",
+      "Id": "32092d2824ce45a4963f128be10d7dbb"
+    },
+    {
+      "Start": "a68d63fc065744b88590716b52336cee",
+      "End": "a9424452040b4a3fb8e00727080347d1",
+      "Id": "ff37d77ab51d49039a92ddfdb314cee3"
+    },
+    {
+      "Start": "fc89ef8b33174fc493d6f2be94d31df7",
+      "End": "3c8041b9c45444ab8db8fd7e1a7c5903",
+      "Id": "6686c39e4c03444cbc6d00897773c2f8"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "52443729e83e4c11a579511aa08b1af6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "65b379ba03334bfe86d6bb8489ed91ec",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -15.9310005728249,
+        "Y": -44.8964561597792
+      },
+      {
+        "Id": "4aeef56b5b274c0f8904e6fa33aa3050",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -46.3310005728249,
+        "Y": 24.3035438402208
+      },
+      {
+        "Id": "2e902db294de46a794f3c21109a02483",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -148.999955300542,
+        "Y": 108.165634384787
+      },
+      {
+        "Id": "8bd0fa20415b40ca9871911d796e238e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "ebbbc7c771c24837a487a7898f0f0e82",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -128.495046782392,
+        "Y": 192.968862959382
+      }
+    ],
+    "Annotations": [],
+    "X": 222.982036042329,
+    "Y": 62.0403588259367,
+    "Zoom": 1.37758335255867
+  }
+}

@@ -1,0 +1,927 @@
+{
+  "Uuid": "3c9d0464-8643-5ffe-96e5-ab1769818209",
+  "IsCustomNode": false,
+  "Description": "",
+  "Name": "FormIt.K-Paneling Frame",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [
+    {
+      "Id": "6d10347186cf44d0ab2e715c606c1548",
+      "Name": "02.Faces Offset",
+      "Type": "number",
+      "Value": "0",
+      "NumberType": "Double",
+      "Description": "Creates a number.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "3e39039d12d94a7a850570136365ee0b",
+      "Name": "03.Border Width",
+      "Type": "number",
+      "Value": "0.1",
+      "NumberType": "Double",
+      "Description": "Creates a number.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "2bc8c0a24ab3488a887191d17a542069",
+      "Name": "04.Border Depth",
+      "Type": "number",
+      "Value": "0.2",
+      "NumberType": "Double",
+      "Description": "Creates a number.",
+      "SelectedIndex": 0
+    }
+  ],
+  "Outputs": [
+    {
+      "Id": "c042867bea9545d8ade344abb48b8220",
+      "Name": "SendToFormIt",
+      "Type": "unknown",
+      "InitialValue": "",
+      "Description": "Node of type 'FormItUINodes.BakeNodeWithOptionsNodeModel', from assembly 'FormItUINodes', cannot be resolved."
+    }
+  ],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\nsurfaces = IN[0]\noffsetvalue = IN[1]\n\nfixedlist = []\nfor s in surfaces:\n\tfixedlist.append(s)\nsurfaces = fixedlist\n\ndef joinonesurf(surfaces):\n\tbackuplist = []\n\tfor s in surfaces:\n\t\tbackuplist.append(s)\n\tsurftojoin = surfaces.pop(0)\n\tcounter = 0\n\tresult = []\n\tfor s in surfaces:\n\t\tbbox1 = s.BoundingBox\n\t\tbbox2 = surftojoin.BoundingBox\n\t\tif dg.BoundingBox.Intersects(bbox1, bbox2):\n\t\t\tif dg.Geometry.DoesIntersect(surftojoin,s):\n\t\t\t\ttry:\n\t\t\t\t\tresult = dg.Surface.ByUnion([surftojoin,s])\n\t\t\t\texcept:\n\t\t\t\t\tresult = dg.PolySurface.ByJoinedSurfaces([surftojoin,s])\n\t\t\t\tbreak\n\t\tcounter += 1\n\tif result != []:\n\t\tsurfaces.append(result)\n\t\tsurfaces.pop(counter)\n\telse:\n\t\tsurfaces = rotate(backuplist,-1)\n\ttotallystop = True\n\tfor s in surfaces:\n\t\tfor s1 in surfaces:\n\t\t\tif dg.Geometry.DoesIntersect(s,s1) and s != s1:\n\t\t\t\ttotallystop = False\n\t\t\t\tbreak\n\t\tif totallystop == False:\n\t\t\tbreak\n\treturn surfaces,totallystop\n\t\ndef rotate(l, n):\n    return l[n:] + l[:n]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nif offsetvalue > 0:\n\ttotallystop = False\n\twhile totallystop == False:\n\t\tdoit = joinonesurf(surfaces)\n\t\tsurfaces = doit[0]\n\t\ttotallystop = doit[1]\n\t\n\tfinalsurfaces = []\n\tfor s in surfaces:\n\t\ttry:\n\t\t\toffset = dg.Surface.Offset(s,0)\n\t\t\toffset.Dispose()\n\t\t\tfinalsurfaces.append(s)\n\t\texcept:\n\t\t\texploded = dg.Geometry.Explode(s)\n\t\t\tfinalsurfaces.append(exploded)\n\t\n\tfinalsurfaces = flatten(finalsurfaces)\n\t\n\toffset = []\n\tfor f in finalsurfaces:\n\t\ttry:\n\t\t\toffset.append(dg.Geometry.Explode(dg.Surface.Offset(f,offsetvalue)))\n\t\texcept:\n\t\t\tpass\n\toffset = flatten(offset)\nelse:\n\toffset = surfaces\n\n# Assign your output to the OUT variable.\nOUT = offset",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "cefe4b86de56418ca7480c6bef032403",
+      "Inputs": [
+        {
+          "Id": "141d26d547714a5c81af8a420f248219",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4ecc1d9f3dcb4dd8b7abb0bf200ae655",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "aa3a8a9f5ea44c3dae2ea91a46886078",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Flatten@var[]..[],int",
+      "Id": "c90180c3ec2c44a2ade466946b01b648",
+      "Inputs": [
+        {
+          "Id": "6c4f30c22c244a48b146af1dff9f59f4",
+          "Name": "list",
+          "Description": "List to flatten.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2bcbba9adb2d4feb92642b6ee6133470",
+          "Name": "amount",
+          "Description": "Layers of list nesting to remove (-1 will remove all list nestings)\n\nint\nDefault value : -1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "7d6976e4ee03448c803d7f7da9f30d88",
+          "Name": "list",
+          "Description": "Flattened list by amount",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Flattens a nested list of lists by a certain amount.\n\nList.Flatten (list: var[]..[], amount: int = -1): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.Geometry.Explode",
+      "Id": "f5d95915582442ffa6c2445dddd0008d",
+      "Inputs": [
+        {
+          "Id": "7cf9a02da5cb4ae28a8fc40879e84f68",
+          "Name": "geometry",
+          "Description": "Autodesk.DesignScript.Geometry.Geometry",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "75e5f99be6624787a0a3a2a1dd00d099",
+          "Name": "Geometry[]",
+          "Description": "Geometry[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Separates compound or non-separated elements into their component parts.\n\nGeometry.Explode ( ): Geometry[]"
+    },
+    {
+      "ConcreteType": "FormItUINodes.FormItSelectionNode, FormItUINodes",
+      "m_FormItSelection": "[{\"ids\":[{\"History\":0,\"Object\":8,\"objectName\":\"ObjectHistoryID\"}],\"objectName\":\"GroupInstancePath\"},{\"ids\":[{\"History\":0,\"Object\":35,\"objectName\":\"ObjectHistoryID\"}],\"objectName\":\"GroupInstancePath\"},{\"ids\":[{\"History\":0,\"Object\":333,\"objectName\":\"ObjectHistoryID\"}],\"objectName\":\"GroupInstancePath\"},{\"ids\":[{\"History\":0,\"Object\":406,\"objectName\":\"ObjectHistoryID\"}],\"objectName\":\"GroupInstancePath\"},{\"ids\":[{\"History\":0,\"Object\":427,\"objectName\":\"ObjectHistoryID\"}],\"objectName\":\"GroupInstancePath\"}]",
+      "ButtonText": "Select From FormIt",
+      "NodeType": "ExtensionNode",
+      "Id": "5fa3f3611387484aa2f6e47abf904e70",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7212c12637904942a7374b34298af0a8",
+          "Name": "Geometry[]..[]",
+          "Description": "Returns list of Geometry",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Select geometry from FormIt for use in Dynamo. Selecting FormIt Group instances is recommended, because any changes to the geometry inside the Group will be captured without requiring re-selection."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 0.0,
+      "Id": "6d10347186cf44d0ab2e715c606c1548",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2ca72b36db234ca7a2e84604bd7357f7",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 0.1,
+      "Id": "3e39039d12d94a7a850570136365ee0b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6a8c546d373f4a9e83979468afd475b4",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 0.2,
+      "Id": "2bc8c0a24ab3488a887191d17a542069",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6230fa83460d474da11c4d1bdc90757e",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Flatten@var[]..[],int",
+      "Id": "0da0b4bab31d405f843bcc985ec3d4d0",
+      "Inputs": [
+        {
+          "Id": "efa08497bf944d69a5f6811e715a6a52",
+          "Name": "list",
+          "Description": "List to flatten.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "633a1ae7a21e4bacb72e3fc59505306d",
+          "Name": "amount",
+          "Description": "Layers of list nesting to remove (-1 will remove all list nestings)\n\nint\nDefault value : -1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "db26a82a1d6243c29e2f38fe74aa7bc9",
+          "Name": "list",
+          "Description": "Flattened list by amount",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Flattens a nested list of lists by a certain amount.\n\nList.Flatten (list: var[]..[], amount: int = -1): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Clean@var[]..[],bool",
+      "Id": "dc7abd5fceb64675a6b378b0d5cd2031",
+      "Inputs": [
+        {
+          "Id": "4809462b01774988aed264c5957e45c4",
+          "Name": "list",
+          "Description": "List containing nulls and empty sublists to clean\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8073c7a3ce35408e80ea697516906daf",
+          "Name": "preserveIndices",
+          "Description": "Provide an option to preserve the indices of the data\n\nbool\nDefault value : true",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "c81ce957d47748fba24c33c9a4b60d55",
+          "Name": "list",
+          "Description": "List of transposed lists",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Cleans data of nulls and empty lists from a given list of arbitrary dimension\n\nList.Clean (list: var[]..[], preserveIndices: bool = true): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "false;",
+      "Id": "d1e027f41c3848339a13ee0918b25062",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c905e76ec10b4c71aa48632439f6a378",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "6119dba4-8e03-4dda-a5dd-d32a3d49f323",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "b2a3fcb400b648fa93bb2f77557b6c0f",
+      "Inputs": [
+        {
+          "Id": "6e5bb33dcc104fdd987186f5cbfe648e",
+          "Name": "VARSuraces",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "5229463232da4040a4fe5b489617ac8c",
+          "Name": "VARFrameDepth",
+          "Description": "double\nDefault value : 0.2",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "807c09038b684beb80a1967ccd3c4400",
+          "Name": "VARFrameWidth",
+          "Description": "double\nDefault value : 0.1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "bdf22d4da5094111ad2a6daed98ed33a",
+          "Name": "VARSafeThickenFactor",
+          "Description": "double\nDefault value : 1.65",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1c428887f4f84dad8180fc8404da329f",
+          "Name": "VAROnlySubtractedSurfaces",
+          "Description": "bool\nDefault value : false",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "c9391f12494d4aa5a1b475e5fafbc28b",
+          "Name": "VARFrameSolids",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fc33378cb15441c6829b6a17232d4e92",
+          "Name": "VARExtraFrameOnly",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Create Frames By Surfaces"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.Geometry.Explode",
+      "Id": "7620385c52d2408d900a407f210ca976",
+      "Inputs": [
+        {
+          "Id": "410939246e3e4e7b96204fe81c94c5bd",
+          "Name": "geometry",
+          "Description": "Autodesk.DesignScript.Geometry.Geometry",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b49c55ae997045619a6298ed20b87f8a",
+          "Name": "Geometry[]",
+          "Description": "Geometry[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Separates compound or non-separated elements into their component parts.\n\nGeometry.Explode ( ): Geometry[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Flatten@var[]..[],int",
+      "Id": "4040322bf5134b84a24dac7b08044c23",
+      "Inputs": [
+        {
+          "Id": "1f29e09ff91a40ebbd409e9d3118ac9f",
+          "Name": "list",
+          "Description": "List to flatten.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9a8e5be381cd48098be40c42aeec05a9",
+          "Name": "amount",
+          "Description": "Layers of list nesting to remove (-1 will remove all list nestings)\n\nint\nDefault value : -1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "181567f6439247588400665e7de61c41",
+          "Name": "list",
+          "Description": "Flattened list by amount",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Flattens a nested list of lists by a certain amount.\n\nList.Flatten (list: var[]..[], amount: int = -1): var[]..[]"
+    },
+    {
+      "ConcreteType": "FormItUINodes.BakeNodeWithOptionsNodeModel, FormItUINodes",
+      "m_FormItBakeNodeOptions": "",
+      "NodeType": "ExtensionNode",
+      "Id": "c042867bea9545d8ade344abb48b8220",
+      "Inputs": [
+        {
+          "Id": "b3067eaadd9b4a629b8bb17dd80bece5",
+          "Name": "geometry",
+          "Description": "Specify the Dynamo geometry that will be sent to FormIt. This geometry will be contained in a FormIt Group within the parent Group that is created by the Dynamo graph.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6fb2f8681d1f483586eb6e313ea271c0",
+          "Name": "FormItGroupOptions",
+          "Description": "Customize the behavior of the FormIt Group containing this Dynamo geometry by connecting FormItGroupOptions nodes. Multiple FormItGroupOptions nodes can be daisy chained together.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "25ad3435c7524f0aa97a0ceb1b0feca8",
+          "Name": "geometry",
+          "Description": "The Dynamo geometry being sent to FormIt.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Send Dynamo geometry to Autodesk FormIt, contained in a FormIt Group instance."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "FormItGroupOptions.SetAsMesh@bool,string",
+      "Id": "5846d9f31bf147bab8fe31579f5af85f",
+      "Inputs": [
+        {
+          "Id": "7c82469a63cb476b84e9a4e9cdfd33a8",
+          "Name": "SetAsMesh",
+          "Description": "Choose whether Dynamo geometry is sent to FormIt as a Mesh (true) or an editable Object (false).\n\nbool",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e6bb0fbdb53344eeaee08147dbbbe8af",
+          "Name": "FormItGroupOptions",
+          "Description": "Connect additional FormItGroupOptions to daisy chain them together.\n\nstring\nDefault value : \"\"",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "bd6e89ac73214930a4de479d848eb3f5",
+          "Name": "string",
+          "Description": "The properly-formatted FormItGroupOption.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Choose whether the geometry being sent to FormIt is a FormIt Mesh (faster, but cannot be edited, and with limited snapping capabilities) or a FormIt Object (potentially slower for larger objects but editable, and with fully-functional snapping).\n\nFormItGroupOptions.SetAsMesh (SetAsMesh: bool, FormItGroupOptions: string = \"\"): string"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "false;",
+      "Id": "689695bca23d4309a5f352e35129b796",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bc257911cfed4de98ce62729c9b10215",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "aa3a8a9f5ea44c3dae2ea91a46886078",
+      "End": "410939246e3e4e7b96204fe81c94c5bd",
+      "Id": "2e29d3a5132a4d88a196c446a6e286fc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7d6976e4ee03448c803d7f7da9f30d88",
+      "End": "141d26d547714a5c81af8a420f248219",
+      "Id": "35a3cc03c8e3463591eabbd0359f60ee",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "75e5f99be6624787a0a3a2a1dd00d099",
+      "End": "6c4f30c22c244a48b146af1dff9f59f4",
+      "Id": "a2fd99f35cbe4e078ef3ac7e415483df",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7212c12637904942a7374b34298af0a8",
+      "End": "7cf9a02da5cb4ae28a8fc40879e84f68",
+      "Id": "10113bb6a6fb44c5b21f0f83a3b352a1",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2ca72b36db234ca7a2e84604bd7357f7",
+      "End": "4ecc1d9f3dcb4dd8b7abb0bf200ae655",
+      "Id": "ff165ab078d546cdacc9a50e1c36102d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6a8c546d373f4a9e83979468afd475b4",
+      "End": "807c09038b684beb80a1967ccd3c4400",
+      "Id": "a0e54645714a4ad595c76520f9b3a6b3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6230fa83460d474da11c4d1bdc90757e",
+      "End": "5229463232da4040a4fe5b489617ac8c",
+      "Id": "181311fddbcd49bda972aa0955e81c4d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "db26a82a1d6243c29e2f38fe74aa7bc9",
+      "End": "b3067eaadd9b4a629b8bb17dd80bece5",
+      "Id": "7a3f339f031d4fe8869d1b32bbcad137",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "c81ce957d47748fba24c33c9a4b60d55",
+      "End": "efa08497bf944d69a5f6811e715a6a52",
+      "Id": "9537b41659844b8b81217f335df19462",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "c905e76ec10b4c71aa48632439f6a378",
+      "End": "8073c7a3ce35408e80ea697516906daf",
+      "Id": "947d0f6656994b158d1c48321937c97b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "c9391f12494d4aa5a1b475e5fafbc28b",
+      "End": "4809462b01774988aed264c5957e45c4",
+      "Id": "6843bd17d58845c6bf2b339ee05c43c9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b49c55ae997045619a6298ed20b87f8a",
+      "End": "1f29e09ff91a40ebbd409e9d3118ac9f",
+      "Id": "85e970aa35694b1ea72adfc4851189bc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "181567f6439247588400665e7de61c41",
+      "End": "6e5bb33dcc104fdd987186f5cbfe648e",
+      "Id": "006665810d0042818a27e2dc56133cd6",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "bd6e89ac73214930a4de479d848eb3f5",
+      "End": "6fb2f8681d1f483586eb6e313ea271c0",
+      "Id": "085fb80372f04031ad3eb7d9a3fd8f56",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "bc257911cfed4de98ce62729c9b10215",
+      "End": "7c82469a63cb476b84e9a4e9cdfd33a8",
+      "Id": "c27d5a3b68df422c98342c9df0133eea",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "6119dba4-8e03-4dda-a5dd-d32a3d49f323"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Synthesize toolkit",
+      "Version": "12.5.1",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "b2a3fcb400b648fa93bb2f77557b6c0f"
+      ]
+    }
+  ],
+  "Thumbnail": "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",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [
+    {
+      "ExtensionGuid": "28992e1d-abb9-417f-8b1b-05e053bee670",
+      "Name": "Properties",
+      "Version": "2.13",
+      "Data": {}
+    },
+    {
+      "ExtensionGuid": "DFBD9CC0-DB40-457A-939E-8C8555555A9D",
+      "Name": "Generative Design",
+      "Version": "2.0",
+      "Data": {}
+    }
+  ],
+  "Author": "karam@aecedx.com",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": true,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -0.9617629774820031,
+      "EyeY": 39.37345928642483,
+      "EyeZ": 60.55703487241341,
+      "LookX": -46.77347414410003,
+      "LookY": -29.972234457168298,
+      "LookZ": -63.649621389747395,
+      "UpX": -0.08650491481284898,
+      "UpY": 0.9892723338394411,
+      "UpZ": -0.11771634591165642
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": false,
+        "Id": "cefe4b86de56418ca7480c6bef032403",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -4287.195069413108,
+        "Y": -203.9923895177143
+      },
+      {
+        "Name": "List.Flatten",
+        "ShowGeometry": false,
+        "Id": "c90180c3ec2c44a2ade466946b01b648",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -4766.4701348235685,
+        "Y": -237.61392540646125
+      },
+      {
+        "Name": "Geometry.Explode",
+        "ShowGeometry": false,
+        "Id": "f5d95915582442ffa6c2445dddd0008d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -5069.035185573608,
+        "Y": -153.3801852975222
+      },
+      {
+        "Name": "01.FormIt.SelectFromFormIt",
+        "ShowGeometry": true,
+        "Id": "5fa3f3611387484aa2f6e47abf904e70",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -5404.54232426013,
+        "Y": -137.123647646205
+      },
+      {
+        "Name": "02.Faces Offset",
+        "ShowGeometry": true,
+        "Id": "6d10347186cf44d0ab2e715c606c1548",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -5364.93923655734,
+        "Y": 0.576942121049797
+      },
+      {
+        "Name": "03.Border Width",
+        "ShowGeometry": true,
+        "Id": "3e39039d12d94a7a850570136365ee0b",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -5357.29693349473,
+        "Y": 64.4194870409493
+      },
+      {
+        "Name": "04.Border Depth",
+        "ShowGeometry": true,
+        "Id": "2bc8c0a24ab3488a887191d17a542069",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -5363.27625737481,
+        "Y": 121.565682523694
+      },
+      {
+        "Name": "List.Flatten",
+        "ShowGeometry": false,
+        "Id": "0da0b4bab31d405f843bcc985ec3d4d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -2342.212445518748,
+        "Y": 40.46946407534247
+      },
+      {
+        "Name": "List.Clean",
+        "ShowGeometry": false,
+        "Id": "dc7abd5fceb64675a6b378b0d5cd2031",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -2684.312676265378,
+        "Y": 11.691358105265493
+      },
+      {
+        "Name": "Code Block",
+        "ShowGeometry": false,
+        "Id": "d1e027f41c3848339a13ee0918b25062",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -2947.576034926444,
+        "Y": 170.14162520094328
+      },
+      {
+        "Name": "K-Paneling Framing Only Sandbox",
+        "ShowGeometry": false,
+        "Id": "b2a3fcb400b648fa93bb2f77557b6c0f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -3277.9476368686996,
+        "Y": -115.84150722244539
+      },
+      {
+        "Name": "Geometry.Explode",
+        "ShowGeometry": false,
+        "Id": "7620385c52d2408d900a407f210ca976",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -3988.0178249658916,
+        "Y": -285.9496457288309
+      },
+      {
+        "Name": "List.Flatten",
+        "ShowGeometry": false,
+        "Id": "4040322bf5134b84a24dac7b08044c23",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -3582.130036094295,
+        "Y": -295.8268993188349
+      },
+      {
+        "Name": "SendToFormIt",
+        "ShowGeometry": false,
+        "Id": "c042867bea9545d8ade344abb48b8220",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": true,
+        "Excluded": false,
+        "X": -1686.213722215555,
+        "Y": 36.382066825147035
+      },
+      {
+        "Name": "FormItGroupOptions.SetAsMesh",
+        "ShowGeometry": false,
+        "Id": "5846d9f31bf147bab8fe31579f5af85f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -2007.7515034772039,
+        "Y": 99.01929694105252
+      },
+      {
+        "Name": "Code Block",
+        "ShowGeometry": false,
+        "Id": "689695bca23d4309a5f352e35129b796",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -2213.0345265106816,
+        "Y": 180.40031575597664
+      }
+    ],
+    "Annotations": [
+      {
+        "Id": "6aece2bf92f54d6cb9c74fad0461c921",
+        "Title": "Input",
+        "DescriptionText": null,
+        "IsExpanded": true,
+        "WidthAdjustment": 0.0,
+        "HeightAdjustment": 0.0,
+        "Nodes": [
+          "3e39039d12d94a7a850570136365ee0b",
+          "2bc8c0a24ab3488a887191d17a542069",
+          "5fa3f3611387484aa2f6e47abf904e70",
+          "6d10347186cf44d0ab2e715c606c1548"
+        ],
+        "HasNestedGroups": false,
+        "Left": -5414.54232426013,
+        "Top": -209.523647646205,
+        "Width": 303.1999999999998,
+        "Height": 462.889330169899,
+        "FontSize": 36.0,
+        "InitialTop": -137.123647646205,
+        "InitialHeight": 403.689330169899,
+        "TextblockHeight": 62.4,
+        "Background": "#FFD8D8D8"
+      }
+    ],
+    "X": 4601.218079044296,
+    "Y": 296.756932335271,
+    "Zoom": 0.8282268098978378
+  }
+}

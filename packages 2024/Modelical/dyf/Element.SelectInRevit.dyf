@@ -1,0 +1,167 @@
+{
+  "Uuid": "c3ba5836-4456-4ae9-a346-781cacf6ef07",
+  "IsCustomNode": true,
+  "Category": "Modelical.Elements.Actions",
+  "Description": "This node allows to select Revit elements using the element ID or the element itself.",
+  "Name": "Element.SelectInRevit",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "_elementsOrIDs",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Elements or IDs"
+      },
+      "Id": "e9ed44137ba743c2a614b47c98bf1d0a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "32a1577525414e05a07bbdaa9b48eaf8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "/*Selected elements*/\r\n_elements",
+      "Id": "67013e27318e4049adc12d69043a6518",
+      "Inputs": [
+        {
+          "Id": "3b54e150b54c4785962f41330bb7a800",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# This node has been made by Modelical\r\n# www.modelical.com\r\n\r\nimport clr\r\nclr.AddReference(\"ProtoGeometry\")\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n\r\n\r\nclr.AddReference(\"RevitAPI\")\r\nfrom Autodesk.Revit.DB import *\r\n\r\n\r\nclr.AddReference(\"RevitAPIUI\")\r\nfrom Autodesk.Revit.UI import *\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\nfrom System.Collections.Generic import *\r\n\r\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\napp = uidoc.Application\r\n\r\n\r\nimport sys\r\nsys.path.append(r\"C:\\Program Files (x86)\\IronPython 2.7\\Lib\")\r\n\r\ndef Feet2m(value):\r\n\treturn value * 0.3048\r\n\r\ndef toList(input):\r\n\r\n    if hasattr(input, \"__iter__\") and not isinstance(input, basestring):\r\n        return iter(input)\r\n    else:\r\n        return [input]\r\n        \r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\n# Logic starts here\r\n\r\nelementsOrIDs = toList(UnwrapElement(flatten(IN[0])))\r\n\r\nelementIds = List[ElementId]()\r\nfList=[]\r\nfor elem in elementsOrIDs:\r\n\r\n\ttry: \r\n\t\tint(elem)\r\n\t\telementIds.Add(ElementId(int(elem)))\r\n\t\tfList.append(doc.GetElement(ElementId(int(elem))))\r\n\texcept:\r\n\t\telementIds.Add(elem.Id)\r\n\t\tfList.append(elem)\r\nselection = uidoc.Selection.SetElementIds(elementIds)\r\n\r\n# Transactions\r\n\r\n# Output\r\nOUT = fList",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "b369efde74e041d3a180c3e25a7e6477",
+      "Inputs": [
+        {
+          "Id": "b54ee4d0a65143fa96e363f70e84b226",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0597c74d2de14106a903409aefb177f9",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "32a1577525414e05a07bbdaa9b48eaf8",
+      "End": "b54ee4d0a65143fa96e363f70e84b226",
+      "Id": "824152ed87ee4dd6b39f367c08cbe44b"
+    },
+    {
+      "Start": "0597c74d2de14106a903409aefb177f9",
+      "End": "3b54e150b54c4785962f41330bb7a800",
+      "Id": "4c725c5decde41f490cefde17471cb2a"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.12.0.5650",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "e9ed44137ba743c2a614b47c98bf1d0a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -232.44982061894467,
+        "Y": -77.475532055982512
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "67013e27318e4049adc12d69043a6518",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 496.00936542596241,
+        "Y": -76.068428936107239
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "b369efde74e041d3a180c3e25a7e6477",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 133.68086272583287,
+        "Y": -77.801153855406426
+      }
+    ],
+    "Annotations": [],
+    "X": 388.66295207641372,
+    "Y": 394.8485259132591,
+    "Zoom": 1.4761802392636134
+  }
+}

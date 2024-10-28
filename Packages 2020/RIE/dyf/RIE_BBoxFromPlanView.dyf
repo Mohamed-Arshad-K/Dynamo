@@ -1,0 +1,381 @@
+{
+  "Uuid": "126a1507-c041-42f4-a6a2-9da67711b13a",
+  "IsCustomNode": true,
+  "Category": "RIE.Geometry",
+  "Description": "Retrieves boundingbox from active view based on viewrange settins",
+  "Name": "RIE_BBoxFromPlanView",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "BBox",
+      "Id": "dab01be9d88b42069f7990a81dcdd221",
+      "Inputs": [
+        {
+          "Id": "b7e3ebf281574663a5262fc973effc89",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "views",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "78a9232d3f5340ed81436b1452df576a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "11824d1640064892a9c3d53847c87797",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\n\n\n\n\n\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import*\n\nclr.AddReference(\"RevitNodes\")\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nimport System\nfrom System.Collections.Generic import *\n\nclr.AddReference(\"RevitAPI\")\nfrom Autodesk.Revit.DB import*\nfrom Autodesk.Revit.DB import FilteredElementCollector, RevitLinkType\n\ndef tolist(obj1):\n\tif hasattr(obj1,\"__iter__\"): return obj1\n\telse: return [obj1]\n\t\nft = 304.8\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nUIunit = Document.GetUnits(doc).GetFormatOptions(UnitType.UT_Length).DisplayUnits\n\nOUT = []\n\nif IN[0] == None:\n\tviews = tolist(doc.ActiveView)\nelse:\n\tviews = tolist(UnwrapElement(IN[0]))\n\nfor v in views:\n\tbb = v.CropBox\n\tvr = v.GetViewRange()\n\ttopclip = PlanViewPlane.TopClipPlane\n\tbottomclip = PlanViewPlane.BottomClipPlane\n\tcutclip = PlanViewPlane.CutPlane\n\ttoplevel = (doc.GetElement(vr.GetLevelId(topclip)))\n\ttopoffset = vr.GetOffset(topclip)\n\tcutlevel = (doc.GetElement(vr.GetLevelId(cutclip)))\n\tcutoffset = vr.GetOffset(cutclip)\n\tbottomoffset = vr.GetOffset(bottomclip)\n\ttry:\n\t\ttopZ = toplevel.Elevation + topoffset\n\texcept:\n\t\ttopZ = cutlevel.Elevation + cutoffset\n\t\tbottomlevel = (doc.GetElement(vr.GetLevelId(bottomclip)))\n\t\tbottomoffset = vr.GetOffset(bottomclip)\n\ttry:\n\t\tbottomZ = bottomlevel.Elevation + bottomoffset\n\texcept :\n\t\tbottomZ = cutlevel.Elevation + bottomoffset\n\t\tmin = bb.Min\n\t\tmax = bb.Max\n\t\tnewmin = XYZ(UnitUtils.ConvertToInternalUnits(min.X,UIunit)*ft,UnitUtils.ConvertToInternalUnits(min.Y,UIunit)*ft,bottomZ)\n\t\tnewmax = XYZ(UnitUtils.ConvertToInternalUnits(max.X,UIunit)*ft,UnitUtils.ConvertToInternalUnits(max.Y,UIunit)*ft,topZ)\n\t\t#OUT.append(Outline(newmin,newmax).ToRevitType())\n\tOUT.append([newmin.ToPoint(),newmax.ToPoint()])",
+      "VariableInputPorts": true,
+      "Id": "334ebed752394940b8a8d840765808c4",
+      "Inputs": [
+        {
+          "Id": "491bad9e275a43498e408ea83a3157bb",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "59df6c862f244e608c01dbd9f97d8cdc",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "0;\n1;",
+      "Id": "5a994f894ebf4115bff50a6a8468de02",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4c1948de1fe54fb580cdd4adf45293ec",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "710b53090455417ea20f93801fe77532",
+          "Name": "",
+          "Description": "Value of expression at line 2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GetItemAtIndex@var[]..[],int",
+      "Id": "b872ab1971514afe9e490e6bb085726b",
+      "Inputs": [
+        {
+          "Id": "38ffba9cc37a48a2a864712a8b2503b8",
+          "Name": "list",
+          "Description": "List to fetch an item from.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": true,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f9e38ce567f1412c84f407468fc5b8f5",
+          "Name": "index",
+          "Description": "Index of the item to be fetched.\n\nint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4550d075305e4705bba476a3651d5033",
+          "Name": "item",
+          "Description": "Item in the list at the given index.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns an item from the given list that's located at the specified index.\n\nList.GetItemAtIndex (list: var[]..[], index: int): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GetItemAtIndex@var[]..[],int",
+      "Id": "2f6b274094cc4c0db5645cea898b3fc3",
+      "Inputs": [
+        {
+          "Id": "f4175f6b90e44c27bca4fd0ec4b6348d",
+          "Name": "list",
+          "Description": "List to fetch an item from.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": true,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "90df6e4d4ca4438994ac3ec0eaacc425",
+          "Name": "index",
+          "Description": "Index of the item to be fetched.\n\nint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "285a7f76503e484b87916039c1f76d16",
+          "Name": "item",
+          "Description": "Item in the list at the given index.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns an item from the given list that's located at the specified index.\n\nList.GetItemAtIndex (list: var[]..[], index: int): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.BoundingBox.ByCorners@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point",
+      "Id": "00de462f2b5c44b087b3398ba86276d4",
+      "Inputs": [
+        {
+          "Id": "941772ad3684414881be0fb3b8a385db",
+          "Name": "min",
+          "Description": "Point\nDefault value : Autodesk.DesignScript.Geometry.Point.ByCoordinates(0, 0, 0)",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "7957950fa2c040f98f2a57c696f2fbbf",
+          "Name": "max",
+          "Description": "Point\nDefault value : Autodesk.DesignScript.Geometry.Point.ByCoordinates(1, 1, 1)",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "f5015c30f1404665aa07573d0941436f",
+          "Name": "BoundingBox",
+          "Description": "BoundingBox",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Creates the an axis-aligned BoundingBox spanning between the minimum Point and the maximum Point.\n\nBoundingBox.ByCorners (min: Point = Autodesk.DesignScript.Geometry.Point.ByCoordinates(0, 0, 0), max: Point = Autodesk.DesignScript.Geometry.Point.ByCoordinates(1, 1, 1)): BoundingBox"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "11824d1640064892a9c3d53847c87797",
+      "End": "491bad9e275a43498e408ea83a3157bb",
+      "Id": "d153ac754f03490bbd8de3bdc309857f"
+    },
+    {
+      "Start": "59df6c862f244e608c01dbd9f97d8cdc",
+      "End": "38ffba9cc37a48a2a864712a8b2503b8",
+      "Id": "f65e3148b0fc45eab040866a67a8a0f9"
+    },
+    {
+      "Start": "59df6c862f244e608c01dbd9f97d8cdc",
+      "End": "f4175f6b90e44c27bca4fd0ec4b6348d",
+      "Id": "aba8107115e545918da74e42ac9846f2"
+    },
+    {
+      "Start": "4c1948de1fe54fb580cdd4adf45293ec",
+      "End": "f9e38ce567f1412c84f407468fc5b8f5",
+      "Id": "9bb92737607c4d298bd39391c004b821"
+    },
+    {
+      "Start": "710b53090455417ea20f93801fe77532",
+      "End": "90df6e4d4ca4438994ac3ec0eaacc425",
+      "Id": "edfe3cd489ea49c99008657c34caf2a4"
+    },
+    {
+      "Start": "4550d075305e4705bba476a3651d5033",
+      "End": "941772ad3684414881be0fb3b8a385db",
+      "Id": "6812b65dfca84109944a636b681c9e9e"
+    },
+    {
+      "Start": "285a7f76503e484b87916039c1f76d16",
+      "End": "7957950fa2c040f98f2a57c696f2fbbf",
+      "Id": "f4823815745643f0ad8689b6c607d262"
+    },
+    {
+      "Start": "f5015c30f1404665aa07573d0941436f",
+      "End": "b7e3ebf281574663a5262fc973effc89",
+      "Id": "a2f4d8b78832409896fb6dc8c79e2d02"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.3.0.5885",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -38.162926487427619,
+      "EyeY": 41.343170361379933,
+      "EyeZ": 184.45414468923352,
+      "LookX": 38.162926487427619,
+      "LookY": -41.343170361379933,
+      "LookZ": -184.45414468923352,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "dab01be9d88b42069f7990a81dcdd221",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1299.58683090223,
+        "Y": 222.699484463992
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "78a9232d3f5340ed81436b1452df576a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 298.586830902235,
+        "Y": 204.699484463992
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "334ebed752394940b8a8d840765808c4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 469.586830902235,
+        "Y": 204.699484463992
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Code Block",
+        "Id": "5a994f894ebf4115bff50a6a8468de02",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 469.586830902235,
+        "Y": 288.126151130659
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.GetItemAtIndex",
+        "Id": "b872ab1971514afe9e490e6bb085726b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 693.586830902235,
+        "Y": 168.699484463992
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.GetItemAtIndex",
+        "Id": "2f6b274094cc4c0db5645cea898b3fc3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 693.586830902235,
+        "Y": 302.699484463992
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "BoundingBox.ByCorners",
+        "Id": "00de462f2b5c44b087b3398ba86276d4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 972.586830902235,
+        "Y": 222.699484463992
+      }
+    ],
+    "Annotations": [],
+    "X": -78.438167921793024,
+    "Y": -18.949406015022404,
+    "Zoom": 1.35408781501052
+  }
+}

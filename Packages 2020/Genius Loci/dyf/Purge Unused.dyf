@@ -1,0 +1,119 @@
+<Workspace Version="1.3.4.6666" X="185.702108291231" Y="101.328730227174" zoom="0.808219866393031" ScaleFactor="1" Name="Purge Unused" Description="Purge the document completely including materials an assets using the API.&#xD;&#xA;Works only in Revit 2017 and later." ID="33ddc5d3-6950-49c0-b50e-b59764a9e7c9" Category="GeniusLoci.Utilities">
+  <NamespaceResolutionMap />
+  <Elements>
+    <PythonNodeModels.PythonNode guid="57d2acdd-51b1-4cbb-92cf-eabfd08ee923" type="PythonNodeModels.PythonNode" nickname="Python Script" x="204.087226848851" y="159.57214919139" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="1">
+      <PortInfo index="0" default="False" />
+      <Script>#Part of script by Matthew Taylor translated in Python by Oliver E Green
+
+#Alban de Chasteigner 2020
+#twitter : @geniusloci_bim
+#geniusloci.bim@gmail.com
+
+import clr
+import System
+from System.Collections.Generic import List
+
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+doc = DocumentManager.Instance.CurrentDBDocument
+
+bool=IN[0]
+
+#GetPurgeableElements by Oliver E Green 
+def GetPurgeableElements(doc, rule_id_list):
+	failure_messages = PerformanceAdviser.GetPerformanceAdviser().ExecuteRules(doc, rule_id_list)
+	if failure_messages.Count &gt; 0:
+		purgeable_element_ids = failure_messages[0].GetFailingElements()
+		return purgeable_element_ids
+
+#A constant 
+PURGE_GUID = "e8c63650-70b7-435a-9010-ec97660c1bda"
+
+#A generic list of PerformanceAdviserRuleIds as required by the ExecuteRules method
+rule_id_list = List[PerformanceAdviserRuleId]()
+
+#Iterating through all PerformanceAdviser rules looking to find that which matches PURGE_GUID
+for rule_id in PerformanceAdviser.GetPerformanceAdviser().GetAllRuleIds():
+	if str(rule_id.Guid) == PURGE_GUID:
+		rule_id_list.Add(rule_id)
+		break
+
+#Attempting to retrieve the elements which can be purged
+purgeable_element_ids = GetPurgeableElements(doc, rule_id_list)
+
+TransactionManager.Instance.EnsureInTransaction(doc)
+if bool==True and purgeable_element_ids != None:
+	doc.Delete(purgeable_element_ids)
+
+toKeep=[]
+elements = FilteredElementCollector(doc).WhereElementIsElementType().ToElements()
+for elem in elements:
+	matlist=[]
+	for matid in elem.GetMaterialIds(False):
+		matlist.append(matid)
+	toKeep.extend(matlist)
+
+compound=FilteredElementCollector(doc).OfClass(HostObjAttributes).WhereElementIsElementType().ToElements()
+compoundStructure = [comp.GetCompoundStructure() for comp in compound]
+for compoundStr in compoundStructure:
+	if compoundStr != None:
+		layerCount=compoundStr.LayerCount
+		for j in range (0, layerCount):
+			if compoundStr.GetMaterialId(j) != ElementId(-1):
+				toKeep.append(compoundStr.GetMaterialId(j))
+
+materials = FilteredElementCollector(doc).OfClass(Material).ToElementIds()
+
+appearanceAssetIds = FilteredElementCollector(doc).OfClass(AppearanceAssetElement).ToElementIds()
+#The PropertySetElement contains either the Thermal or Structural Asset
+propertySet = FilteredElementCollector(doc).OfClass(PropertySetElement).ToElementIds()
+
+thermal=[doc.GetElement(id).ThermalAssetId for id in set(toKeep)]
+structural=[doc.GetElement(id).StructuralAssetId for id in set(toKeep)]
+appearanceAssets=[doc.GetElement(id).AppearanceAssetId for id in set(toKeep)]
+
+propertySet2 = [e for e in propertySet if e not in thermal and e not in structural]
+appearanceAssetIds2 = [e for e in appearanceAssetIds if e not in appearanceAssets]
+matToDelete=[m for m in materials if not m in toKeep]
+
+if bool==True and appearanceAssetIds2 != None:
+	[doc.Delete(a) for a in appearanceAssetIds2]
+if bool==True and propertySet2 != None:
+	[doc.Delete(p) for p in propertySet2]
+if bool==True and matToDelete != None:
+	[doc.Delete(m) for m in matToDelete]
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT= len([purg for purg in purgeable_element_ids]+appearanceAssetIds2+propertySet2+matToDelete),[purg for purg in purgeable_element_ids]+appearanceAssetIds2+propertySet2+matToDelete</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="4cacee57-836d-460d-b1b2-e6fb31dc9f1a" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="428.487226848851" y="163.785482524723" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="x[0];&#xA;x[1];" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="6df82c78-5bcd-48e0-95b8-56d14d983612" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="619.687226848851" y="126.358815858057" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Count" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="6cbb0249-86c6-4268-80f4-01b1dec0d640" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="619.687226848851" y="210.358815858057" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Id" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="eed695df-40bb-4e01-9ebe-9410a5927431" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-66.7127731511494" y="159.57214919139" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="RunIt :bool=false" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="57d2acdd-51b1-4cbb-92cf-eabfd08ee923" start_index="0" end="4cacee57-836d-460d-b1b2-e6fb31dc9f1a" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="4cacee57-836d-460d-b1b2-e6fb31dc9f1a" start_index="0" end="6df82c78-5bcd-48e0-95b8-56d14d983612" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="4cacee57-836d-460d-b1b2-e6fb31dc9f1a" start_index="1" end="6cbb0249-86c6-4268-80f4-01b1dec0d640" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="eed695df-40bb-4e01-9ebe-9410a5927431" start_index="0" end="57d2acdd-51b1-4cbb-92cf-eabfd08ee923" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+</Workspace>

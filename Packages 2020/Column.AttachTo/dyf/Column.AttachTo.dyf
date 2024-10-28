@@ -1,0 +1,130 @@
+<Workspace Version="0.9.2.4472" X="-181.905372855303" Y="-86.2349175325983" zoom="0.82770257044119" Name="Column.AttachTo" Description="Attaches a column to a target .&#xD;&#xA;Input may be a single item or a list, make sure the lists are the same length.&#xD;&#xA;&#xD;&#xA;Input:&#xD;&#xA;Column: columns&#xD;&#xA;Targets: elements&#xD;&#xA;TopOrBase: base = 0, top = 1&#xD;&#xA;cutstyle: CutColumn = 0, CutTarget = 1, None = 2&#xD;&#xA;justification:  Minimum = 0,  Midpoint = 1, Maximum = 2, Tangent = 3&#xD;&#xA;offset: positive for shorter length, negative for longer length&#xD;&#xA;overwrite:  bool per item (it can be different for each column), if true current attachment will be ignored, if false current attachment will remain as it is." ID="a2647de7-a40f-4720-98bd-fa4f6e82155f" Category="ABT">
+  <NamespaceResolutionMap />
+  <Elements>
+    <PythonNodeModels.PythonNode guid="72f289bb-d613-4467-a0fd-a192837fb72b" type="PythonNodeModels.PythonNode" nickname="attach colum top or base" x="1089.68400111874" y="299.917143774438" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" inputcount="7">
+      <Script>import clr
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import ToDSType(bool) extension method
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+#def to force item into list even if it is a singel item and unwrap elements to directly acces them
+def forcelist(item,tolist):
+	#if item 
+	try:
+		for i in item:
+			tolist.append( UnwrapElement( i ))
+	except:
+		tolist.append(UnwrapElement(item))
+
+columns = []
+attachto = []
+topOrBase = []
+cutStyle = []
+justification = []
+offset = []
+overwrite = []
+
+# Unwrap anf force into list
+
+forcelist(IN[0], columns)
+forcelist(IN[1], attachto)
+forcelist(IN[2], topOrBase)
+forcelist(IN[3], cutStyle)
+forcelist(IN[4], justification)
+forcelist(IN[5], offset)
+forcelist(IN[6], overwrite)
+
+cs= []
+for i in cutStyle:
+	if i == 0:
+		cs.append(Autodesk.Revit.DB.ColumnAttachmentCutStyle.CutColumn)
+	elif i == 1:
+		cs.append(Autodesk.Revit.DB.ColumnAttachmentCutStyle.CutTarget)
+	else:
+		cs.append(Autodesk.Revit.DB.ColumnAttachmentCutStyle.None)
+
+ju = []
+for i in justification:
+	if i == 0:
+		ju.append(Autodesk.Revit.DB.ColumnAttachmentJustification.Minimum)
+	elif i == 1:
+		ju.append(Autodesk.Revit.DB.ColumnAttachmentJustification.Midpoint)
+	elif i == 2:
+		ju.append(Autodesk.Revit.DB.ColumnAttachmentJustification.Maximum)
+	else:
+		ju.append(Autodesk.Revit.DB.ColumnAttachmentJustification.Tangent)	
+	
+
+
+# Start Transaction
+doc = DocumentManager.Instance.CurrentDBDocument
+TransactionManager.Instance.EnsureInTransaction(doc)
+
+xx= []
+for idx, e in enumerate(columns):
+	try:#no attachment yet
+		ColumnAttachment.AddColumnAttachment(doc, e, attachto[idx], topOrBase[idx], cs[idx], ju[idx], (offset[idx]/304.8))
+
+	except:#there in an attachment, if overwrite is true remove and reattach to new target
+		if overwrite[idx] == True:
+			ColumnAttachment.RemoveColumnAttachment(e, topOrBase[idx])
+			ColumnAttachment.AddColumnAttachment(doc, e, attachto[idx], topOrBase[idx], cs[idx], ju[idx], (offset[idx]/304.8))
+
+# End Transaction
+TransactionManager.Instance.TransactionTaskDone()
+
+# Wrap
+OUT = IN[0]</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="26ac3ee0-81b8-4b3e-80cd-06fc22379b6d" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="727.950685855088" y="166.842454634905" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="Columns" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="da0d128d-08be-4b48-9ed5-2e89ef760102" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="729.534968161217" y="260.408042212045" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="Targets" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="c436461a-bffd-469e-9124-95f7835b540e" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="734.31187273378" y="365.624555628997" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="TopOrBase" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="170866e6-41d3-4b2c-a938-0e391d55b6c2" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="732.821062793418" y="445.614034356657" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="cutstyle" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="960054ab-8ac4-4ca7-9131-46d4319471b9" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="732.374871938543" y="513.068084058467" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="Justification" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="fd0117e0-c38c-4f6d-a04c-4504f2cdcf2f" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="722.070397187067" y="579.020802547574" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="offset" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="df96eb68-5c33-4a7d-bf51-b9a59ff29997" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="713.598753360032" y="677.940130510479" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false">
+      <Symbol value="overwrite" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="6c939c5a-87fe-40a0-8f85-7feb10e2abde" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="1374.32835952756" y="352.620217589643" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false">
+      <Symbol value="Columns" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="72f289bb-d613-4467-a0fd-a192837fb72b" start_index="0" end="6c939c5a-87fe-40a0-8f85-7feb10e2abde" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="26ac3ee0-81b8-4b3e-80cd-06fc22379b6d" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="da0d128d-08be-4b48-9ed5-2e89ef760102" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="c436461a-bffd-469e-9124-95f7835b540e" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="170866e6-41d3-4b2c-a938-0e391d55b6c2" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="3" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="960054ab-8ac4-4ca7-9131-46d4319471b9" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="4" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="fd0117e0-c38c-4f6d-a04c-4504f2cdcf2f" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="5" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="df96eb68-5c33-4a7d-bf51-b9a59ff29997" start_index="0" end="72f289bb-d613-4467-a0fd-a192837fb72b" end_index="6" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+</Workspace>

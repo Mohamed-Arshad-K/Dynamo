@@ -1,0 +1,1758 @@
+{
+  "Uuid": "ba911b25-7baa-481f-8c5d-93afa2d5caf1",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Clash Detection",
+  "Description": "K-Clash",
+  "Name": "K-Clash",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nimport math\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\nimport System\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\n\nclr.AddReference('DynamoRevitDS')\nimport Dynamo\nscriptfullpath = Dynamo.Applications.DynamoRevit().RevitDynamoModel.CurrentWorkspace.FileName\t\nironpython_path = scriptfullpath.split(\"\\\\\")[:-3]\nironpython_path.append(\"DynamoIronPython2.7\")\nironpython_path.append(\"extra\")\nironpython_path.append(\"IronPython.StdLib.2.7.9\")\nsys.path.Insert(1,\"\\\\\".join(ironpython_path))\nsys.path.Insert(2,\"\\\\\".join(scriptfullpath.split(\"\\\\\")[:-1]))\n\nfrom sgmllib import SGMLParser\nfrom collections import Counter\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\nfrom itertools import compress\nfrom itertools import combinations\n\nfrom bisect import bisect_left\n\nclr.AddReference(\"RevitAPIUI\")\nfrom Autodesk.Revit.UI import TaskDialog\n\nclr.AddReference('DynamoRevitDS')\nimport Dynamo \nimport os\n\nimport random\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndef take_closest(myList, myNumber):\n    pos = bisect_left(myList, myNumber)\n    if pos == 0:\n        return myList[0]\n    if pos == len(myList):\n        return myList[-1]\n    before = myList[pos - 1]\n    after = myList[pos]\n    if after - myNumber < myNumber - before:\n        return after\n    else:\n        return before\n\n# Parsing Technique Created By Dimitar Venkov\nclass ReportParser(SGMLParser):\n\tdef __init__(self, verbose=0):\n\t\tSGMLParser.__init__(self, verbose)\n\t\tself.data1 = []\n\t\tself.temp_data = []\n\tdef handle_data(self, data):\n\t\tif data != \"\\n\" and data not in known_errors:\n\t\t\tself.temp_data.append(data)\n\tdef unknown_starttag(self, tag, attrs):\n\t\tif tag == \"tr\":\n\t\t\tself.data1.append(self.temp_data)\n\t\t\tself.temp_data = []\n\ninterference_cats = {\"Structural Columns\", \"Air Terminals\", \"Assemblies\", \"Cable Tray Fittings\", \"Cable Tray Runs\", \"Cable Trays\", \"Casework\", \"Ceilings\", \"Columns\", \"Conduit Fittings\", \"Conduit Runs\", \"Conduits\", \"Curtain Panels\", \"Curtain Systems\", \"Curtain Wall Mullions\",\"Doors\", \"Ducts\", \"Duct Accessories\", \"Duct Fittings\", \"Duct Insulations\", \"Duct Linings\", \"Duct Placeholders\", \"Duct Systems\", \"Electrical Circuits\", \"Electrical Equipment\", \"Electrical Fixtures\", \"Fabrication Parts\", \"Flex Ducts\", \"Flex Pipes\", \"Floors\", \"Furniture\", \"Furniture Systems\", \"Generic Models\", \"Gutters\", \"Lighting Devices\", \"Lighting Fixtures\", \"Mass Floors\", \"Mass\", \"Mechanical Equipment\", \"Pads\", \"Parts\", \"Pipe Accessories\", \"Pipe Fittings\", \"Pipe Insulations\", \"Pipe Placeholders\", \"Pipes\", \"Piping Systems\",  \"Plumbing Fixtures\", \"Railings\", \"Ramps\", \"Roofs\", \"Roof Soffits\", \"Shaft Openings\", \"Slab Edges\", \"Specialty Equipment\", \"Sprinklers\", \"Stairs\", \"Structural Connections\", \"Structural Foundations\", \"Structural Framing\", \"Structural Trusses\", \"Wall Sweeps\", \"Walls\", \"Windows\", \"Wires\"}\n\ndef getElement(IgnoreErrors,i,document,documentName):\n\ttry:\n\t\tif documentName == not_linked_string:\n\t\t\treturn doc.GetElement(ElementId(i))\n\t\telif documentName == link_not_loaded_string and not IgnoreErrors:\n\t\t\treturn error_string\n\t\telse:\n\t\t\treturn document.GetElement(ElementId(i))\n\texcept:\n\t\tif IgnoreErrors:\n\t\t\treturn i\n\t\telse:\n\t\t\treturn error_string\n\ndef fetchCat(items, interference_cats=interference_cats):\n\tfor i in items:\n\t\tif i in interference_cats:\n\t\t\treturn i\n\ndef idparamHandle(element,idoneparam,id):\n\tstopIt = False\n\tidone = element.LookupParameter(idoneparam)\n\tif idone != None:\n\t\tif idone.StorageType == StorageType.String:\n\t\t\tif isinstance(id, str):\n\t\t\t\tidone.Set(id)\n\t\t\telse:\n\t\t\t\tidone.Set(id.ToString())\n\t\telif idone.StorageType == StorageType.Integer:\n\t\t\tif isinstance(id, str):\n\t\t\t\tidone.Set(-1)\n\t\t\telse:\n\t\t\t\tidone.Set(id.IntegerValue)\n\t\telse:\n\t\t\tstopIt = True\n\telse:\n\t\tstopIt = True\n\treturn stopIt\n\ndef paramHandle(element,param,value):\n\tstopIt = False\n\tparam = element.LookupParameter(param)\n\tif param != None:\n\t\tparam.Set(value)\n\telse:\n\t\tstopIt = True\n\treturn stopIt\n\ndef paramGet(element,param):\n\tparam = element.LookupParameter(param)\n\tif param != None:\n\t\tif param.StorageType == StorageType.String:\n\t\t\tif param.HasValue:\n\t\t\t\treturn param.AsString()\n\t\t\telse:\n\t\t\t\treturn \"None\"\n\t\telif param.StorageType == StorageType.Integer:\n\t\t\tif param.HasValue:\n\t\t\t\treturn param.AsInteger().ToString()\n\t\t\telse:\n\t\t\t\treturn \"None\"\n\treturn param\n\ndef bboxValue(bbox):\n\ttry:\n\t\tcuboid = bbox.ToCuboid()\n\t\tvalue = (cuboid.Height + cuboid.Length + cuboid.Width)/3\n\t\tvolume = cuboid.Volume\n\t\tcuboid.Dispose()\n\t\treturn value,volume\n\texcept:\n\t\treturn None,None\n\ndef markParamhandle(element,markparam):\n\tif hasattr(element, 'LookupParameter'):\n\t\tmarkparam = element.LookupParameter(markparam)\n\t\tif markparam == None:\n\t\t\treturn \"\"\n\t\telse:\n\t\t\tif markparam.StorageType == StorageType.String:\n\t\t\t\tmarkparam = markparam.AsString()\n\t\t\telse:\n\t\t\t\tmarkparam = markparam.AsValueString()\n\t\t\tif markparam == None:\n\t\t\t\treturn \"\"\n\t\t\telse:\n\t\t\t\treturn markparam\n\telse:\n\t\treturn \"\"\n\ndef unitsHandle(units):\n\tif units == \"m\":\n\t\treturn 3.28084\n\telif units == \"mm\":\n\t\treturn 0.00328084\n\telif units == \"cm\":\n\t\treturn 0.0328084\n\telif units == \"in\":\n\t\treturn 0.0833333\n\telse:\n\t\treturn 1\n\t\t\ndef getTitle(doc):\n\ttitle = doc.Title.Replace(\"_detached\",\"\")\n\tif title.endswith(\".rfa\"):\n\t\ttitle.replace(\".rfa\",\".rvt\")\n\telif title.endswith(\".rte\"):\n\t\ttitle.replace(\".rte\",\".rvt\")\n\telif title.endswith(\"rvt\") == False:\n\t\ttitle += \".rvt\"\n\treturn title\t\n\ndef smarttagsHandle(clashObj,unknown_string):\n\tsmarttags_1 = clashObj.getElementsByTagName('smarttags')[0].childNodes\n\tproject_name_found = False\n\tproject_1_name = unknown_string\n\tcategory_1_name = unknown_string\n\tclash_1_id = -1\n\tfor smarttag_1 in smarttags_1:\n\t\ttry:\n\t\t\tname = smarttag_1.getElementsByTagName('name')[0].firstChild.data\n\t\texcept:\n\t\t\tcontinue\n\t\tif name == \"Element Id\":\n\t\t\ttry:\n\t\t\t\tclash_1_id = smarttag_1.getElementsByTagName('value')[0].firstChild.data\n\t\t\texcept:\n\t\t\t\tpass\n\t\telif project_name_found == False and name == \"Item Source File\":\n\t\t\ttry:\n\t\t\t\tproject_1_name = smarttag_1.getElementsByTagName('value')[0].firstChild.data.Replace(\"_detached\",\"\")\n\t\t\t\tproject_name_found = True\n\t\t\texcept:\n\t\t\t\tpass\n\t\telif project_name_found == False and name == \"Document Title\":\n\t\t\ttry:\n\t\t\t\tproject_1_name = smarttag_1.getElementsByTagName('value')[0].firstChild.data.Replace(\"_detached\",\"\") + \".rvt\"\n\t\t\t\tproject_name_found = True\n\t\t\texcept:\n\t\t\t\tpass\n\t\telif name == \"Element Category\" or name == \"Category Name\":\n\t\t\ttry:\n\t\t\t\tcategory_1_name = smarttag_1.getElementsByTagName('value')[0].firstChild.data\n\t\t\texcept:\n\t\t\t\tpass\n\treturn project_1_name,category_1_name,clash_1_id\n\ndef clashData(report,units,doc,title,andsym,linksData,link_not_loaded_string,not_linked_string,FromInternalfactor,surveyTransform,currentGuids,InterInstancesIntegers,not_existed_string,unknown_string):\n\tgroups_names = []\n\tgroups_comments = []\n\tgroup_guids = []\n\tgroups_data = report.getElementsByTagName('clashgroup')\n\tif len(groups_data) > 0:\n\t\tfor group_data in groups_data:\n\t\t\tchildgroup_nodes = group_data.childNodes\n\t\t\tcommentsObj_All = []\n\t\t\tfor child in childgroup_nodes:\n\t\t\t\tif child.nodeName == \"comments\":\n\t\t\t\t\tcommentsObj_All = child.getElementsByTagName('comment')\n\t\t\t\tif child.nodeName == \"clashresults\":\n\t\t\t\t\tclashresults_data = child.getElementsByTagName('clashresult')\n\t\t\t\t\ttmp_guids = []\n\t\t\t\t\tfor clashresult_data in clashresults_data:\n\t\t\t\t\t\ttmp_guids.append(clashresult_data.attributes['guid'].value)\n\t\t\tif len(commentsObj_All) > 0:\n\t\t\t\tcomments = []\n\t\t\t\tfor commentObj in commentsObj_All:\n\t\t\t\t\ttmp = []\n\t\t\t\t\tcomment_date = commentObj.getElementsByTagName('date')[0]\n\t\t\t\t\tcomment_date = comment_date.attributes['year'].value + \"/\" + comment_date.attributes['month'].value + \"/\" + comment_date.attributes['day'].value + \" \" + comment_date.attributes['hour'].value + \":\" + comment_date.attributes['minute'].value\n\t\t\t\t\ttmp.append(\"Group Comment Id: \" + commentObj.attributes['id'].value)\n\t\t\t\t\ttmp.append(\"Group Comment Status: \" + commentObj.attributes['status'].value)\n\t\t\t\t\ttmp.append(\"Group Comment By: \" + commentObj.getElementsByTagName('user')[0].firstChild.data)\n\t\t\t\t\ttmp.append(\"Group Comment Date: \" + comment_date)\n\t\t\t\t\ttmp.append(\"Group Comment: \" + commentObj.getElementsByTagName('body')[0].firstChild.data)\n\t\t\t\t\ttmp.append(\"\\n\")\n\t\t\t\t\tcomments.append(\"\\r\\n\".join(tmp))\n\t\t\t\tgroups_names.append(group_data.attributes['name'].value)\n\t\t\t\tgroups_comments.append(comments)\n\t\t\t\tgroup_guids.append(tmp_guids)\n\t\t\t\n\tmegaOutput = []\n\ttests = report.getElementsByTagName('clashtest')\n\tfor test in tests:\n\t\ttestName = test.attributes['name'].value\n\t\tclashes = test.getElementsByTagName('clashresult')\n\t\tfor clash in clashes:\n\t\t\ttry:\n\t\t\t\tfactor = unitsHandle(units)\n\t\t\t\tis_orphan = False\n\t\t\t\tclashObj_All = clash.getElementsByTagName('clashobjects')[0].getElementsByTagName('clashobject')\n\t\t\t\tclashObj_1 = clashObj_All[0]\n\t\t\t\tif len(clashObj_All) < 2:\n\t\t\t\t\tclashObj_2 = clashObj_All[0]\n\t\t\t\t\tis_orphan = True\n\t\t\t\telse:\n\t\t\t\t\tclashObj_2 = clashObj_All[1]\n\t\t\t\tdates_data = clash.getElementsByTagName('date')\n\t\t\t\tclashpoint_data = clash.getElementsByTagName('pos3f')[0]\n\t\t\t\tproject_1_data = smarttagsHandle(clashObj_1,unknown_string)\n\t\t\t\tproject_2_data = smarttagsHandle(clashObj_2,unknown_string)\n\t\t\t\n\t\t\t\tstatus = clash.attributes['status'].value.capitalize()\n\t\t\t\tclashname = clash.attributes['name'].value\n\t\t\t\tclashguid = clash.attributes['guid'].value\n\t\t\t\tgroup = clash.getElementsByTagName('parentgroup')\n\t\t\t\tif len(group) > 0:\n\t\t\t\t\tgroup = group[0].firstChild.data\n\t\t\t\telse:\n\t\t\t\t\tgroup = \"\"\n\t\t\t\tdescription = clash.getElementsByTagName('description')[0].firstChild.data\n\t\t\t\tproject_1_name = project_1_data[0]\n\t\t\t\tif project_1_name == unknown_string:\n\t\t\t\t\tcontinue\n\t\t\t\tproject_1_category = project_1_data[1]\n\t\t\t\tproject_2_name = project_2_data[0]\n\t\t\t\tif project_2_name == unknown_string:\n\t\t\t\t\tcontinue\n\t\t\t\tproject_2_category = project_2_data[1]\n\t\t\t\tclash_date = dates_data[0].attributes['year'].value + \"/\" + dates_data[0].attributes['month'].value + \"/\" + dates_data[0].attributes['day'].value + \" \" + dates_data[0].attributes['hour'].value + \":\" + dates_data[0].attributes['minute'].value\n\t\t\t\tdistance = float(clash.attributes['distance'].value)*factor\n\t\t\t\tclashpoint_x = float(clashpoint_data.attributes['x'].value)*factor\n\t\t\t\tclashpoint_y = float(clashpoint_data.attributes['y'].value)*factor\n\t\t\t\tclashpoint_z = float(clashpoint_data.attributes['z'].value)*factor\n\t\t\t\t\n\t\t\t\tapprovedby = clash.getElementsByTagName('approvedby')\n\t\t\t\tif len(approvedby) > 0:\n\t\t\t\t\tapprovedby = approvedby[0].firstChild.data\n\t\t\t\t\tapprovedDate = dates_data[1].attributes['year'].value + \"/\" + dates_data[1].attributes['month'].value + \"/\" + dates_data[1].attributes['day'].value + \" \" + dates_data[1].attributes['hour'].value + \":\" + dates_data[1].attributes['minute'].value\n\t\t\t\telse:\n\t\t\t\t\tapprovedby = \"\"\n\t\t\t\t\tapprovedDate = \"\"\n\t\t\t\t\t\n\t\t\t\tassignedto = clash.getElementsByTagName('assignedto')\n\t\t\t\tif len(assignedto) > 0:\n\t\t\t\t\tassignedto = assignedto[0].firstChild.data\n\t\t\t\telse:\n\t\t\t\t\tassignedto = \"\"\n\t\t\t\t\n\t\t\t\ttry:\n\t\t\t\t\tclash_1_objectattribute = clashObj_1.getElementsByTagName('objectattribute')[0]\n\t\t\t\t\tclash_1_type = clash_1_objectattribute.getElementsByTagName('name')[0].firstChild.data\n\t\t\t\texcept:\n\t\t\t\t\tclash_1_objectattribute = None\n\t\t\t\t\tclash_1_type = None\n\t\t\t\t\t\n\t\t\t\ttry:\n\t\t\t\t\tclash_2_objectattribute = clashObj_2.getElementsByTagName('objectattribute')[0]\n\t\t\t\t\tclash_2_type = clash_2_objectattribute.getElementsByTagName('name')[0].firstChild.data\n\t\t\t\texcept:\n\t\t\t\t\tclash_2_objectattribute = None\n\t\t\t\t\tclash_2_type = None\n\t\t\n\t\t\t\tif clash_1_type == \"GUID\":\n\t\t\t\t\tclash_1_is_guid = True\n\t\t\t\telse:\n\t\t\t\t\tclash_1_is_guid = False\n\t\t\t\tif clash_2_type == \"GUID\":\n\t\t\t\t\tclash_2_is_guid = True\n\t\t\t\telse:\n\t\t\t\t\tclash_2_is_guid = False\n\t\t\t\t\n\t\t\t\tif clash_1_is_guid:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tclash_1_id = clash_1_objectattribute.getElementsByTagName('value')[0].firstChild.data\n\t\t\t\t\texcept:\n\t\t\t\t\t\tclash_1_id = int(project_1_data[2])\n\t\t\t\telse:\n\t\t\t\t\tclash_1_id = int(project_1_data[2])\n\t\t\t\tif clash_2_is_guid:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tclash_2_id = clash_2_objectattribute.getElementsByTagName('value')[0].firstChild.data\n\t\t\t\t\texcept:\n\t\t\t\t\t\tclash_2_id = int(project_2_data[2])\n\t\t\t\telse:\n\t\t\t\t\tclash_2_id = int(project_2_data[2])\n\t\t\t\t\n\t\t\t\t\n\t\t\t\tif clash_1_id == -1:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tclash_1_id = clash_1_objectattribute.getElementsByTagName('value')[0].firstChild.data\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\tif clash_2_id == -1:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tclash_2_id = clash_2_objectattribute.getElementsByTagName('value')[0].firstChild.data\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\t\n\t\t\t\tif project_1_name == title:\n\t\t\t\t\tself_1 = True\n\t\t\t\telse:\n\t\t\t\t\tself_1 = False\n\t\t\t\tif project_2_name == title:\n\t\t\t\t\tself_2 = True\n\t\t\t\telse:\n\t\t\t\t\tself_2 = False\n\t\t\t\tif self_1 and self_2:\n\t\t\t\t\tguids_1 = currentGuids\n\t\t\t\t\tguids_2 = currentGuids\n\t\t\t\t\tif clash_1_is_guid and clash_1_id in guids_1[0]:\n\t\t\t\t\t\tclash_1_id = guids_1[1][guids_1[0].IndexOf(clash_1_id)].IntegerValue\n\t\t\t\t\tif clash_2_is_guid and clash_2_id in guids_2[0]:\n\t\t\t\t\t\tclash_2_id = guids_2[1][guids_2[0].IndexOf(clash_2_id)].IntegerValue\n\t\t\t\t\tif clash_1_id in InterInstancesIntegers or clash_2_id in InterInstancesIntegers:\n\t\t\t\t\t\treturn None\n\t\t\t\t\tpair = [getElement(True,clash_1_id,None,not_linked_string),getElement(True,clash_2_id,None,not_linked_string)]\n\t\t\t\t\tif pair[0] == None or pair[0] == -1:\n\t\t\t\t\t\tif not is_orphan:\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tpair[0] = not_existed_string\n\t\t\t\t\tif pair[1] == None or pair[1] == -1:\n\t\t\t\t\t\tif not is_orphan:\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tpair[1] = not_existed_string\n\t\t\t\t\tcase = andsym.join([project_1_category,project_2_category])\n\t\t\t\t\tdocumentName = not_linked_string\n\t\t\t\t\tdocument = None\n\t\t\t\t\ttransform = None\n\t\t\t\telif not self_1 and not self_2:\n\t\t\t\t\tif not is_orphan:\n\t\t\t\t\t\tcontinue\n\t\t\t\t\telse:\n\t\t\t\t\t\tpair = [not_existed_string, not_existed_string]\n\t\t\t\telif self_1:\n\t\t\t\t\tdocument = None\n\t\t\t\t\ttransform = None\n\t\t\t\t\tguids_1 = currentGuids\n\t\t\t\t\tdocumentName = project_2_name\n\t\t\t\t\tfor linkData in linksData:\n\t\t\t\t\t\tif documentName.lower() == linkData[2].lower():\n\t\t\t\t\t\t\tdocument = linkData[1]\n\t\t\t\t\t\t\ttransform = linkData[3]\n\t\t\t\t\t\t\tguids_2 = linkData[4]\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\tif document != None:\n\t\t\t\t\t\tif clash_1_is_guid and clash_1_id in guids_1[0]:\n\t\t\t\t\t\t\tclash_1_id = guids_1[1][guids_1[0].IndexOf(clash_1_id)].IntegerValue\n\t\t\t\t\t\tif clash_2_is_guid and clash_2_id in guids_2[0]:\n\t\t\t\t\t\t\tclash_2_id = guids_2[1][guids_2[0].IndexOf(clash_2_id)].IntegerValue\n\t\t\t\t\tif clash_1_id in InterInstancesIntegers or clash_2_id in InterInstancesIntegers:\n\t\t\t\t\t\tcontinue\n\t\t\t\t\tpair = [getElement(True,clash_1_id,None,not_linked_string),getElement(True,clash_2_id,document,documentName)]\n\t\t\t\t\tif pair[0] == None or pair[0] == -1:\n\t\t\t\t\t\tif not is_orphan:\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tpair[0] = not_existed_string\n\t\t\t\t\tif pair[1] == None or pair[1] == -1:\n\t\t\t\t\t\tpair[1] = clashguid\n\t\t\t\t\tcase = andsym.join([project_1_category,project_2_category])\n\t\t\t\telif self_2:\n\t\t\t\t\tdocument = None\n\t\t\t\t\ttransform = None\n\t\t\t\t\tguids_2 = currentGuids\n\t\t\t\t\tdocumentName = project_1_name\n\t\t\t\t\tfor linkData in linksData:\n\t\t\t\t\t\tif documentName.lower() == linkData[2].lower():\n\t\t\t\t\t\t\tdocument = linkData[1]\n\t\t\t\t\t\t\ttransform = linkData[3]\n\t\t\t\t\t\t\tguids_1 = linkData[4]\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\tif document != None:\n\t\t\t\t\t\tif clash_1_is_guid and clash_1_id in guids_1[0]:\n\t\t\t\t\t\t\tclash_1_id = guids_1[1][guids_1[0].IndexOf(clash_1_id)].IntegerValue\n\t\t\t\t\t\tif clash_2_is_guid and clash_2_id in guids_2[0]:\n\t\t\t\t\t\t\tclash_2_id = guids_2[1][guids_2[0].IndexOf(clash_2_id)].IntegerValue\n\t\t\t\t\tif clash_1_id in InterInstancesIntegers or clash_2_id in InterInstancesIntegers:\n\t\t\t\t\t\tcontinue\n\t\t\t\t\tpair = [getElement(True,clash_2_id,None,not_linked_string),getElement(True,clash_1_id,document,documentName)]\n\t\t\t\t\tif pair[0] == None or pair[0] == -1:\n\t\t\t\t\t\tif not is_orphan:\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tpair[0] = not_existed_string\n\t\t\t\t\tif pair[1] == None or pair[1] == -1:\n\t\t\t\t\t\tpair[1] = clashguid\n\t\t\t\t\tcase = andsym.join([project_2_category,project_1_category])\n\t\t\t\t\t\n\t\t\t\tclashpoint = surveyTransform.OfPoint(XYZ(clashpoint_x,clashpoint_y,clashpoint_z)).ToPoint()\n\t\t\t\tcommentsObj_All = clash.getElementsByTagName('comments')\n\t\t\t\tcomments = \"\"\n\t\t\t\textra_comments_indexs = [i for i in range(len(groups_names)) if groups_names[i] == group]\n\t\t\t\tfor extra_comments_index in extra_comments_indexs:\n\t\t\t\t\textra_comments = groups_comments[extra_comments_index]\n\t\t\t\t\textra_guids = group_guids[extra_comments_index]\n\t\t\t\t\tif clash.attributes['guid'].value in extra_guids:\n\t\t\t\t\t\tcomments = []\n\t\t\t\t\t\tfor extra_comment in extra_comments:\n\t\t\t\t\t\t\tcomments.append(extra_comment)\n\t\t\t\tif len(commentsObj_All) > 0:\n\t\t\t\t\tcommentsObj_All = commentsObj_All[0].getElementsByTagName('comment')\n\t\t\t\t\tif comments == \"\":\n\t\t\t\t\t\tcomments = []\n\t\t\t\t\tfor commentObj in commentsObj_All:\n\t\t\t\t\t\ttmp = []\n\t\t\t\t\t\tcomment_date = commentObj.getElementsByTagName('date')[0]\n\t\t\t\t\t\tcomment_date = comment_date.attributes['year'].value + \"/\" + comment_date.attributes['month'].value + \"/\" + comment_date.attributes['day'].value + \" \" + comment_date.attributes['hour'].value + \":\" + comment_date.attributes['minute'].value\n\t\t\t\t\t\ttmp.append(\"Comment Id: \" + commentObj.attributes['id'].value)\n\t\t\t\t\t\ttmp.append(\"Comment Status: \" + commentObj.attributes['status'].value)\n\t\t\t\t\t\ttmp.append(\"Comment By: \" + commentObj.getElementsByTagName('user')[0].firstChild.data)\n\t\t\t\t\t\ttmp.append(\"Comment Date: \" + comment_date)\n\t\t\t\t\t\ttmp.append(\"Comment: \" + commentObj.getElementsByTagName('body')[0].firstChild.data)\n\t\t\t\t\t\ttmp.append(\"\\n\")\n\t\t\t\t\t\tcomments.append(\"\\r\\n\".join(tmp))\n\t\t\t\t\tcomments = \"\\r\\n\".join(comments)\n\t\t\t\telse:\n\t\t\t\t\tif comments != \"\":\n\t\t\t\t\t\tcomments = \"\\r\\n\".join(comments)\n\t\t\t\tmegaOutput.append([pair,case,documentName,document,transform,clashname,status,description,comments,distance,clashpoint,testName,group,clash_date,assignedto,approvedby,approvedDate,clashguid])\n\t\t\texcept:\n\t\t\t\tcontinue\n\treturn megaOutput\n\t\ndef getSurveyTransform(doc):\n\tbasepoints = FilteredElementCollector(doc).OfClass(BasePoint)\n\tfor basepoint in basepoints:\n\t\tif basepoint.IsShared:\n\t\t\tsv = basepoint\n\t\t\tbreak\n\tsv_transform = Transform.CreateTranslation(XYZ(0, 0, 0))\n\tcur_loc = projectPosition = doc.ActiveProjectLocation.GetProjectPosition(XYZ(0,0,0))\n\trotation = Transform.CreateRotation(XYZ.BasisZ, projectPosition.Angle)\n\tcur_transform = Transform.CreateTranslation(XYZ(projectPosition.EastWest, projectPosition.NorthSouth, projectPosition.Elevation)).Multiply(rotation).Inverse\n\tfinal = sv_transform.Multiply(cur_transform)\n\treturn final\n\ndef getGuids(doc):\n\tallIds = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElementIds()\n\tallGuids = []\n\tfor eachId in allIds:\n\t\tallGuids.append(str(ExportUtils.GetExportId(doc,eachId)))\n\treturn [allGuids,allIds]\n\nclass FamOptions(IFamilyLoadOptions):\n\tdef __init__(self):\n\t\tpass\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\n\t\toverwriteParameterValues.Value = False\n\t\treturn True\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\n\t\toverwriteParameterValues.Value = False\n\t\treturn True\n\nclass KaramWarningIgnore(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\tToInternalfactor = UnitUtils.ConvertToInternalUnits(1,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\n\tFromInternalfactor = UnitUtils.ConvertFromInternalUnits(1,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\nelse:\n\tToInternalfactor = UnitUtils.ConvertToInternalUnits(1,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\tFromInternalfactor = UnitUtils.ConvertFromInternalUnits(1,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\t\nlinksIds = FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElementIds()\nlinks = []\nfor linkId in linksIds:\n\tlinks.append(doc.GetElement(linkId))\n\t\nlevels = list(FilteredElementCollector(doc).OfClass(Level).ToElements())\nlevels.sort(key=lambda x: x.Elevation, reverse=False)\n\nlevelsData = []\nfor level in levels:\n\tlevelsData.append([level.Name,level.Elevation])\n\nlinksData = []\nfor link in links:\n\tlinkDoc = link.GetLinkDocument()\n\tif linkDoc != None:\n\t\tlinkTitle = linkDoc.Title.Replace(\"_detached\",\"\") + \".rvt\"\n\telse:\n\t\tcontinue\n\tlinksData.append([link, linkDoc, linkTitle, link.GetTotalTransform(), getGuids(linkDoc)])\n\ncurrentGuids = getGuids(doc)\n\ncleanedLinksData = []\nfor linkData in linksData:\n\tif linkData[1] != None:\n\t\tcleanedLinksData.append(linkData)\nlinksData = cleanedLinksData\n\nreport = IN[0]\nrequestedfamilyname = IN[1]\nmode = IN[2] # 1 is New Markers, 2 is New Views, 3 is Markers Cleanup, 4 is Views Cleanup, 5 is Cleanup All\ncleanup = IN[3]\nprefix = IN[4]\nextra_bbox_distance = IN[5]\nset3dGenerate = IN[6]\ngenerateFixed = IN[7]\nmark1param = IN[8]\nmark2param = IN[9]\ngen3dparam = IN[10]\nisfixedparam = IN[11]\nclashcategoryparam = IN[12]\nclashlevelparam = IN[13]\nclashvalueparam = IN[14]\nidoneparam = IN[15]\nidtwoparam = IN[16]\nlinkparam = IN[17]\nsectionBoxparam = IN[18]\nclashnameparam = IN[19]\nclashstatusparam = IN[20]\nclashdescriptionparam = IN[21]\nclashcommentsparam = IN[22]\ntestnameparam = IN[23]\nclashgroupparam = IN[24]\nclashdateparam = IN[25]\nassignedtoparam = IN[26]\napprovedbyparam = IN[27]\napproveddateparam = IN[28]\nclashguidparam = IN[29]\ntollerance = IN[30]*0.003280839895\n\ncleanupAll = False\nif mode == 5:\n\tcleanupAll = True\n\nnot_linked_string = \"Not Linked\"\nnot_existed_string = \"Deleted Element\"\nlink_not_loaded_string = \"Link Not Loaded\"\nunknown_string = \"Unknown\"\nerror_string = \"ERROR\"\nnot_navis_string = \"NOT_NAVISWORKS\"\nseparator = \"__\"\nandsym = \" & \"\nerror_message = \"ERROR: Interference Parameters are Incorrect\"\nerror_family_loading = \"ERROR: Unable to Loading Interference Family: Please Contact Karam\\n karam@aecedx.com\"\nerror_family_not_found = \"ERROR: Interference Family Not Found\"\nfamname = \"Sample-Interference Marker Family.rfa\"\n\nDialogtitle = \"AECedx - Karam\"\nmsgs = []\n\ncheckfamily = [x for x in FilteredElementCollector(doc).OfClass(Family).ToElements() if requestedfamilyname.lower() == x.Name.lower()]\nif len(checkfamily) == 0 and mode == 1:\n\tscript = Dynamo.Applications.DynamoRevit().RevitDynamoModel.CurrentWorkspace.FileName.split(\"\\\\\")[:-1]\n\tfullpath = \"\\\\\".join(script) + \"\\\\\" + famname\n\tif os.path.isfile(fullpath):\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans = Transaction(doc, 'Load ' + requestedfamilyname)\n\t\ttrans.Start()\n\t\twarnhandle = KaramWarningIgnore()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\tloadedfamily = doc.LoadFamily(fullpath,FamOptions())[1]\n\t\tloadedfamily.Name = requestedfamilyname\n\t\tsymbol = loadedfamily.GetFamilySymbolIds().GetEnumerator()\n\t\tsymbol.MoveNext()\n\t\tsymbol = doc.GetElement(symbol.Current)\n\t\tsymbol.Name = requestedfamilyname\n\t\tif not symbol.IsActive: symbol.Activate()\n\t\ttrans.Commit()\n\t\tfamilysymbol = symbol\n\telse:\n\t\tTaskDialog.Show(Dialogtitle, error_family_loading)\nelse:\n\tif len(checkfamily) == 0:\n\t\tTaskDialog.Show(Dialogtitle, error_family_not_found)\n\telse:\n\t\tsymbol = checkfamily[0].GetFamilySymbolIds().GetEnumerator()\n\t\tsymbol.MoveNext()\n\t\tsymbol = doc.GetElement(symbol.Current)\n\t\tfamilysymbol = symbol\n\nInterInstances = [x for x in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements() if familysymbol.FamilyName.lower() == x.Symbol.FamilyName.lower()]\nInterInstancesIntegers = []\nfor InterInstance in InterInstances:\n\tInterInstancesIntegers.append(InterInstance.Id.IntegerValue)\n\nstopIt = False\ndumpedDataList = []\nfor InterInstance in InterInstances:\n\tdumpedData = []\n\tp_idone = paramGet(InterInstance,idoneparam)\n\tif p_idone != None:\n\t\tdumpedData.append(p_idone)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_idtwo = paramGet(InterInstance,idtwoparam)\n\tif p_idtwo != None:\n\t\tdumpedData.append(p_idtwo)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_linkname = paramGet(InterInstance,linkparam)\n\tif p_linkname != None:\n\t\tdumpedData.append(p_linkname)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashlevel = paramGet(InterInstance,clashlevelparam)\n\tif p_clashlevel != None:\n\t\tdumpedData.append(p_clashlevel)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_gen3d = paramGet(InterInstance,gen3dparam)\n\tif p_gen3d != None:\n\t\tdumpedData.append(p_gen3d)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_isfixed = paramGet(InterInstance,isfixedparam)\n\tif p_isfixed != None:\n\t\tdumpedData.append(p_isfixed)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_sectionBox = paramGet(InterInstance,sectionBoxparam)\n\tif p_sectionBox != None:\n\t\tdumpedData.append(p_sectionBox)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashcat = paramGet(InterInstance,clashcategoryparam)\n\tif p_clashcat != None:\n\t\tdumpedData.append(p_clashcat)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tif \"None\" in dumpedData:\n\t\tcontinue\n\tp_clashname = paramGet(InterInstance,clashnameparam)\n\tif p_clashname != None:\n\t\tdumpedData.append(p_clashname)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashstatus = paramGet(InterInstance,clashstatusparam)\n\tif p_clashstatus != None:\n\t\tdumpedData.append(p_clashstatus)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashdescription = paramGet(InterInstance,clashdescriptionparam)\n\tif p_clashdescription != None:\n\t\tdumpedData.append(p_clashdescription)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashcomments = paramGet(InterInstance,clashcommentsparam)\n\tif p_clashcomments != None:\n\t\tdumpedData.append(p_clashcomments)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_testname = paramGet(InterInstance,testnameparam)\n\tif p_testname != None:\n\t\tdumpedData.append(p_testname)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashgroup = paramGet(InterInstance,clashgroupparam)\n\tif p_clashgroup != None:\n\t\tdumpedData.append(p_clashgroup)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashdate = paramGet(InterInstance,clashdateparam)\n\tif p_clashdate != None:\n\t\tdumpedData.append(p_clashdate)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_assignedto = paramGet(InterInstance,assignedtoparam)\n\tif p_assignedto != None:\n\t\tdumpedData.append(p_assignedto)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_approvedby = paramGet(InterInstance,approvedbyparam)\n\tif p_approvedby != None:\n\t\tdumpedData.append(p_approvedby)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_approveddate = paramGet(InterInstance,approveddateparam)\n\tif p_approveddate != None:\n\t\tdumpedData.append(p_approveddate)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tp_clashguid = paramGet(InterInstance,clashguidparam)\n\tif p_clashguid != None:\n\t\tdumpedData.append(p_clashguid)\n\telse:\n\t\tstopIt = True\n\t\tbreak\n\tdumpedDataList.append([InterInstance,separator.join([dumpedData[0],dumpedData[1],dumpedData[2]]),dumpedData[0],dumpedData[1],dumpedData[2],dumpedData[3],dumpedData[4],dumpedData[5],dumpedData[6],dumpedData[7],dumpedData[8],dumpedData[9],dumpedData[10],dumpedData[11],dumpedData[12],dumpedData[13],dumpedData[14],dumpedData[15],dumpedData[16],dumpedData[17],dumpedData[18]])\n\t\t\nif stopIt:\n\tmsgs.append(error_message)\nelse:\n\tif mode == 1:\n\t\tif report.endswith(\".html\"):\n\t\t\tis_navis = False\n\t\t\tknown_errors = {\"  \", \"td>  \"}\n\t\t\tparser = ReportParser()\n\t\t\twith System.IO.File.OpenText(report) as f:\n\t\t\t\twhile not f.EndOfStream:\n\t\t\t\t\tparser.feed(f.ReadLine().replace(\"&\", \"\"))\n\t\t\tparser.data1.append(parser.temp_data)\n\t\t\treport_data = parser.data1[2:]\n\t\t\tparser.close()\n\t\telif report.endswith(\".xml\"):\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2020:\n\t\t\t\treport_data = []\n\t\t\t\tmsgs.append(\"Navisworks XML Supports Revit 2020 or Above\")\n\t\t\telse:\n\t\t\t\tfrom xml.dom import minidom\n\t\t\t\tis_navis = True\n\t\t\t\tsurveyTransform = getSurveyTransform(doc)\n\t\t\t\ttitle = getTitle(doc)\n\t\t\t\treport = minidom.parse(report)\n\t\t\t\tunits = report.getElementsByTagName('exchange')[0].attributes['units'].value\n\t\t\t\treport_data = clashData(report,units,doc,title,andsym,linksData,link_not_loaded_string,not_linked_string,FromInternalfactor,surveyTransform,currentGuids,InterInstancesIntegers,not_existed_string,unknown_string)\n\t\t\n\t\tparser = None\n\t\tcases, elements, = [], []\n\t\t\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans = Transaction(doc, 'K-Clash Markers Create')\n\t\ttrans.Start()\n\t\twarnhandle = KaramWarningIgnore()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\t\n\t\tstopIt = False\n\n\t\tfound = []\n\t\tnew = []\n\t\t\n\t\tfor d in report_data:\n\t\t\tif is_navis:\n\t\t\t\tclash = d\n\t\t\t\tpair = clash[0]\n\t\t\t\tcase = clash[1]\n\t\t\t\tdocumentName = clash[2]\n\t\t\t\tdocument = clash[3]\n\t\t\t\ttransform = clash[4]\n\t\t\t\tclashName = clash[5]\n\t\t\t\tclashStatus = clash[6]\n\t\t\t\tclashDescription = clash[7]\n\t\t\t\tclashComments = clash[8]\n\t\t\t\tclashDistance = clash[9]\n\t\t\t\tclashPoint = clash[10]\n\t\t\t\ttestName = clash[11]\n\t\t\t\tclashGroup = clash[12]\n\t\t\t\tclashDate = clash[13]\n\t\t\t\tassignedTo = clash[14]\n\t\t\t\tapprovedBy = clash[15]\n\t\t\t\tapprovedDate = clash[16]\n\t\t\t\tclashGUID = clash[17]\n\t\t\telse:\n\t\t\t\tclashName = not_navis_string\n\t\t\t\tclashStatus = not_navis_string\n\t\t\t\tclashDescription = not_navis_string\n\t\t\t\tclashComments = not_navis_string\n\t\t\t\ttestName = not_navis_string\n\t\t\t\tclashGroup = not_navis_string\n\t\t\t\tclashDate = not_navis_string\n\t\t\t\tassignedTo = not_navis_string\n\t\t\t\tapprovedBy = not_navis_string\n\t\t\t\tapprovedDate = not_navis_string\n\t\t\t\tclashGUID = not_navis_string\n\t\t\t\tleft, right = map(str.strip, d[1].split(\" : \")), map(str.strip, d[2].split(\" : \"))\n\t\t\t\tleftId, rightId = int(filter(str.isdigit, left[-1])), int(filter(str.isdigit, right[-1]))\n\t\t\t\tif leftId in InterInstancesIntegers or rightId in InterInstancesIntegers:\n\t\t\t\t\tcontinue\n\t\t\t\tdocument = None\n\t\t\t\tif len(right) > 4:\n\t\t\t\t\tdocumentName = right[0]\n\t\t\t\t\tfor linkData in linksData:\n\t\t\t\t\t\tif documentName.lower() == linkData[2].lower():\n\t\t\t\t\t\t\tdocument = linkData[1]\n\t\t\t\t\t\t\ttransform = linkData[3]\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\tif document == None:\n\t\t\t\t\t\tdocumentName = link_not_loaded_string\n\t\t\t\telse:\n\t\t\t\t\tdocumentName = not_linked_string\n\t\t\t\tleftId, rightId = getElement(False,leftId,None,not_linked_string), getElement(False,rightId,document,documentName)\n\t\t\t\tpair = (leftId, rightId)\n\t\t\t\tleftCat, rightCat = fetchCat(left), fetchCat(right)\n\t\t\t\tcase = \"%s%s%s\" % (leftCat, andsym, rightCat) if leftCat is not None and rightCat is not None else \"Unidentified\"\n\t\t\tif not is_navis:\n\t\t\t\tif error_string not in pair and None not in pair:\n\t\t\t\t\tif hasattr(pair[0], 'WallType'):\n\t\t\t\t\t\tif (pair[0].WallType.Kind == WallKind.Curtain):\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\tif hasattr(pair[1], 'WallType'):\n\t\t\t\t\t\tif (pair[1].WallType.Kind == WallKind.Curtain):\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\tbbox1 = pair[0].get_BoundingBox(None).ToProtoType()\n\t\t\t\t\tbbox2 = pair[1].get_BoundingBox(None)\n\t\t\t\t\tif documentName == not_linked_string:\n\t\t\t\t\t\tbbox2 = bbox2.ToProtoType()\n\t\t\t\t\telse:\n\t\t\t\t\t\tbbox2min = transform.OfPoint(bbox2.Min).ToPoint()\n\t\t\t\t\t\tbbox2max = transform.OfPoint(bbox2.Max).ToPoint()\n\t\t\t\t\t\tbbox2 = dg.BoundingBox.ByCorners(bbox2min,bbox2max)\n\t\t\t\telse:\n\t\t\t\t\tcontinue\n\t\t\tif is_navis or dg.BoundingBox.Intersects(bbox1,bbox2):\n\t\t\t\tif is_navis:\n\t\t\t\t\tmarker_loc = clashPoint\n\t\t\t\t\tmarker_bbox_mid_height = marker_loc.Z * ToInternalfactor\n\t\t\t\t\tViewbbox = dg.BoundingBox.ByCorners(dg.Point.ByCoordinates(marker_loc.X+(extra_bbox_distance/2),marker_loc.Y+(extra_bbox_distance/2),marker_loc.Z+(extra_bbox_distance/2)),dg.Point.ByCoordinates(marker_loc.X-(extra_bbox_distance/2),marker_loc.Y-(extra_bbox_distance/2),marker_loc.Z-(extra_bbox_distance/2)))\n\t\t\t\t\tmarker_bboxValue = clashDistance\n\t\t\t\telse:\n\t\t\t\t\tmarker_bbox = dg.BoundingBox.Intersection(bbox1,bbox2)\n\t\t\t\t\tmarker_bboxOP = bboxValue(marker_bbox)\n\t\t\t\t\tmarker_bboxValue = marker_bboxOP[0]\n\t\t\t\t\tmarker_bboxVolume = marker_bboxOP[1]\n\t\t\t\t\tif marker_bboxValue == None or marker_bboxVolume == None:\n\t\t\t\t\t\tcontinue\n\t\t\t\t\telse:\n\t\t\t\t\t\tmarker_bboxValue *= -ToInternalfactor\n\t\t\t\t\t\tmarker_bboxVolume *= ToInternalfactor\n\t\t\t\t\t\tif marker_bboxVolume < tollerance:\n\t\t\t\t\t\t\tcontinue\n\t\t\t\t\ttry:\n\t\t\t\t\t\tmarker_bbox_mid = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(marker_bbox.MaxPoint,marker_bbox.MinPoint),0.5)\n\t\t\t\t\t\textended_line = dg.Curve.ExtendEnd(dg.Curve.ExtendStart(dg.Line.ByStartPointEndPoint(marker_bbox.MinPoint,marker_bbox.MaxPoint),extra_bbox_distance),extra_bbox_distance)\n\t\t\t\t\t\tViewbbox = dg.BoundingBox.ByCorners(extended_line.StartPoint,extended_line.EndPoint)\n\t\t\t\t\texcept:\n\t\t\t\t\t\tcontinue\n\t\t\t\t\tmarker_line = dg.Line.ByStartPointEndPoint(Viewbbox.MinPoint,Viewbbox.MaxPoint)\n\t\t\t\t\tmarker_loc = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(Viewbbox.MinPoint,Viewbbox.MaxPoint),0.2)\n\t\t\t\t\tmarker_bbox_mid_height = marker_bbox_mid.Z * ToInternalfactor\n\t\t\t\tvalidHeights = []\n\t\t\t\tfor levelData in levelsData:\n\t\t\t\t\tif levelData[1] <= marker_bbox_mid_height:\n\t\t\t\t\t\tvalidHeights.append(levelData[1])\n\t\t\t\tif len(validHeights) == 0:\n\t\t\t\t\tvalidHeights = [levelsData[0][1]]\n\t\t\t\tclosestHeight = take_closest(validHeights,marker_bbox_mid_height)\n\t\t\t\tfor levelData in levelsData:\n\t\t\t\t\tif \tlevelData[1] == closestHeight:\n\t\t\t\t\t\tlevelName = levelData[0]\n\t\t\t\t\n\t\t\t\tif hasattr(pair[0], 'Id'):\n\t\t\t\t\tidone = pair[0].Id\n\t\t\t\telse:\n\t\t\t\t\tidone = pair[0]\n\t\t\t\t\t\n\t\t\t\tif hasattr(pair[1], 'Id'):\n\t\t\t\t\tidtwo = pair[1].Id\n\t\t\t\telse:\n\t\t\t\t\tidtwo = pair[1]\n\t\t\t\t\n\t\t\t\tif not is_navis:\n\t\t\t\t\tjoinedCheck = separator.join([idone.ToString(),idtwo.ToString(),documentName])\n\t\t\t\t\tjoinedCheck_inversed = separator.join([idtwo.ToString(),idone.ToString(),documentName])\n\t\t\t\t\n\t\t\t\tcreateNew = True\n\t\t\t\tfor dumpedData in dumpedDataList:\n\t\t\t\t\tinversed = False\n\t\t\t\t\tif not is_navis and joinedCheck_inversed == dumpedData[1]:\n\t\t\t\t\t\tinversed = True\n\t\t\t\t\tif (is_navis and clashGUID == dumpedData[20]) or (not is_navis and (joinedCheck == dumpedData[1] or inversed)):\n\t\t\t\t\t\tcreateNew = False\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashlevelparam,levelName)\n\t\t\t\t\t\tif clashStatus != not_navis_string:\n\t\t\t\t\t\t\tif (clashStatus == \"New\" or clashStatus == \"Active\" or clashStatus == \"Reviewed\") and idone != not_existed_string and idtwo != not_existed_string:\n\t\t\t\t\t\t\t\tparamHandle(dumpedData[0],isfixedparam,False)\n\t\t\t\t\t\t\telse:\n\t\t\t\t\t\t\t\tparamHandle(dumpedData[0],isfixedparam,True)\n\t\t\t\t\t\tmaxP = Viewbbox.MaxPoint.ToXyz()\n\t\t\t\t\t\tminP = Viewbbox.MinPoint.ToXyz()\n\t\t\t\t\t\tMaxData = \",\".join([str(maxP.X),str(maxP.Y),str(maxP.Z)])\n\t\t\t\t\t\tMinData = \",\".join([str(minP.X),str(minP.Y),str(minP.Z)])\n\t\t\t\t\t\tmarker_loc_xyz = marker_loc.ToXyz()\n\t\t\t\t\t\tmarker_loc_data = \",\".join([str(marker_loc_xyz.X),str(marker_loc_xyz.Y),str(marker_loc_xyz.Z)])\n\t\t\t\t\t\tparamHandle(dumpedData[0],sectionBoxparam,\"|\".join([MaxData,MinData,marker_loc_data]))\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashvalueparam,marker_bboxValue)\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashnameparam,clashName)\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashstatusparam,clashStatus)\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashdescriptionparam,clashDescription)\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashcommentsparam,clashComments)\n\t\t\t\t\t\tparamHandle(dumpedData[0],testnameparam,testName)\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashgroupparam,clashGroup)\n\t\t\t\t\t\tparamHandle(dumpedData[0],clashdateparam,clashDate)\n\t\t\t\t\t\tparamHandle(dumpedData[0],assignedtoparam,assignedTo)\n\t\t\t\t\t\tparamHandle(dumpedData[0],approvedbyparam,approvedBy)\n\t\t\t\t\t\tparamHandle(dumpedData[0],approveddateparam,approvedDate)\n\t\t\t\t\t\t\n\t\t\t\t\t\tif dumpedData[0].Location.Point.IsAlmostEqualTo(marker_loc_xyz) == False:\n\t\t\t\t\t\t\tif dumpedData[0].Pinned:\n\t\t\t\t\t\t\t\tdumpedData[0].Pinned = False\n\t\t\t\t\t\t\tdumpedData[0].Location.Point = marker_loc_xyz\n\t\t\t\t\t\t\tdumpedData[0].Pinned = True\n\t\t\t\t\t\tfound.append(True)\n\t\t\t\t\t\tbreak\n\t\t\t\t\n\t\t\t\tif (createNew and not is_navis) or (createNew and is_navis and ((clashStatus == \"New\" or clashStatus == \"Active\" or clashStatus == \"Reviewed\") or ((clashStatus == \"Resolved\" or clashStatus == \"Approved\") and not cleanup)) and idone != not_existed_string and idtwo != not_existed_string):\n\t\t\t\t\tmarker_loc_xyz = marker_loc.ToXyz()\n\t\t\t\t\tmarker_loc_data = \",\".join([str(marker_loc_xyz.X),str(marker_loc_xyz.Y),str(marker_loc_xyz.Z)])\n\t\t\t\t\tinter_family = doc.Create.NewFamilyInstance(marker_loc_xyz,familysymbol,Structure.StructuralType.NonStructural)\n\t\t\t\t\tinter_family.Pinned = True\n\t\t\t\t\tstopIt1 = paramHandle(inter_family,gen3dparam,set3dGenerate)\n\t\t\t\t\tstopIt2 = idparamHandle(inter_family,idoneparam,idone)\n\t\t\t\t\tstopIt3 = idparamHandle(inter_family,idtwoparam,idtwo)\n\t\t\t\t\tstopIt4 = paramHandle(inter_family,clashlevelparam,levelName)\n\t\t\t\t\tstopIt5 = paramHandle(inter_family,linkparam,documentName)\n\t\t\t\t\tif clashStatus == not_navis_string or clashStatus == \"New\" or clashStatus == \"Active\" or clashStatus == \"Reviewed\":\n\t\t\t\t\t\tstopIt6 = paramHandle(inter_family,isfixedparam,False)\n\t\t\t\t\telse:\n\t\t\t\t\t\tstopIt6 = paramHandle(inter_family,isfixedparam,True)\n\t\t\t\t\tmaxP = Viewbbox.MaxPoint.ToXyz()\n\t\t\t\t\tminP = Viewbbox.MinPoint.ToXyz()\n\t\t\t\t\tMaxData = \",\".join([str(maxP.X),str(maxP.Y),str(maxP.Z)])\n\t\t\t\t\tMinData = \",\".join([str(minP.X),str(minP.Y),str(minP.Z)])\n\t\t\t\t\tstopIt7 = paramHandle(inter_family,sectionBoxparam,\"|\".join([MaxData,MinData,marker_loc_data]))\n\t\t\t\t\tstopit8 = paramHandle(inter_family,clashvalueparam,marker_bboxValue)\n\t\t\t\t\tstopit9 = paramHandle(inter_family,clashcategoryparam,case)\n\t\t\t\t\tstopit10 = paramHandle(inter_family,clashnameparam,clashName)\n\t\t\t\t\tstopit11 = paramHandle(inter_family,clashstatusparam,clashStatus)\n\t\t\t\t\tstopit12 = paramHandle(inter_family,clashdescriptionparam,clashDescription)\n\t\t\t\t\tstopit13 = paramHandle(inter_family,clashcommentsparam,clashComments)\n\t\t\t\t\tstopit14 = paramHandle(inter_family,testnameparam,testName)\n\t\t\t\t\tstopit15 = paramHandle(inter_family,clashgroupparam,clashGroup)\n\t\t\t\t\tstopit16 = paramHandle(inter_family,clashdateparam,clashDate)\n\t\t\t\t\tstopit17 = paramHandle(inter_family,assignedtoparam,assignedTo)\n\t\t\t\t\tstopit18 = paramHandle(inter_family,approvedbyparam,approvedBy)\n\t\t\t\t\tstopit19 = paramHandle(inter_family,approveddateparam,approvedDate)\n\t\t\t\t\tstopit20 = paramHandle(inter_family,clashguidparam,clashGUID)\n\t\t\t\t\tif stopIt1 or stopIt2 or stopIt3 or stopIt4 or stopIt5 or stopIt6 or stopIt7 or stopit8 or stopit9 or stopit10 or stopit11 or stopit12 or stopit13 or stopit14 or stopit15 or stopit16 or stopit17 or stopit18 or stopit19 or stopit20:\n\t\t\t\t\t\tstopIt = True\n\t\t\t\t\t\tdoc.Delete(inter_family.Id)\n\t\t\t\t\t\tbreak\n\t\t\t\t\tnew.append(True)\n\t\t\t\t\n\t\t\t\telements.append(pair)\n\t\t\t\tcases.append(case)\n\t\tnew = len(new)\n\t\tfound = len(found)\n\t\tif new == 0 and found == 0:\n\t\t\tpass\n\t\telif new > 0 and found == 0:\n\t\t\tmsg = \"Created \" + str(new) + \" Interference Markers\"\n\t\t\tmsgs.append(msg)\n\t\telif found > 0 and new == 0:\n\t\t\tmsg = \"Found \" + str(found) + \" Interference Markers\"\n\t\t\tmsgs.append(msg)\n\t\telse:\n\t\t\tmsg = \"Created \" + str(new) + \" and Found \" + str(found) + \" Interference Markers\"\n\t\t\tmsgs.append(msg)\n\t\ttrans.Commit()\n\t\t\n\tif (mode == 1 and cleanup) or mode == 3 or cleanupAll:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans = Transaction(doc, 'K-Clash Markers Cleanup')\n\t\ttrans.Start()\n\t\twarnhandle = KaramWarningIgnore()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\t\n\t\tdeleted = []\n\t\t\n\t\tcleaned_dumpDataList = []\n\t\tfor dumpedData in dumpedDataList:\n\t\t\tcheck1 = doc.GetElement(ElementId(int(dumpedData[2])))\n\t\t\tif check1 == None or dumpedData[0].LookupParameter(isfixedparam).AsInteger() == 1:\n\t\t\t\tdoc.Delete(dumpedData[0].Id)\n\t\t\t\tdeleted.append(True)\n\t\t\t\tcontinue\n\t\t\tif dumpedData[4] == not_linked_string:\n\t\t\t\tcheck2 = doc.GetElement(ElementId(int(dumpedData[3])))\n\t\t\t\tif check2 == None:\n\t\t\t\t\tdoc.Delete(dumpedData[0].Id)\n\t\t\t\t\tdeleted.append(True)\n\t\t\t\t\tcontinue\n\t\t\telse:\n\t\t\t\tdocument = None\n\t\t\t\tfor linkData in linksData:\n\t\t\t\t\tif dumpedData[4] == linkData[2]:\n\t\t\t\t\t\tdocument = linkData[1]\n\t\t\t\t\t\tbreak\n\t\t\t\tif document == None and dumpedData[11] == not_navis_string:\n\t\t\t\t\tcontinue\n\t\t\t\tif document != None:\n\t\t\t\t\tcheck2 = document.GetElement(ElementId(int(dumpedData[3])))\n\t\t\t\telse:\n\t\t\t\t\tcheck2 = None\n\t\t\t\tif check2 == None and dumpedData[11] == not_navis_string:\n\t\t\t\t\tdoc.Delete(dumpedData[0].Id)\n\t\t\t\t\tdeleted.append(True)\n\t\t\t\t\tcontinue\n\t\t\tcleaned_dumpDataList.append(dumpedData)\n\t\tdumpedDataList = cleaned_dumpDataList\n\t\t\n\t\tdeleted = len(deleted)\n\t\tif deleted > 0:\n\t\t\tmsg = \"Deleted \" + str(deleted) + \" Interference Markers\"\n\t\t\tmsgs.append(msg)\n\t\t\n\t\ttrans.Commit()\n\t\t\n\tif mode == 2 or mode == 4 or cleanupAll:\n\t\tviewFamilyTypes = FilteredElementCollector(doc).OfClass(ViewFamilyType)\n\t\tfor e in viewFamilyTypes:\n\t\t\tif str(e.ViewFamily) == \"ThreeDimensional\":\n\t\t\t\tviewType = e.Id\n\t\t\t\tbreak\n\t\t\n\t\texistedView3Ds = FilteredElementCollector(doc).OfClass(View3D)\n\t\tfilteredViews3Ds = []\n\t\texistedView3DsNames = []\n\t\tfor existedView3D in existedView3Ds:\n\t\t\tif existedView3D.IsTemplate == False:\n\t\t\t\tviewname = existedView3D.Name.split(separator)\n\t\t\t\tif len(viewname) > 2:\n\t\t\t\t\texistedView3DsNames.append(separator.join(viewname[-2:]))\n\t\t\t\t\tfilteredViews3Ds.append(existedView3D)\n\t\tactive_view_id = doc.ActiveView.Id\n\t\t\n\tif mode == 2:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans = Transaction(doc, 'K-Clash Views Create')\n\t\ttrans.Start()\n\t\twarnhandle = KaramWarningIgnore()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\t\n\t\tFillPats = FilteredElementCollector(doc).OfClass(FillPatternElement).ToElements()\n\t\tfor FillPat in FillPats:\n\t\t\tif FillPat.GetFillPattern().IsSolidFill:\n\t\t\t\tbreak\n\t\t\n\t\tover_a = OverrideGraphicSettings().SetHalftone(True)\n\t\tover_b = OverrideGraphicSettings(over_a).SetSurfaceTransparency(90)\n\t\t\n\t\tcolor_a = OverrideGraphicSettings().SetCutForegroundPatternId(FillPat.Id)\n\t\tcolor_b = OverrideGraphicSettings(color_a).SetCutBackgroundPatternId(FillPat.Id)\n\t\tcolor_c = OverrideGraphicSettings(color_b).SetSurfaceForegroundPatternId(FillPat.Id)\n\t\tcolor_d = OverrideGraphicSettings(color_c).SetSurfaceBackgroundPatternId(FillPat.Id)\n\t\t\n\t\tcolor_yellow_a = OverrideGraphicSettings(color_d).SetCutBackgroundPatternColor(Color(255,255,0))\n\t\tcolor_yellow_b = OverrideGraphicSettings(color_yellow_a).SetCutForegroundPatternColor(Color(255,255,0))\n\t\tcolor_yellow_c = OverrideGraphicSettings(color_yellow_b).SetSurfaceForegroundPatternColor(Color(255,255,0))\n\t\tcolor_yellow_d = OverrideGraphicSettings(color_yellow_c).SetSurfaceBackgroundPatternColor(Color(255,255,0))\n\t\t\n\t\tcolor_green_a = OverrideGraphicSettings(color_d).SetCutBackgroundPatternColor(Color(0,128,0))\n\t\tcolor_green_b = OverrideGraphicSettings(color_green_a).SetCutForegroundPatternColor(Color(0,128,0))\n\t\tcolor_green_c = OverrideGraphicSettings(color_green_b).SetSurfaceForegroundPatternColor(Color(0,128,0))\n\t\tcolor_green_d = OverrideGraphicSettings(color_green_c).SetSurfaceBackgroundPatternColor(Color(0,128,0))\n\t\t\n\t\tlevel_cat = Category.GetCategory(doc,BuiltInCategory.OST_Levels)\n\t\tscope_cat = Category.GetCategory(doc,BuiltInCategory.OST_VolumeOfInterest)\n\t\t\n\t\tfound = []\n\t\tnew = []\n\t\t\n\t\tfor dumpedData in dumpedDataList:\n\t\t\n\t\t\tif dumpedData[0].LookupParameter(gen3dparam).AsInteger() != 1:\n\t\t\t\tcontinue\n\t\t\t\t\n\t\t\tif generateFixed == False:\n\t\t\t\tif dumpedData[0].LookupParameter(isfixedparam).AsInteger() == 1:\n\t\t\t\t\tcontinue\n\t\t\t\n\t\t\tcheck1 = doc.GetElement(ElementId(int(dumpedData[2])))\n\t\t\tif check1 == None:\n\t\t\t\tcontinue\n\t\t\t\n\t\t\tif dumpedData[11] == not_navis_string:\n\t\t\t\tbbox1 = check1.get_BoundingBox(None).ToProtoType()\n\t\t\telse:\n\t\t\t\tbbox1 = None\n\t\t\t\n\t\t\tif dumpedData[4] == not_linked_string:\n\t\t\t\tcheck2 = doc.GetElement(ElementId(int(dumpedData[3])))\n\t\t\t\tif check2 == None:\n\t\t\t\t\tcontinue\n\t\t\t\tif dumpedData[11] == not_navis_string:\n\t\t\t\t\tbbox2 = check2.get_BoundingBox(None)\n\t\t\t\t\tbbox2 = bbox2.ToProtoType()\n\t\t\t\telse:\n\t\t\t\t\tbbox2 = None\n\t\t\telse:\n\t\t\t\tdocument = None\n\t\t\t\tfor linkData in linksData:\n\t\t\t\t\tif dumpedData[4] == linkData[2]:\n\t\t\t\t\t\tmyLink = linkData[0]\n\t\t\t\t\t\tdocument = linkData[1]\n\t\t\t\t\t\ttransform = linkData[3]\n\t\t\t\t\t\tbreak\n\t\t\t\tif document == None and dumpedData[11] == not_navis_string:\n\t\t\t\t\tcontinue\n\t\t\t\tif document != None:\n\t\t\t\t\tcheck2 = document.GetElement(ElementId(int(dumpedData[3])))\n\t\t\t\telse:\n\t\t\t\t\tcheck2 = None\n\t\t\t\tif check2 == None and dumpedData[11] == not_navis_string:\n\t\t\t\t\tcontinue\n\t\t\t\tif dumpedData[11] == not_navis_string:\n\t\t\t\t\tbbox2 = check2.get_BoundingBox(None)\n\t\t\t\t\tbbox2min = transform.OfPoint(bbox2.Min).ToPoint()\n\t\t\t\t\tbbox2max = transform.OfPoint(bbox2.Max).ToPoint()\n\t\t\t\t\tbbox2 = dg.BoundingBox.ByCorners(bbox2min,bbox2max)\n\t\t\t\telse:\n\t\t\t\t\tbbox2 = None\n\t\t\t\n\t\t\tbig_scope = False\n\t\t\tif dumpedData[11] == not_navis_string:\n\t\t\t\tif dg.BoundingBox.Intersects(bbox1,bbox2) == False:\n\t\t\t\t\tbig_scope = True\n\t\t\t\t\n\t\t\tmark1param_val = markParamhandle(check1,mark1param)\n\t\t\tmark2param_val = markParamhandle(check2,mark2param)\n\t\t\t\n\t\t\tif mark1param_val == \"\" and mark2param_val == \"\":\n\t\t\t\tmarks = \"\"\n\t\t\telif mark1param_val == \"\" and mark2param_val != \"\":\n\t\t\t\tmarks = mark2param_val.Replace(separator,\"\") + separator\n\t\t\telif mark2param_val == \"\" and mark1param_val != \"\":\n\t\t\t\tmarks = mark1param_val.Replace(separator,\"\") + separator\n\t\t\telse:\n\t\t\t\tmarks = mark1param_val.Replace(separator,\"\") + andsym + mark2param_val.Replace(separator,\"\") + separator\n\t\t\tsplitData = dumpedData[8].split(\"|\")\n\t\t\tmaxData = splitData[0].split(\",\")\n\t\t\tminData = splitData[1].split(\",\")\n\t\t\tmarker_loc_data = splitData[2].split(\",\")\n\t\t\tif big_scope == False:\n\t\t\t\tmaxP = XYZ(float(maxData[0]),float(maxData[1]),float(maxData[2]))\n\t\t\t\tminP = XYZ(float(minData[0]),float(minData[1]),float(minData[2]))\n\t\t\tmarker_loc_xyz = XYZ(float(marker_loc_data[0]),float(marker_loc_data[1]),float(marker_loc_data[2]))\n\t\t\tif dumpedData[0].Location.Point.IsAlmostEqualTo(marker_loc_xyz) == False:\n\t\t\t\tdumpedData[0].Location.Point = marker_loc_xyz\n\t\t\tif dumpedData[0].Pinned == False:\n\t\t\t\tdumpedData[0].Pinned = True\n\t\t\t\n\t\t\tif big_scope == False:\n\t\t\t\tbbox = BoundingBoxXYZ()\n\t\t\t\tbbox.Max = maxP\n\t\t\t\tbbox.Min = minP\n\t\t\telse:\n\t\t\t\tbbox = dg.BoundingBox.ByGeometry([bbox1.MinPoint,bbox1.MaxPoint,bbox2.MinPoint,bbox2.MaxPoint]).ToRevitType()\n\t\t\t\n\t\t\tdumpedData[4] = dumpedData[4].replace(separator,\"\")\n\t\t\t\n\t\t\tcompare_viewname = dumpedData[2].Replace(separator,\"\") + andsym + dumpedData[3].Replace(separator,\"\") + separator + dumpedData[4].Replace(separator,\"\")\n\t\t\t\n\t\t\tcompare_viewname_inversed = dumpedData[3].Replace(separator,\"\") + andsym + dumpedData[2].Replace(separator,\"\") + separator + dumpedData[4].Replace(separator,\"\")\n\t\t\t\n\t\t\texists = False\n\t\t\tinversed = False\n\t\t\tif compare_viewname in existedView3DsNames:\n\t\t\t\tview = filteredViews3Ds[existedView3DsNames.IndexOf(compare_viewname)]\n\t\t\t\texists = True\n\t\t\telif compare_viewname_inversed in existedView3DsNames:\n\t\t\t\tview = filteredViews3Ds[existedView3DsNames.IndexOf(compare_viewname_inversed)]\n\t\t\t\texists = True\n\t\t\t\tinversed = True\n\t\t\telse:\n\t\t\t\tview = View3D.CreateIsometric(doc, viewType)\n\t\t\t\n\t\t\tif dumpedData[11] == \"Approved\":\n\t\t\t\tif dumpedData[18] == \"None\" or dumpedData[18] == \"\":\n\t\t\t\t\townerName = dumpedData[11].Replace(separator,\"\")\n\t\t\t\telse:\n\t\t\t\t\townerName = dumpedData[11].Replace(separator,\"\") + separator + dumpedData[18].Replace(separator,\"\")\n\t\t\telse:\n\t\t\t\tif dumpedData[17] == \"None\" or dumpedData[17] == \"\":\n\t\t\t\t\townerName = dumpedData[11]\n\t\t\t\telse:\n\t\t\t\t\townerName = dumpedData[11] + separator + dumpedData[17]\n\t\t\t\t\t\n\t\t\tif dumpedData[15] == \"None\" or dumpedData[15] == \"\":\n\t\t\t\tgroupName = dumpedData[12].Replace(separator,\"\") + separator + dumpedData[14].Replace(separator,\"\")\n\t\t\telse:\n\t\t\t\tgroupName = dumpedData[12].Replace(separator,\"\") + separator + dumpedData[14].Replace(separator,\"\") + separator + dumpedData[15].Replace(separator,\"\")\n\t\t\t\n\t\t\tif dumpedData[11] == not_navis_string:\n\t\t\t\tviewname = prefix.Replace(separator,\"\") + separator + \"Hard\" + separator + dumpedData[5].Replace(separator,\"\") + separator + marks + dumpedData[9].Replace(separator,\"\") + separator + compare_viewname\n\t\t\telse:\n\t\t\t\tviewname = prefix.Replace(separator,\"\") + separator + groupName + separator + ownerName + separator + dumpedData[10].Replace(separator,\"\") + separator + dumpedData[5].Replace(separator,\"\") + separator + marks + dumpedData[9].Replace(separator,\"\") + separator + compare_viewname\n\t\t\t\t\n\t\t\tif viewname != view.Name:\n\t\t\t\ttry:\n\t\t\t\t\tview.Name = viewname\n\t\t\t\texcept:\n\t\t\t\t\tif dumpedData[11] == not_navis_string:\n\t\t\t\t\t\tviewname = prefix.Replace(separator,\"\") + separator + \"Hard\" + separator + error_string + str(random.randrange(1, 1000)) + separator + dumpedData[5].Replace(separator,\"\") + separator + marks + dumpedData[9].Replace(separator,\"\") + separator + compare_viewname\n\t\t\t\t\telse:\n\t\t\t\t\t\tviewname = prefix.Replace(separator,\"\") + separator + groupName.Replace(separator,\"\") + separator + ownerName + separator + dumpedData[10].Replace(separator,\"\") + separator + error_string + str(random.randrange(1, 1000)) + separator + dumpedData[5].Replace(separator,\"\") + separator + marks + dumpedData[9].Replace(separator,\"\") + separator + compare_viewname\n\t\t\t\t\tview.Name = viewname\n\t\t\t\n\t\t\tif exists:\n\t\t\t\tfound.append(True)\n\t\t\t\tif view.IsSectionBoxActive:\n\t\t\t\t\texisted_bbox = doc.GetElement(ElementId(view.Id.IntegerValue-1)).get_BoundingBox(view)\n\t\t\t\t\texisted_bbox_min = existed_bbox.Min\n\t\t\t\t\texisted_bbox_max = existed_bbox.Max\n\t\t\t\t\tif existed_bbox_min.IsAlmostEqualTo(bbox.Min) == False and existed_bbox_max.IsAlmostEqualTo(bbox.Max) == False:\n\t\t\t\t\t\tview.SetSectionBox(bbox)\n\t\t\t\t\t\tdoc.Regenerate()\n\t\t\t\telse:\n\t\t\t\t\tview.SetSectionBox(bbox)\n\t\t\t\t\tdoc.Regenerate()\n\t\t\telse:\n\t\t\t\tnew.append(True)\n\t\t\t\tview.SetSectionBox(bbox)\n\t\t\tif view.CanCategoryBeHidden(level_cat.Id):\n\t\t\t\tview.SetCategoryHidden(level_cat.Id,True)\n\t\t\tif view.CanCategoryBeHidden(scope_cat.Id):\n\t\t\t\tview.SetCategoryHidden(scope_cat.Id,True)\n\t\t\thideElems = List[ElementId]()\n\t\t\tfor dumpedInside in dumpedDataList:\n\t\t\t\tif dumpedData[8] != dumpedInside[8]:\n\t\t\t\t\thideElems.Add(dumpedInside[0].Id)\n\t\t\tif hideElems.Count != 0:\n\t\t\t\tview.HideElements(hideElems)\n\t\t\tif check2 != None:\n\t\t\t\tallElementsId = FilteredElementCollector(doc,view.Id).ToElementIds()\n\t\t\t\tallElementsId.Remove(check1.Id)\n\t\t\t\tif dumpedData[4] == not_linked_string:\n\t\t\t\t\tallElementsId.Remove(check2.Id)\n\t\t\t\t\tview.SetElementOverrides(check2.Id,color_green_d)\n\t\t\t\telse:\n\t\t\t\t\tallElementsId.Remove(myLink.Id)\n\t\t\t\tallElementsId.Remove(dumpedData[0].Id)\n\t\t\t\tfor eachId in allElementsId:\n\t\t\t\t\tview.SetElementOverrides(eachId, over_b)\n\t\t\tview.SetElementOverrides(check1.Id,color_yellow_d)\n\t\tnew = len(new)\n\t\tfound = len(found)\n\t\tif new == 0 and found == 0:\n\t\t\tpass\n\t\telif new > 0 and found == 0:\n\t\t\tmsg = \"Generated \" + str(new) + \" Views\"\n\t\t\tmsgs.append(msg)\n\t\telif found > 0 and new == 0:\n\t\t\tmsg = \"Found \" + str(found) + \" Views\"\n\t\t\tmsgs.append(msg)\n\t\telse:\n\t\t\tmsg = \"Generated \" + str(new) + \" and Found \" + str(found) + \" Views\"\n\t\t\tmsgs.append(msg)\n\t\ttrans.Commit()\n\t\t\n\tif (mode == 2 and cleanup) or mode == 4 or cleanupAll:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans = Transaction(doc, 'K-Clash Views Cleanup')\n\t\ttrans.Start()\n\t\twarnhandle = KaramWarningIgnore()\n\t\tfoptions = trans.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\tfoptions.SetClearAfterRollback(True)\n\t\ttrans.SetFailureHandlingOptions(foptions)\n\t\t\n\t\tsafe_views = []\n\t\t\n\t\tdeleted = []\n\t\t\n\t\tfor dumpedData in dumpedDataList:\n\t\t\tif dumpedData[0].LookupParameter(gen3dparam).AsInteger() == 0 or (generateFixed == False and dumpedData[0].LookupParameter(isfixedparam).AsInteger() == 1):\n\t\t\t\tcontinue\n\t\t\tcompare_viewname = dumpedData[2].Replace(separator,\"\") + andsym + dumpedData[3].Replace(separator,\"\") + separator + dumpedData[4].Replace(separator,\"\")\n\t\t\tcompare_viewname_inversed = dumpedData[3].Replace(separator,\"\") + andsym + dumpedData[2].Replace(separator,\"\") + separator + dumpedData[4].Replace(separator,\"\")\n\t\t\tif compare_viewname in existedView3DsNames:\n\t\t\t\tsafe_views.append(compare_viewname)\n\t\t\telif compare_viewname_inversed in existedView3DsNames: \n\t\t\t\tsafe_views.append(compare_viewname)\n\t\tnon_safe_views = set(existedView3DsNames) - set(safe_views)\n\t\t\n\t\tfor non_save_view in non_safe_views:\n\t\t\tviews_indexes = [i for i in range(len(existedView3DsNames)) if existedView3DsNames[i] == non_save_view]\n\t\t\tfor view_index in views_indexes:\n\t\t\t\tview_to_del_id = filteredViews3Ds[view_index].Id\n\t\t\t\tif active_view_id != view_to_del_id:\n\t\t\t\t\tdoc.Delete(view_to_del_id)\n\t\t\t\t\tdeleted.append(True)\n\t\t\t\telse:\n\t\t\t\t\tmsgs.append(\"Unable to Delete Active View\")\n\t\t\n\t\tdeleted = len(deleted)\n\t\tif deleted > 0:\n\t\t\tmsg = \"Deleted \" + str(deleted) + \" Views\"\n\t\t\tmsgs.append(msg)\n\n\t\ttrans.Commit()\n\t\t\n\tif stopIt:\n\t\tmsgs.append(error_message)\n\t\t\nif len(msgs) > 0:\n\tTaskDialog.Show(Dialogtitle, \"\\n\".join(msgs))\nOUT = \"Done\"",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "46e9d8756ae74922bbcd00780647a57d",
+      "Inputs": [
+        {
+          "Id": "58a25fd2b2804094a1333a83ff31093a",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "37b343be83ee45528dc5cff762c557c6",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e672f8827cba4afcb1a6efc9d57cfdb7",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ca9d28910a234127bf566991243349b9",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "33195cd3028a4342bfdb7018f42618ce",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c9615af4fa584b7cb736f2a408cabf11",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "78bf4c44ac614956bcd4efba545b52df",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d80f9644dc974878b12a76efa9340e6a",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "af03e332f67548afa42e884fd985451d",
+          "Name": "IN[8]",
+          "Description": "Input #8",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f77425f277e94bc4bae6619cbedcd149",
+          "Name": "IN[9]",
+          "Description": "Input #9",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6d6a50420c564a09bca9b8090a678691",
+          "Name": "IN[10]",
+          "Description": "Input #10",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a7f12a9cccb34b869ac889c2bc6838af",
+          "Name": "IN[11]",
+          "Description": "Input #11",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c065a2d20950479bab29dff936d82e70",
+          "Name": "IN[12]",
+          "Description": "Input #12",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "049bab40ac974970afe360b4d92baef1",
+          "Name": "IN[13]",
+          "Description": "Input #13",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b6c63d062fc846a5b15daf347f5bff3c",
+          "Name": "IN[14]",
+          "Description": "Input #14",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9ca462214b3b485197a16099b28fb16e",
+          "Name": "IN[15]",
+          "Description": "Input #15",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d0b6508870934ec6872dac11010af67a",
+          "Name": "IN[16]",
+          "Description": "Input #16",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ff41c56f51f64403a7a52b4ee16886f5",
+          "Name": "IN[17]",
+          "Description": "Input #17",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b24ff989f8474be6a6ce5a8dc6bd7e16",
+          "Name": "IN[18]",
+          "Description": "Input #18",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "335a22e9d402400b85f8eb8437cea8fa",
+          "Name": "IN[19]",
+          "Description": "Input #19",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "09b690c172c640649174e0768847f3bf",
+          "Name": "IN[20]",
+          "Description": "Input #20",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "69db221bf2074787918a2c2da23596d8",
+          "Name": "IN[21]",
+          "Description": "Input #21",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d47ce6fab2f14ca084a467115504ced0",
+          "Name": "IN[22]",
+          "Description": "Input #22",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3a62fc9de02f4cfd985d933b2e5293e0",
+          "Name": "IN[23]",
+          "Description": "Input #23",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ec440792aa82478abce43d4a951d1dfb",
+          "Name": "IN[24]",
+          "Description": "Input #24",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c744523c9c244d3086c46964d221255f",
+          "Name": "IN[25]",
+          "Description": "Input #25",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e63f51e7f5434b72bd8c15fc9b24831c",
+          "Name": "IN[26]",
+          "Description": "Input #26",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2ccb8170dfbe4f0ca0042517d61cb0df",
+          "Name": "IN[27]",
+          "Description": "Input #27",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a880f9d225c84c178116c9daa490daca",
+          "Name": "IN[28]",
+          "Description": "Input #28",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "666671ed2e094fe0a1d13707d00fc05c",
+          "Name": "IN[29]",
+          "Description": "Input #29",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6573f8593e69490eaf097e319e658829",
+          "Name": "IN[30]",
+          "Description": "Input #30",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "60e26ba288ea4e759fec453555589f2a",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFilePath",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "d8e86b943c9347e3a52d10ab40d6015d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8b1086890e3c4b8e96c9b6d836f059ed",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceFamily",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "72e02504c3d34e67addf1469818bd231",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f98e7b13704c49998e29b4d67e249fb2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARMode1NewMarkers2NewViews3CleanupMarkers4CleanupViews5Cleanupall",
+        "TypeName": "int",
+        "TypeRank": 0,
+        "DefaultValue": "1",
+        "Description": ""
+      },
+      "Id": "edfd7150cec24161a7918f6dfdedfc21",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "505c1398bd7a4901ab569e4c65b08f5b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCleanupalongtheway",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "160acde1d8934eda92d121429757701b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b59795453d6b441fad2a0debc841e3b4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARKClashViewsPrefix",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash\"",
+        "Description": ""
+      },
+      "Id": "5b6ec3104c4446019031544ff84639f1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7ce3581c3b274b109033239996514f65",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARKClashViewsSectionBoxExtraOffsetMeters",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "1",
+        "Description": ""
+      },
+      "Id": "a1ac10bd86504ca9a8d00de72a1dbd76",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "623db908b8c84fa9925357a5aacdb2cd",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSetGenerate3DAlwaysOn",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "fa0bd7730dd2452897c30cf1898e9cd0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ba19931a506442b49715432b6a653aa7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARGenerate3DViewsforFixedClashes",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "77d862669ca1456fb5a0e044c68ee69b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "07b3545ead124e7b80d49c691d066361",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFirstElementMarkParameter",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"Mark\"",
+        "Description": ""
+      },
+      "Id": "3388fe2f12594523a3383b1ded140a80",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "494c9afe057e42d0a7a05cc3cf45ae0d",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSecondElementMarkParameter",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"Mark\"",
+        "Description": ""
+      },
+      "Id": "0d13f1cd350949f3bc22119760f82ef1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5d79204ab433416ab33c3f8c7b432e3c",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersGenerate3DParameterYesNo",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Generate 3D\"",
+        "Description": ""
+      },
+      "Id": "c1f8fe7262424aa986dc00a29e6f2918",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "eac47d0e20bf4f87968367c96e9abee6",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersIsFixedParameterYesNo",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Is Fixed\"",
+        "Description": ""
+      },
+      "Id": "fc077baa077f4c82a6b83c60af58e1bd",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "632477cd504840cea21f2114c9b12eec",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashCategoryParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Category\"",
+        "Description": ""
+      },
+      "Id": "496aa2de1ecf433db51767e01ec81e67",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "9ba02537966947e3af7ae75888dbf5cf",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashLevelParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Level\"",
+        "Description": ""
+      },
+      "Id": "c7786de3b9ba4f3fbdbdac356fc8bdc7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ca7f3b4c845f4a75a5a1cb8281c038bf",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersApproxClashValueParameterLengthorNumber",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Distance\"",
+        "Description": ""
+      },
+      "Id": "adc1a644cc544ba4b9494f7212f6dd79",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "61f3357a772543b0bc639f45d9ae7e31",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersIDOneParameterTextorInteger",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_IDone\"",
+        "Description": ""
+      },
+      "Id": "7c8760140b3248908908e70fc4c2b692",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7f12f7509bd94229972830e660c1f8dd",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersIDTwoParameterTextorInteger",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_IDtwo\"",
+        "Description": ""
+      },
+      "Id": "1a10738b423e46a5927411c4ce7a037a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4578819c1d994623a3adf51384dc94e5",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersLinkNameParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Link Name\"",
+        "Description": ""
+      },
+      "Id": "459e4f39dbf143f0b6535c7fcf970c6b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ad8d9adc5d0b4e7681db32066ff390ed",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersSectionBoxDataParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"Data Storage\"",
+        "Description": ""
+      },
+      "Id": "5ef21950ec0d42f285a88f20638de4e1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6e2930136c044ceca0298a06b0ac9c1f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARout",
+      "Id": "65e35ae28f864981978570d708c5366f",
+      "Inputs": [
+        {
+          "Id": "3f05f4ff2c0d488c9808ebd92d79065e",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "b0b15f1d-d87e-4bde-baf0-d90438b15cae",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "1711fefc0c364704befbc18e6821c8ed",
+      "Inputs": [
+        {
+          "Id": "8cfd2c4f88514209ac5161d329595f7f",
+          "Name": "VARInput",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "9fc8d1b5958d4aacb695fed3732b699f",
+          "Name": "VAROutput",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "MetersInput"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashNameParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Name\"",
+        "Description": ""
+      },
+      "Id": "8acc010dfac94e64a88ca7957e494548",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "cf6e809f8d5748d99fc01f564b38e7c2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashStatusParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Status\"",
+        "Description": ""
+      },
+      "Id": "82e072948afd429e9af32f916efe9c9a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "40080bea20ef4660b21d06abf204e49b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashDescriptionParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Description\"",
+        "Description": ""
+      },
+      "Id": "e60f2355863a4644be41d49e82a9dfc6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "88dfddc777ff4292b34f976b73aaddc0",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashCommentsParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Comments\"",
+        "Description": ""
+      },
+      "Id": "0f13b58306514c42a110d99b59dbb114",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4c74c56d04154360b80d93ee2113f1c7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersTestNameParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Test Name\"",
+        "Description": ""
+      },
+      "Id": "19de47d865b14572819cf9a9c8b5b2bb",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4547d9c286f84fd2958c5abb2551a749",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersGroupParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Group\"",
+        "Description": ""
+      },
+      "Id": "509d0f3efb1b42dfb4109687ee93eae8",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6de1e43c0f4c419ba8ebf7d5749e54aa",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersDateParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Date\"",
+        "Description": ""
+      },
+      "Id": "cf7bc1ddcfbf46ec934857ae08757ee9",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "043b3f05a1854909bfdd7ac7e0374957",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersAssignedToParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Assigned To\"",
+        "Description": ""
+      },
+      "Id": "f11bde84246645549a2155b4f7fa4d2e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ab3a9e507f244cd0b61bdeb60af8541f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersApprovedByParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Approved By\"",
+        "Description": ""
+      },
+      "Id": "60209888e1c74d39aa1c31629411dac7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4a4efe31e1c44ad9abdece5babb12b5a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersApprovedDateParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"KClash_Approval Date\"",
+        "Description": ""
+      },
+      "Id": "45b1d0d2175a4b85ac978c379cc764a6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "567f4d1be7a148fca613fa311e29dcfd",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInterferenceParametersClashGUIDParameterText",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"GUID\"",
+        "Description": ""
+      },
+      "Id": "5f81c8ce54ee40cab2e8d1a91151353d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "08ce4acab84543b69173f3bb6d015a15",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARTolleranceInMillimeters",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "1",
+        "Description": ""
+      },
+      "Id": "12000f0ba7e64e868ff627098f971ac9",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2357ab2dad6149ab83421728b893a5c9",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "60e26ba288ea4e759fec453555589f2a",
+      "End": "3f05f4ff2c0d488c9808ebd92d79065e",
+      "Id": "5e5bcd114a3b4a2d9159dbad90873732",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "8b1086890e3c4b8e96c9b6d836f059ed",
+      "End": "58a25fd2b2804094a1333a83ff31093a",
+      "Id": "49f6c602830b4493b6f21d319afcb79e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f98e7b13704c49998e29b4d67e249fb2",
+      "End": "37b343be83ee45528dc5cff762c557c6",
+      "Id": "3f7e4654ed9d4fdc9a90fb7f3349ee8d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "505c1398bd7a4901ab569e4c65b08f5b",
+      "End": "e672f8827cba4afcb1a6efc9d57cfdb7",
+      "Id": "d99dd5a76b874e3e999aa31591de2cf3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b59795453d6b441fad2a0debc841e3b4",
+      "End": "ca9d28910a234127bf566991243349b9",
+      "Id": "c1372525c1394105a5f61a9feea1de60",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7ce3581c3b274b109033239996514f65",
+      "End": "33195cd3028a4342bfdb7018f42618ce",
+      "Id": "bf14e546ca544ff69055c539a409f51d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "623db908b8c84fa9925357a5aacdb2cd",
+      "End": "8cfd2c4f88514209ac5161d329595f7f",
+      "Id": "3455806a1c0e49889856b58d836fbfb9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ba19931a506442b49715432b6a653aa7",
+      "End": "78bf4c44ac614956bcd4efba545b52df",
+      "Id": "e239aeaa5bf948499f7804abeb5e7eb3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "07b3545ead124e7b80d49c691d066361",
+      "End": "d80f9644dc974878b12a76efa9340e6a",
+      "Id": "715a61be98164787b728246ef6cb6432",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "494c9afe057e42d0a7a05cc3cf45ae0d",
+      "End": "af03e332f67548afa42e884fd985451d",
+      "Id": "ad93a9fbfdd2415cbb88ffb8b0246d69",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "5d79204ab433416ab33c3f8c7b432e3c",
+      "End": "f77425f277e94bc4bae6619cbedcd149",
+      "Id": "f52b797a9b6c4f78bebaf7c11bc420dd",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "eac47d0e20bf4f87968367c96e9abee6",
+      "End": "6d6a50420c564a09bca9b8090a678691",
+      "Id": "e681df2565974037be178a4d716185bb",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "632477cd504840cea21f2114c9b12eec",
+      "End": "a7f12a9cccb34b869ac889c2bc6838af",
+      "Id": "f0937d1ed4c944409a4a6e8318df4162",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "9ba02537966947e3af7ae75888dbf5cf",
+      "End": "c065a2d20950479bab29dff936d82e70",
+      "Id": "81e36a368d7847fc84052a3187d26ac5",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ca7f3b4c845f4a75a5a1cb8281c038bf",
+      "End": "049bab40ac974970afe360b4d92baef1",
+      "Id": "e9d7261ff4e54086af7b2b756496235f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "61f3357a772543b0bc639f45d9ae7e31",
+      "End": "b6c63d062fc846a5b15daf347f5bff3c",
+      "Id": "99534e279c69428b8277feb48caf75d0",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7f12f7509bd94229972830e660c1f8dd",
+      "End": "9ca462214b3b485197a16099b28fb16e",
+      "Id": "8b5c18135ac94376bc714895810acb8c",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4578819c1d994623a3adf51384dc94e5",
+      "End": "d0b6508870934ec6872dac11010af67a",
+      "Id": "216d524e8e9d498f9ea2157fe45cb47a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ad8d9adc5d0b4e7681db32066ff390ed",
+      "End": "ff41c56f51f64403a7a52b4ee16886f5",
+      "Id": "63f9c70c193f48cab6206bdedea6dfa3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6e2930136c044ceca0298a06b0ac9c1f",
+      "End": "b24ff989f8474be6a6ce5a8dc6bd7e16",
+      "Id": "34b1638c568546b786a41ae6d9da7580",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "9fc8d1b5958d4aacb695fed3732b699f",
+      "End": "c9615af4fa584b7cb736f2a408cabf11",
+      "Id": "94ab24fd0d244c8786816e5f544fa918",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cf6e809f8d5748d99fc01f564b38e7c2",
+      "End": "335a22e9d402400b85f8eb8437cea8fa",
+      "Id": "97784fb85c7c4212adb4e4a2b82f5d0f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "40080bea20ef4660b21d06abf204e49b",
+      "End": "09b690c172c640649174e0768847f3bf",
+      "Id": "70d3933e059246d983dff6d94f075ca9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "88dfddc777ff4292b34f976b73aaddc0",
+      "End": "69db221bf2074787918a2c2da23596d8",
+      "Id": "b72fa2eaf298465b82d54522e7f5b3ae",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4c74c56d04154360b80d93ee2113f1c7",
+      "End": "d47ce6fab2f14ca084a467115504ced0",
+      "Id": "a7ec89a422294646b0eacd4bd9f96baa",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4547d9c286f84fd2958c5abb2551a749",
+      "End": "3a62fc9de02f4cfd985d933b2e5293e0",
+      "Id": "a740fc13fa4e4dbcb7ab165566dbad1b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6de1e43c0f4c419ba8ebf7d5749e54aa",
+      "End": "ec440792aa82478abce43d4a951d1dfb",
+      "Id": "4212b94815094b0eb69295c6539429aa",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "043b3f05a1854909bfdd7ac7e0374957",
+      "End": "c744523c9c244d3086c46964d221255f",
+      "Id": "1234f27304f04c85abdbce3474ec2c67",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ab3a9e507f244cd0b61bdeb60af8541f",
+      "End": "e63f51e7f5434b72bd8c15fc9b24831c",
+      "Id": "0ab48f69e6b043aea74b9552301c5790",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4a4efe31e1c44ad9abdece5babb12b5a",
+      "End": "2ccb8170dfbe4f0ca0042517d61cb0df",
+      "Id": "67024a5ae1b6457688f12330995274b6",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "567f4d1be7a148fca613fa311e29dcfd",
+      "End": "a880f9d225c84c178116c9daa490daca",
+      "Id": "e4f870925b2346c4b307ea32fbb8022b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "08ce4acab84543b69173f3bb6d015a15",
+      "End": "666671ed2e094fe0a1d13707d00fc05c",
+      "Id": "e09197969d294766a326dede3798371e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2357ab2dad6149ab83421728b893a5c9",
+      "End": "6573f8593e69490eaf097e319e658829",
+      "Id": "500e3f49d8f34c92a7e85c5c63ece526",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "b0b15f1d-d87e-4bde-baf0-d90438b15cae"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Synthesize toolkit",
+      "Version": "12.5.5",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "1711fefc0c364704befbc18e6821c8ed"
+      ]
+    }
+  ],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -11.522818565368652,
+      "EyeY": 7.7286219596862793,
+      "EyeZ": -7.2911200523376465,
+      "LookX": 9.23617935180664,
+      "LookY": -5.6883478164672852,
+      "LookZ": 4.683626651763916,
+      "UpX": 0.25181511044502258,
+      "UpY": 0.95931392908096313,
+      "UpZ": 0.12769435346126556
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "46e9d8756ae74922bbcd00780647a57d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2244.30902414686,
+        "Y": 1355.64591352777
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "d8e86b943c9347e3a52d10ab40d6015d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 174.327430430859,
+        "Y": 0.0
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "72e02504c3d34e67addf1469818bd231",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 133.527430430859,
+        "Y": 152.321720232508
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "edfd7150cec24161a7918f6dfdedfc21",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -76.8725695691413,
+        "Y": 304.643440465016
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "160acde1d8934eda92d121429757701b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 91.927430430858692,
+        "Y": 456.965160697524
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "5b6ec3104c4446019031544ff84639f1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 71.1274304308587,
+        "Y": 609.286880930032
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "a1ac10bd86504ca9a8d00de72a1dbd76",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 13.5274304308587,
+        "Y": 761.60860116254
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "fa0bd7730dd2452897c30cf1898e9cd0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 79.9274304308587,
+        "Y": 913.930321395047
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "77d862669ca1456fb5a0e044c68ee69b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 42.3274304308586,
+        "Y": 1066.25204162756
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "3388fe2f12594523a3383b1ded140a80",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 46.3274304308586,
+        "Y": 1218.57376186006
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "0d13f1cd350949f3bc22119760f82ef1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 42.3274304308586,
+        "Y": 1370.89548209257
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "c1f8fe7262424aa986dc00a29e6f2918",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -97.6725695691414,
+        "Y": 1523.21720232508
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "fc077baa077f4c82a6b83c60af58e1bd",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -72.8725695691413,
+        "Y": 1675.53892255759
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "496aa2de1ecf433db51767e01ec81e67",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -113.672569569141,
+        "Y": 1827.86064279009
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "c7786de3b9ba4f3fbdbdac356fc8bdc7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -83.9703846302616,
+        "Y": 1980.7384813572
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "adc1a644cc544ba4b9494f7212f6dd79",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -103.970384630262,
+        "Y": 2133.06020158971
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "7c8760140b3248908908e70fc4c2b692",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -75.9703846302621,
+        "Y": 2294.18192182222
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "1a10738b423e46a5927411c4ce7a037a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -75.9703846302621,
+        "Y": 2446.50364205473
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "459e4f39dbf143f0b6535c7fcf970c6b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -67.170384630262,
+        "Y": 2598.82536228723
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "5ef21950ec0d42f285a88f20638de4e1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -75.9703846302621,
+        "Y": 2751.14708251974
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Id": "65e35ae28f864981978570d708c5366f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2512.12392992555,
+        "Y": 1332.3760451742
+      },
+      {
+        "Name": "MetersInput",
+        "ShowGeometry": true,
+        "Id": "1711fefc0c364704befbc18e6821c8ed",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 532.611514550613,
+        "Y": 766.51307530924
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "8acc010dfac94e64a88ca7957e494548",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -86.5156204277946,
+        "Y": 2875.8637950073
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "82e072948afd429e9af32f916efe9c9a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -96.2259978075356,
+        "Y": 2989.48080720754
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "e60f2355863a4644be41d49e82a9dfc6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -98.7908971692136,
+        "Y": 3106.0581210868
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "0f13b58306514c42a110d99b59dbb114",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -107.308802108787,
+        "Y": 3219.2510306778
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "19de47d865b14572819cf9a9c8b5b2bb",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -39.293543659902,
+        "Y": 3326.20823312966
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "509d0f3efb1b42dfb4109687ee93eae8",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -36.2909043669392,
+        "Y": 3428.37147356456
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "cf7bc1ddcfbf46ec934857ae08757ee9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -42.7246059835766,
+        "Y": 3531.14041547926
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "f11bde84246645549a2155b4f7fa4d2e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -69.6778575053116,
+        "Y": 3660.22325995264
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "60209888e1c74d39aa1c31629411dac7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -74.0700758793053,
+        "Y": 3752.33232677514
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "45b1d0d2175a4b85ac978c379cc764a6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -62.9451653279674,
+        "Y": 3866.40373316167
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "5f81c8ce54ee40cab2e8d1a91151353d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -30.0798543142687,
+        "Y": 3994.79862810992
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "12000f0ba7e64e868ff627098f971ac9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 84.8146595183527,
+        "Y": 4115.49922677933
+      }
+    ],
+    "Annotations": [],
+    "X": 83.7153881852042,
+    "Y": 144.66894167743715,
+    "Zoom": 0.0863183461619713
+  }
+}

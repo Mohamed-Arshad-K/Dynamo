@@ -1,0 +1,164 @@
+{
+  "Uuid": "c9bd2092-1c1c-4b8c-9c65-f1b1191498b8",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Surface",
+  "Description": "Understand Quad Faces",
+  "Name": "Curves to Quad Surface",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurves=UnwrapElement(IN[0])\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\n# Create Empty List\nresult = []\nfor clist in curves:\n\tif len(clist) == 4:\n\t\ttry:\n\t\t\ttry:\n\t\t\t\tresult.append(dg.Surface.ByLoft([clist[0],clist[2]],[clist[1],clist[3]]))\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\tresult.append(dg.Surface.ByLoft([clist[1],clist[3]],[clist[0],clist[2]]))\n\t\t\t\texcept:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tareas = []\n\t\t\t\t\t\tsurfat = []\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tsurf = dg.Surface.ByLoft([clist[1],clist[3]])\n\t\t\t\t\t\t\tareas.append(surf.Area)\n\t\t\t\t\t\t\tsurfat.append(surf)\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tsurf2 = dg.Surface.ByLoft([clist[0],clist[2]])\n\t\t\t\t\t\t\tareas.append(surf2.Area)\n\t\t\t\t\t\t\tsurfat.append(surf2)\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\t\tmaxarea = max(areas)\n\t\t\t\t\t\tmaxind = areas.index(maxarea)\n\t\t\t\t\t\twantedsurf = surfat[maxind]\n\t\t\t\t\t\tbboxorg = dg.BoundingBox.ByGeometry(clist)\n\t\t\t\t\t\tbboxnew = dg.BoundingBox.ByGeometry(wantedsurf)\n\t\t\t\t\t\tminorg = bboxorg.MinPoint\n\t\t\t\t\t\tmaxorg = bboxorg.MaxPoint\n\t\t\t\t\t\tmidorg = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minorg,maxorg),0.5)\n\t\t\t\t\t\tminnew = bboxnew.MinPoint\n\t\t\t\t\t\tmaxnew = bboxnew.MaxPoint\n\t\t\t\t\t\tmidnew = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minnew,maxnew),0.5)\n\t\t\t\t\t\torgX = round(midorg.X,2)\n\t\t\t\t\t\torgY = round(midorg.Y,2)\n\t\t\t\t\t\torgZ = round(midorg.Z,2)\n\t\t\t\t\t\tnewX = round(midnew.X,2)\n\t\t\t\t\t\tnewY = round(midnew.Y,2)\n\t\t\t\t\t\tnewZ = round(midnew.Z,2)\n\t\t\t\t\t\tdis = dg.Geometry.DistanceTo(midorg,midnew)\n\t\t\t\t\t\tif round(dis,1) == 0:\n\t\t\t\t\t\t\tresult.append(wantedsurf)\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tresult.append(None)\n\t\t\t\t\texcept:\n\t\t\t\t\t\tresult.append(None)\n\t\t\t\t\t\n\t\texcept:\n\t\t\tresult.append(None)\n\telse:\n\t\tresult.append(None)\n# Assign your output to the OUT variable.\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "d85e52beadda4d6b87bda0981ab6dd61",
+      "Inputs": [
+        {
+          "Id": "ef346e7af81d45bbbe58d8a9170e30ed",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "d38a191bdd2042eeb37998bd3bea0f61",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSurfaces",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "63dd0a116e9b4aa8815e8dc7c153c599",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e12922ddbc064951bc98d532becd8731",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARNurbsSurfaces",
+      "Id": "0fbbbeef1061420a9e7189b86eee06ee",
+      "Inputs": [
+        {
+          "Id": "edb7e2d6909d47d7a8cd6f9a606d03c1",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "d38a191bdd2042eeb37998bd3bea0f61",
+      "End": "edb7e2d6909d47d7a8cd6f9a606d03c1",
+      "Id": "4ed9d6cab41e4a5d9f1c22264d4b1144"
+    },
+    {
+      "Start": "e12922ddbc064951bc98d532becd8731",
+      "End": "ef346e7af81d45bbbe58d8a9170e30ed",
+      "Id": "83fe021d37b047d189d36f565d3ad93b"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -38.070590972900391,
+      "EyeY": 51.21893310546875,
+      "EyeZ": -65.626747131347656,
+      "LookX": 27.308614730834961,
+      "LookY": -44.946338653564453,
+      "LookZ": 28.367313385009766,
+      "UpX": 0.41155707836151123,
+      "UpY": 0.80489379167556763,
+      "UpZ": 0.42751228809356689
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "d85e52beadda4d6b87bda0981ab6dd61",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "63dd0a116e9b4aa8815e8dc7c153c599",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "0fbbbeef1061420a9e7189b86eee06ee",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 204.0,
+    "Y": 272.0,
+    "Zoom": 1.0
+  }
+}

@@ -1,0 +1,414 @@
+{
+  "Uuid": "bc563e74-6248-43b4-b8ca-f2f15b5696bb",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Floors",
+  "Description": "Floors By Subregion",
+  "Name": "Floors By Subregion",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\nclr.AddReference('RevitNodes')\nimport Revit\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\nclr.AddReference(\"RevitAPIUI\")\nfrom Autodesk.Revit.UI import TaskDialog\nclr.ImportExtensions(Revit.GeometryConversion)\nimport math\n\nclass WarnSwallowSimple(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndef PointsEqual(pt1, pt2):\n\ttolerance = 0.00001\n\tif (math.fabs(pt1.X - pt2.X) < tolerance and\n\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\n\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\n\t\treturn True\n\telse:\n\t\treturn False\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndef defaultpadtype(doc):\n\ttry:\n\t\tdefaultpad = BuildingPadType.CreateDefault(doc)\n\texcept:\n\t\tdefaultpad = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_BuildingPad).WhereElementIsElementType().ToElements()[0]\n\treturn defaultpad\n\ndef hideEdges(doc,isroof):\n\tif isroof:\n\t\tfloorcat = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Roofs).SubCategories\n\telse:\n\t\tfloorcat = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Floors).SubCategories\n\tfor f in floorcat:\n\t\tif f.Name == \"Interior Edges\":\n\t\t\twantedsub = f\n\t\t\tbreak\n\tdoc.ActiveView.SetCategoryHidden(wantedsub.Id,True)\n\treturn True\n\nsubregions = UnwrapElement(flatten(tolist(IN[0])))\nfloortype = UnwrapElement(IN[1])\ncreatepads = IN[2]\nfloor_level = UnwrapElement(IN[3])\npad_level = UnwrapElement(IN[4])\ntollerance = IN[5]\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nlevels = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Levels).WhereElementIsNotElementType().ToElements()\nfloors = []\nTransactionManager.Instance.ForceCloseTransaction()\ntrans = Transaction(doc, 'Create Floor From Subregion')\ntrans.Start()\nwarnhandle = WarnSwallowSimple()\nfoptions = trans.GetFailureHandlingOptions()\nfoptions.SetFailuresPreprocessor(warnhandle)\nfoptions.SetClearAfterRollback(True)\ntrans.SetFailureHandlingOptions(foptions)\nshowmsg = False\n\nif floortype.ToString() == \"Autodesk.Revit.DB.RoofType\":\n\tisroof = True\nelse:\n\tisroof = False\n\nfor subregion in subregions:\n\ttry:\n\t\tpivotpoint = subregion.get_BoundingBox(None).Min.Z\n\t\telvs = []\n\t\tfor l in levels:\n\t\t\telvs.append(l.Elevation)\n\t\taccepted = []\n\t\tcount = 0\n\t\tfor e in elvs:\n\t\t\tif e < pivotpoint:\n\t\t\t\taccepted.append(e)\n\t\ttry:\n\t\t\twantedlevel = levels[elvs.IndexOf(max(accepted))]\n\t\texcept:\n\t\t\twantedlevel = levels[0]\n\t\tloops = subregion.AsSiteSubRegion().GetBoundary()\n\t\tcarray = []\n\t\tfor loop in loops:\n\t\t\ttmploop = CurveLoop()\n\t\t\tfor l in loop:\n\t\t\t\ttmploop.Append(l)\n\t\t\tcarray.append(tmploop)\n\t\tif floor_level == None:\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022 or isroof:\n\t\t\t\tcarrayOLD =  CurveArray()\n\t\t\t\tbigloop = list(loops)[0]\n\t\t\t\tif len(list(loops)) > 1:\n\t\t\t\t\tshowmsg = True\n\t\t\t\tfor lo in bigloop:\n\t\t\t\t\tcarrayOLD.Append(lo)\n\t\t\t\tif isroof:\n\t\t\t\t\tfloor = doc.Create.NewFootPrintRoof(carrayOLD,wantedlevel,floortype,clr.StrongBox[ModelCurveArray](ModelCurveArray()))\n\t\t\t\telse:\n\t\t\t\t\tfloor = doc.Create.NewFloor(carrayOLD,floortype,wantedlevel,False)\n\t\t\telse:\n\t\t\t\tif isroof:\n\t\t\t\t\tfloor = doc.Create.NewFootPrintRoof(carrayOLD,wantedlevel,floortype,clr.StrongBox[ModelCurveArray](ModelCurveArray()))\n\t\t\t\telse:\n\t\t\t\t\tfloor = Floor.Create(doc,carray,floortype.Id,wantedlevel.Id)\n\t\telse:\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022 or isroof:\n\t\t\t\tcarrayOLD =  CurveArray()\n\t\t\t\tbigloop = list(loops)[0]\n\t\t\t\tif len(list(loops)) > 1:\n\t\t\t\t\tshowmsg = True\n\t\t\t\tfor lo in bigloop:\n\t\t\t\t\tcarrayOLD.Append(lo)\n\t\t\t\tif isroof:\n\t\t\t\t\tfloor = doc.Create.NewFootPrintRoof(carrayOLD,floor_level,floortype,clr.StrongBox[ModelCurveArray](ModelCurveArray()))\n\t\t\t\telse:\n\t\t\t\t\tfloor = doc.Create.NewFloor(carrayOLD,floortype,floor_level,False)\n\t\t\telse:\n\t\t\t\tif isroof:\n\t\t\t\t\tfloor = doc.Create.NewFootPrintRoof(carrayOLD,floor_level,floortype,clr.StrongBox[ModelCurveArray](ModelCurveArray()))\n\t\t\t\telse:\n\t\t\t\t\tfloor = Floor.Create(doc,carray,floortype.Id,floor_level.Id)\n\t\tdoc.Regenerate()\n\t\tif isroof:\n\t\t\tlevelelv = doc.GetElement(floor.LookupParameter(\"Base Level\").AsElementId()).Elevation\n\t\t\tfloor.LookupParameter(\"Base Offset From Level\").Set(-1.0*floortype.LookupParameter(\"Default Thickness\").AsDouble())\n\t\t\toffsetelv = floor.LookupParameter(\"Base Offset From Level\").AsDouble()\n\t\telse:\n\t\t\tlevelelv = doc.GetElement(floor.LookupParameter(\"Level\").AsElementId()).Elevation\n\t\t\toffsetelv = floor.LookupParameter(\"Height Offset From Level\").AsDouble()\n\t\tif isroof:\n\t\t\tbothelvs = levelelv + offsetelv + floortype.LookupParameter(\"Default Thickness\").AsDouble()\n\t\telse:\n\t\t\tbothelvs = levelelv + offsetelv\n\t\tsubpoints = subregion.GetPoints()\n\t\ttransubpoints = []\n\t\tfor sub in subpoints:\n\t\t\ttransubpoints.append(sub.ToPoint())\n\t\ttransubpoints = dg.Point.PruneDuplicates(transubpoints,tollerance)\n\t\tsubpoints = []\n\t\tfor tran in transubpoints:\n\t\t\tsubpoints.append(tran.ToXyz())\n\t\tfloor.SlabShapeEditor.ResetSlabShape()\n\t\tif createpads:\n\t\t\tfloortypethickness = 0\n\t\telse:\n\t\t\tfloortypethickness = floortype.LookupParameter(\"Default Thickness\").AsDouble()\n\t\tpts = []\n\t\tgoodzeros = []\n\t\tfor p in subpoints:\n\t\t\tp = XYZ(p.X,p.Y,p.Z+floortypethickness)\n\t\t\tfloor.SlabShapeEditor.DrawPoint(p)\n\t\t\tif round((p.Z) - bothelvs,4) == 0:\n\t\t\t\tgoodzeros.append(p)\n\t\tallverts = floor.SlabShapeEditor.SlabShapeVertices\n\t\tpositions = []\n\t\tposcounts = []\n\t\ttofixes = []\n\t\tneedsfix = False\n\t\tposcount = 0\n\t\tnewallverts = []\n\t\tfor vert in allverts:\n\t\t\txyzpos = vert.Position\n\t\t\tisgoodzero = False\n\t\t\tfor goodzero in goodzeros:\n\t\t\t\tif PointsEqual(xyzpos,goodzero):\n\t\t\t\t\tisgoodzero = True\n\t\t\t\t\tnewallverts.append([vert,isgoodzero])\n\t\t\t\t\tbreak\n\t\t\tif isgoodzero == False:\n\t\t\t\tnewallverts.append([vert,isgoodzero])\n\t\tallverts = newallverts\n\t\tfor vert in allverts:\n\t\t\tcheck = vert[1]\n\t\t\tvert = vert[0]\n\t\t\txyzpos = vert.Position\n\t\t\tpositions.append(xyzpos)\n\t\t\tz = round(xyzpos.Z - bothelvs,4)\n\t\t\tif z == 0 and check == False:\n\t\t\t\ttofixes.append([vert,xyzpos.ToPoint()])\n\t\t\t\tposcounts.append(poscount)\n\t\t\t\tneedsfix = True\n\t\t\tposcount += 1\n\t\tif needsfix:\n\t\t\ttranned = []\n\t\t\tnewcount = 0\n\t\t\tfor pos in positions:\n\t\t\t\tif newcount not in poscounts:\n\t\t\t\t\ttranned.append(pos.ToPoint())\n\t\t\t\tnewcount += 1\n\t\t\tfor tofix in tofixes:\n\t\t\t\tvert = tofix[0]\n\t\t\t\tpt = tofix[1]\n\t\t\t\tdises = []\n\t\t\t\tfor tran in tranned:\n\t\t\t\t\tdises.append(dg.Geometry.DistanceTo(pt,tran))\n\t\t\t\tnearestZ = tranned[dises.IndexOf(min(dises))].ToXyz().Z - bothelvs\n\t\t\t\tfloor.SlabShapeEditor.ModifySubElement(vert,nearestZ)\n\t\tif createpads:\n\t\t\tdoc.Delete(subregion.Id)\n\t\t\tif pad_level == None:\n\t\t\t\tpad = Architecture.BuildingPad.Create(doc,defaultpadtype(doc).Id,wantedlevel.Id,carray)\n\t\t\telse:\n\t\t\t\tpad = Architecture.BuildingPad.Create(doc,defaultpadtype(doc).Id,pad_level.Id,carray)\n\t\t\tfloors.append([floor,pad])\n\t\telse:\n\t\t\tfloors.append(floor)\n\texcept:\n\t\tfloors.append(None)\nhideEdges(doc,isroof)\ntrans.Commit()\n\nif showmsg:\n\tif isroof:\n\t\tmsg = \"Multiple Loops In A Single Subregion Is Not Supported\\n\\nUse Topography.Subregions Separate Script to Separate Subregions If Possible.\"\n\telse:\n\t\tmsg = \"Multiple Loops Were Discarded\\nUse Revit 2022 or Above.\"\n\ttitle = \"AECedx - Karam\"\n\tTaskDialog.Show(title, msg)\n\t\nOUT = floors",
+      "VariableInputPorts": true,
+      "Id": "6742344e3a744de69a5be9787f960caa",
+      "Inputs": [
+        {
+          "Id": "11821a89e6b64e98b0d99a9cf3bd0fcb",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "358dd677d57443438aa53211bd6a9773",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f38db8bb2228499cbb277cba033266a0",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e0256106116f4cbd87e9d662a56d8d64",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "035b6e81cbb44ef4b858cc0528b66062",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "88bb606872d34c2faaa3580f8d135abe",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "877364d404274c34bf1c9e9de5c412ab",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSubregions",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "78770869d5db46f083077d90460c4471",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a1a6b91b547e44bfb8a39f9b62b9deb2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFloorType",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "b3f53b2f45b44da3bf6485bb77e34115",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5614f26d4e3442469ba4adf2d5bf5ca5",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFloors",
+      "Id": "38bf03cbbf214c95af53a43f1958e49b",
+      "Inputs": [
+        {
+          "Id": "b487f3d611ab4eaca83ccbe1705721e7",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCreatePads",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "47af95832b134885b419151790b3822f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "81751cb2460c418a9ada202d6d9dcf03",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFloorLevel",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "ba6ee2482c81450a9cc50b8cdea0175e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "31f4043ab4cb482f854792d0d4fe4a17",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPadLevel",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "e66ba22b7c744458b79a23f7de6857cf",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "db712f7374b8431bb758d0ddd1c30a43",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARTollerance",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.001",
+        "Description": ""
+      },
+      "Id": "b889eadcd71143fea2012cee41c019a3",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ba1e15d8633a4cbab14e504021e779e3",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "877364d404274c34bf1c9e9de5c412ab",
+      "End": "b487f3d611ab4eaca83ccbe1705721e7",
+      "Id": "e36f33d1efbe412182649cf190ef0d00"
+    },
+    {
+      "Start": "a1a6b91b547e44bfb8a39f9b62b9deb2",
+      "End": "11821a89e6b64e98b0d99a9cf3bd0fcb",
+      "Id": "80b93442f3ed4a81b324d104944e3bec"
+    },
+    {
+      "Start": "5614f26d4e3442469ba4adf2d5bf5ca5",
+      "End": "358dd677d57443438aa53211bd6a9773",
+      "Id": "c4442402544d4e6cb70388f506205742"
+    },
+    {
+      "Start": "81751cb2460c418a9ada202d6d9dcf03",
+      "End": "f38db8bb2228499cbb277cba033266a0",
+      "Id": "8594c9d6c0e44cefa48870ca99b77954"
+    },
+    {
+      "Start": "31f4043ab4cb482f854792d0d4fe4a17",
+      "End": "e0256106116f4cbd87e9d662a56d8d64",
+      "Id": "6e3d1561d773463e82f97d0fdf0082d2"
+    },
+    {
+      "Start": "db712f7374b8431bb758d0ddd1c30a43",
+      "End": "035b6e81cbb44ef4b858cc0528b66062",
+      "Id": "8bf64a2716b04b5fafb9fc4dff20b47d"
+    },
+    {
+      "Start": "ba1e15d8633a4cbab14e504021e779e3",
+      "End": "88bb606872d34c2faaa3580f8d135abe",
+      "Id": "e8c64e1d3476441086740e6494b5d4a5"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -10761.78515625,
+      "EyeY": 18061.265625,
+      "EyeZ": 3217.849609375,
+      "LookX": -1900.28759765625,
+      "LookY": -11829.244140625,
+      "LookZ": -13009.099609375,
+      "UpX": -0.071394257247447968,
+      "UpY": 0.86949491500854492,
+      "UpZ": -0.4887549877166748
+    },
+    "NodeViews": [
+      {
+        "Id": "6742344e3a744de69a5be9787f960caa",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 445.2,
+        "Y": 51.2
+      },
+      {
+        "Id": "78770869d5db46f083077d90460c4471",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "b3f53b2f45b44da3bf6485bb77e34115",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 150.0
+      },
+      {
+        "Id": "38bf03cbbf214c95af53a43f1958e49b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 645.0,
+        "Y": 51.2
+      },
+      {
+        "Id": "47af95832b134885b419151790b3822f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -3.99999999999989,
+        "Y": 268.8
+      },
+      {
+        "Id": "ba6ee2482c81450a9cc50b8cdea0175e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.869580208244372,
+        "Y": 342.144983197026
+      },
+      {
+        "Id": "e66ba22b7c744458b79a23f7de6857cf",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -0.807493179408766,
+        "Y": 443.607923150058
+      },
+      {
+        "Id": "b889eadcd71143fea2012cee41c019a3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -40.5573801319668,
+        "Y": 521.819024506278
+      }
+    ],
+    "Annotations": [],
+    "X": 205.105819133718,
+    "Y": 220.667038275893,
+    "Zoom": 0.413206959947241
+  }
+}

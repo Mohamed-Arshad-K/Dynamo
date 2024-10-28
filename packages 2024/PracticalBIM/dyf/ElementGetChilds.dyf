@@ -1,0 +1,165 @@
+{
+  "Uuid": "648692e5-0e2c-4511-bbf4-f6b3957b14a9",
+  "IsCustomNode": true,
+  "Category": "PracticalBIM.Revit.Elements.Element",
+  "Description": "Gets the Elements Nested Components",
+  "Name": "ElementGetChilds",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "element",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "ee70aa9319e842e8aa9481b0c841de80",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e158ecc651004acb9b81b14d4603a28c",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\nitems = UnwrapElement(IN[0])\r\n\r\ndef GetSubComponents(item):\r\n\t# FamilyInstances\r\n\tif hasattr(item, \"GetSubComponentIds\"):\r\n\t\treturn [item.Document.GetElement(x) for x in item.GetSubComponentIds()]\r\n\t# Stairs\r\n\telif hasattr(item, \"GetStairsLandings\"):\r\n\t\tstair_comps = [item.Document.GetElement(x) for x in item.GetStairsLandings()]\r\n\t\tstair_comps.extend([item.Document.GetElement(x) for x in item.GetStairsRuns()])\r\n\t\tstair_comps.extend([item.Document.GetElement(x) for x in item.GetStairsSupports()])\r\n\t\treturn stair_comps\r\n\t# Railings\r\n\telif hasattr(item, \"GetHandRails\"):\r\n\t\trail_comps = [item.Document.GetElement(x) for x in item.GetHandRails()]\r\n\t\trail_comps.append(item.Document.GetElement(item.TopRail))\r\n\t\treturn rail_comps\r\n\t# Beam systems\r\n\telif hasattr(item, \"GetBeamIds\"):\r\n\t\treturn [item.Document.GetElement(x) for x in item.GetBeamIds()]\r\n\telse: return []\r\n\r\nif isinstance(IN[0], list): OUT = [GetSubComponents(x) for x in items]\r\nelse: OUT = GetSubComponents(items)",
+      "VariableInputPorts": true,
+      "Id": "4ee2a6e1a6d845d6b7f45ab956c1880c",
+      "Inputs": [
+        {
+          "Id": "3f5b794d362a44e1bb0a91f37e2df2d5",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "2d7088dcfc7846d79d9ea2b64256c19c",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "subComponents",
+      "Id": "68727551e23b48878e106624000768e9",
+      "Inputs": [
+        {
+          "Id": "5d906af7bf0842aea9b615b1f635ca3d",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "e158ecc651004acb9b81b14d4603a28c",
+      "End": "3f5b794d362a44e1bb0a91f37e2df2d5",
+      "Id": "7dfaea98726942b3bb81af3284db4ef9"
+    },
+    {
+      "Start": "2d7088dcfc7846d79d9ea2b64256c19c",
+      "End": "5d906af7bf0842aea9b615b1f635ca3d",
+      "Id": "ccb9a09614a842ac8de7f2814ebaa960"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.3.0.5885",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "ee70aa9319e842e8aa9481b0c841de80",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 888.94522830011852,
+        "Y": 48.188593977572395
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "4ee2a6e1a6d845d6b7f45ab956c1880c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1166.9452283001185,
+        "Y": 48.188593977572395
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "68727551e23b48878e106624000768e9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1390.9452283001185,
+        "Y": 48.188593977572395
+      }
+    ],
+    "Annotations": [],
+    "X": 0.0,
+    "Y": 0.0,
+    "Zoom": 1.0
+  }
+}

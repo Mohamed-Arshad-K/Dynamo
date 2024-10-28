@@ -1,0 +1,682 @@
+{
+  "Uuid": "b814fd86-d3b3-400f-863e-7d0650bd5bc2",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.Ampersand.Geometry.Curve",
+  "Description": "Create polycurves from an unordered list of curves.",
+  "Name": "AS.[&] PolyCurve.ByCurves With Surface Laundry",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Autodesk.Point": {
+        "Key": "Autodesk.DesignScript.Geometry.Point",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.DesignScript.Geometry.Point": {
+        "Key": "Autodesk.DesignScript.Geometry.Point",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.Curve": {
+        "Key": "Autodesk.DesignScript.Geometry.Curve",
+        "Value": "ProtoGeometry.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.PolyCurve.ByJoinedCurves@Autodesk.DesignScript.Geometry.Curve[],double",
+      "Id": "fcf12cbbb8dd44cc8b30d88f5c897fb8",
+      "Inputs": [
+        {
+          "Id": "944f7211e56f412284ab131b2ea81c59",
+          "Name": "curves",
+          "Description": "Curves to join into polycurve\n\nCurve[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "625ae96ae3ec42d4a495dd181dae2e32",
+          "Name": "joinTolerance",
+          "Description": "Tolerance to determine size of gap allowed between curves to be joined\n\ndouble\nDefault value : 0.001",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "ffc5cc818d174c1985cdcf072391e25a",
+          "Name": "PolyCurve",
+          "Description": "PolyCurve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Make PolyCurve by joining curves. Flips curve as needed for connectivity. Choose a preferred join tolerance between 1e-6 and 1e-3 units.\n\nPolyCurve.ByJoinedCurves (curves: Curve[], joinTolerance: double = 0.001): PolyCurve"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Assign curves to groups according to whether they are connected via shared start points and end points.  Group numbers are not important.\r\n# Colin McCrone, 2015-09-28\r\n# Improved By Karam Baki\r\nimport clr\r\n# Enable Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\n\r\n\r\n# Enable DocumentManager and TransactionManager\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nimport math\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\ndef unitconverter(value,doc,frominternal=True):\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\tif frominternal:\r\n\t\t\tvalue = UnitUtils.ConvertFromInternalUnits(value,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\telse:\r\n\t\t\tvalue = UnitUtils.ConvertToInternalUnits(value,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\telse:\r\n\t\tif frominternal:\r\n\t\t\tvalue = UnitUtils.ConvertFromInternalUnits(value,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\telse:\r\n\t\t\tvalue = UnitUtils.ConvertToInternalUnits(value,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\treturn value\r\n\r\nscaledown = round(unitconverter(0.3048,doc,False),8)\r\nscaleup = round(unitconverter(3.280839895,doc,True),8)\r\n\r\n# Determine whether two points are equal\r\ndef PointsEqual(pt1, pt2):\r\n\ttolerance = 0.00001\r\n\t\r\n\tif (math.fabs(pt1.X - pt2.X) < tolerance and\r\n\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\r\n\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n# Get input\r\ncrvs = IN[0]\r\n\r\nscaledcurves = []\r\nif scaledown != 1:\r\n\tfor c in crvs:\r\n\t\tscaledcurves.append(Geometry.Scale(c,scaledown,scaledown,scaledown))\r\n\tcrvs = scaledcurves\r\n\r\n# List the group to which each curve belongs\r\ncrvGroup = [-1 for x in range(len(crvs))]\r\ncrvGroup[0] = 0\r\nmaxGroupNum = 1\r\n\r\n\r\n# Find start and end points for each curve\r\nstarts = []\r\nends = []\r\nfor crv in crvs:\r\n\tstarts.append(Curve.PointAtParameter(crv,0))\r\n\tends.append(crv.PointAtParameter(1))\r\n\r\n\r\n# Find connected groups of curves\r\nfor i in range(len(crvs)):\r\n\t# Add i to its own group it not already part of a group\r\n\tif (crvGroup[i] == -1):\r\n\t\tcrvGroup[i] = i\r\n\t\r\n\t# Find connections\r\n\tfor j in range(len(crvs)):\r\n\t\tif (i != j and\r\n\t\t\t(PointsEqual(starts[i], starts[j]) or\r\n\t\t\tPointsEqual(starts[i], ends[j]) or\r\n\t\t\tPointsEqual(ends[i], starts[j]) or\r\n\t\t\tPointsEqual(ends[i], ends[j]))):\r\n\t\t\t\r\n\t\t\t# Add j to i group\r\n\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t# Add j group to i group\r\n\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\r\n\r\n# Output the (arbitrary) group numbers\r\nOUT = crvGroup,scaleup,scaledown",
+      "VariableInputPorts": true,
+      "Id": "166b7f8deb844d1d91dfc0a9892d27d0",
+      "Inputs": [
+        {
+          "Id": "d66f00edd68c40a792658d60cc09ca1a",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "9d842a69d6d8402192caa5361c396574",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARcurves",
+        "TypeName": "Autodesk.DesignScript.Geometry.Curve",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "f07d9f54f6394685b9622e697d232e3d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a551cc3e18074f2e9754e2acf6eea30f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARSurfaces",
+      "Id": "0ec3577a4cca4579ad1e6d05b0319b97",
+      "Inputs": [
+        {
+          "Id": "705b75f42cc74a758d2657c230316559",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GroupByKey@var[]..[],var[]..[]",
+      "Id": "b515fdb507174218b8ba351b90407e32",
+      "Inputs": [
+        {
+          "Id": "bbc40e1ff5804a2e86f89ccf94de229c",
+          "Name": "list",
+          "Description": "List of items to group as sublists\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "05e92e486b504d25841b6ebc25afa703",
+          "Name": "keys",
+          "Description": "Key values, one per item in the input list, used for grouping the items\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "18264d3143634d67ae16362ea1451ba6",
+          "Name": "groups",
+          "Description": "list of sublists, with items grouped by like key values",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a889742147204f80836c3751cff50a1f",
+          "Name": "unique keys",
+          "Description": "key value corresponding to each group",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Group items into sub-lists based on their like key values\n\nList.GroupByKey (list: var[]..[], keys: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "a[0];\na[1];\na[2];",
+      "Id": "20cce1bc38fc4c7ca05246cd49f0e0d0",
+      "Inputs": [
+        {
+          "Id": "9061ebb3f139483bb3102e93ab4284a7",
+          "Name": "a",
+          "Description": "a",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b978daa18567464bbd192d97e49567b5",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ea09b8f99cf44896925463a3e29e23b1",
+          "Name": "",
+          "Description": "Value of expression at line 2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "93b4572eb74b4be6a4feff25e9e43004",
+          "Name": "",
+          "Description": "Value of expression at line 3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "1a497bc2-1eed-4b9b-8351-6408bae43556",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "e69e7393ccce4606803f92a2f4ed3a1c",
+      "Inputs": [
+        {
+          "Id": "bbe4ee6380cb47319fe26508ebb63e12",
+          "Name": "VARSurfaceOrPolyCurvesList",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6b3f629feefd4945bf4ef3b5ae344ec8",
+          "Name": "VARPrecision",
+          "Description": "double\nDefault value : 0.1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1821a225a3834ab2b9745be448106b7c",
+          "Name": "VAROut",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Surface Laundry"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPrecision",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.1",
+        "Description": ""
+      },
+      "Id": "488885ca458046e99fdc10be9276afae",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a211a4c2a5fa4a5d8a3feb3bdd622375",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.Curve.ToNurbsCurve",
+      "Id": "3b16547188eb4d9f8a9b4c7a36b07554",
+      "Inputs": [
+        {
+          "Id": "606dd71e586a470187dc9fe248311258",
+          "Name": "curve",
+          "Description": "Autodesk.DesignScript.Geometry.Curve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "06cbf6ef707c4eaf9f3854b60734757a",
+          "Name": "NurbsCurve",
+          "Description": "A NurbsCurve approximating the Curve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Converts the Curve to a NurbsCurve approximation\n\nCurve.ToNurbsCurve ( ): NurbsCurve"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.NurbsCurve.ControlPoints",
+      "Id": "517f6c52820b4cf1870c643c79bf0a68",
+      "Inputs": [
+        {
+          "Id": "3899602920ca47a8b83052de6199b052",
+          "Name": "nurbsCurve",
+          "Description": "Autodesk.DesignScript.Geometry.NurbsCurve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "ad4e5ddd93cb46368008d100d9722f32",
+          "Name": "Point[]",
+          "Description": "An Array of Points",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Get the control points of the NurbsCurve. These are the points that the curve interpolates.\n\nNurbsCurve.ControlPoints ( ): Point[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.NurbsCurve.ByControlPoints@Autodesk.DesignScript.Geometry.Point[]",
+      "Id": "f4f9c74c626449d0b1a53cc7dfe1601b",
+      "Inputs": [
+        {
+          "Id": "9a0e59a8dbea45f0a73248a340b0bc98",
+          "Name": "points",
+          "Description": "Point[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b1baf08209864dba865bb187144db664",
+          "Name": "NurbsCurve",
+          "Description": "NurbsCurve",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Create a BSplineCurve by using explicit control points. NOTE 1: BSplineCurves with deg=1 have G1 discontinuities, which cause problems for extrusion, sweep, and other operations. They should be avoided. Use a PolyCurve instead. NOTE 2: If the curve is periodic (closed), then the first and last points MUST be the same.\n\nNurbsCurve.ByControlPoints (points: Point[]): NurbsCurve"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAScaleUp",
+      "Id": "63bd5f20f9394c44804c9f9a7157d739",
+      "Inputs": [
+        {
+          "Id": "1999b36d2aaf4a97b6a95cfaf326ea10",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAScaleDown",
+      "Id": "84132a18022447d886146a0b76e46b88",
+      "Inputs": [
+        {
+          "Id": "f2906a48dbf743e18e22b44af9aa8f05",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "ffc5cc818d174c1985cdcf072391e25a",
+      "End": "bbe4ee6380cb47319fe26508ebb63e12",
+      "Id": "6f6d6229178f49f98ad088c4865d691a"
+    },
+    {
+      "Start": "9d842a69d6d8402192caa5361c396574",
+      "End": "9061ebb3f139483bb3102e93ab4284a7",
+      "Id": "7f65b2f6aa544f9c84446075a51756c4"
+    },
+    {
+      "Start": "a551cc3e18074f2e9754e2acf6eea30f",
+      "End": "d66f00edd68c40a792658d60cc09ca1a",
+      "Id": "54b0871b641a4627999205173c4339dc"
+    },
+    {
+      "Start": "a551cc3e18074f2e9754e2acf6eea30f",
+      "End": "606dd71e586a470187dc9fe248311258",
+      "Id": "0fb136e79c0a49e8a26cc4bbac5e16b4"
+    },
+    {
+      "Start": "18264d3143634d67ae16362ea1451ba6",
+      "End": "944f7211e56f412284ab131b2ea81c59",
+      "Id": "87303e04ea1d40959729426765b94e8a"
+    },
+    {
+      "Start": "b978daa18567464bbd192d97e49567b5",
+      "End": "05e92e486b504d25841b6ebc25afa703",
+      "Id": "993bad0e04604946bfd3fc8bd98390fe"
+    },
+    {
+      "Start": "ea09b8f99cf44896925463a3e29e23b1",
+      "End": "1999b36d2aaf4a97b6a95cfaf326ea10",
+      "Id": "0578237e47014a1c943a7a8d5bfc1d36"
+    },
+    {
+      "Start": "93b4572eb74b4be6a4feff25e9e43004",
+      "End": "f2906a48dbf743e18e22b44af9aa8f05",
+      "Id": "3d8272d9078a424fb32c35ffb4a7939d"
+    },
+    {
+      "Start": "1821a225a3834ab2b9745be448106b7c",
+      "End": "705b75f42cc74a758d2657c230316559",
+      "Id": "bbd0abc36ae84527af0c231ec8839f44"
+    },
+    {
+      "Start": "a211a4c2a5fa4a5d8a3feb3bdd622375",
+      "End": "6b3f629feefd4945bf4ef3b5ae344ec8",
+      "Id": "7fc9f23394274d299627baab3d4773ef"
+    },
+    {
+      "Start": "06cbf6ef707c4eaf9f3854b60734757a",
+      "End": "3899602920ca47a8b83052de6199b052",
+      "Id": "fb85a5f8869e487cb5762f4bdedc8af6"
+    },
+    {
+      "Start": "ad4e5ddd93cb46368008d100d9722f32",
+      "End": "9a0e59a8dbea45f0a73248a340b0bc98",
+      "Id": "3a7710c5c6274aa1a2996cee12a5981c"
+    },
+    {
+      "Start": "b1baf08209864dba865bb187144db664",
+      "End": "bbc40e1ff5804a2e86f89ccf94de229c",
+      "Id": "50874fd384d546ccbf25585e9e560b47"
+    }
+  ],
+  "Dependencies": [
+    "1a497bc2-1eed-4b9b-8351-6408bae43556"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 17407.5390625,
+      "EyeY": 55553.7578125,
+      "EyeZ": 43279.40625,
+      "LookX": -17407.5390625,
+      "LookY": -55553.7578125,
+      "LookZ": -43279.40625,
+      "UpX": -0.2276817262172699,
+      "UpY": 0.7922896146774292,
+      "UpZ": -0.56607258319854736
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "PolyCurve.ByJoinedCurves",
+        "Id": "fcf12cbbb8dd44cc8b30d88f5c897fb8",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1464.89256413301,
+        "Y": -84.1640659926279
+      },
+      {
+        "ShowGeometry": false,
+        "Name": "Python Script",
+        "Id": "166b7f8deb844d1d91dfc0a9892d27d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 518.995253243563,
+        "Y": 84.6374685060953
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "f07d9f54f6394685b9622e697d232e3d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -578.148424571862,
+        "Y": -10.0296863118795
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "0ec3577a4cca4579ad1e6d05b0319b97",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2213.00068803944,
+        "Y": 33.0760024295643
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.GroupByKey",
+        "Id": "b515fdb507174218b8ba351b90407e32",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1174.2721958175,
+        "Y": -93.4115107398411
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Code Block",
+        "Id": "20cce1bc38fc4c7ca05246cd49f0e0d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 764.818648316359,
+        "Y": 36.4061287711678
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Surface Laundry",
+        "Id": "e69e7393ccce4606803f92a2f4ed3a1c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1768.79593024939,
+        "Y": 11.9055819407672
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "488885ca458046e99fdc10be9276afae",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -584.558596639055,
+        "Y": 98.4742300277292
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Curve.ToNurbsCurve",
+        "Id": "3b16547188eb4d9f8a9b4c7a36b07554",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -190.431795169145,
+        "Y": -96.2642769573764
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "NurbsCurve.ControlPoints",
+        "Id": "517f6c52820b4cf1870c643c79bf0a68",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 96.668829673004,
+        "Y": -147.5617949407
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "NurbsCurve.ByControlPoints",
+        "Id": "f4f9c74c626449d0b1a53cc7dfe1601b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 501.92824457924,
+        "Y": -149.51606176014
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "63bd5f20f9394c44804c9f9a7157d739",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2253.31301004643,
+        "Y": 258.497221701084
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "84132a18022447d886146a0b76e46b88",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 2287.93298495147,
+        "Y": 359.339622229429
+      }
+    ],
+    "Annotations": [
+      {
+        "Id": "53cd5f573915448f8394357bb4ceb898",
+        "Title": "Assigns curves to groups with unique (arbirary) numbers.",
+        "Nodes": [],
+        "Left": 451.816088842496,
+        "Top": 29.6019834513141,
+        "Width": 0.0,
+        "Height": 0.0,
+        "FontSize": 36.0,
+        "InitialTop": 0.0,
+        "InitialHeight": 0.0,
+        "TextblockHeight": 0.0,
+        "Background": "#FFC1D676"
+      }
+    ],
+    "X": 228.894911601768,
+    "Y": 261.924806279867,
+    "Zoom": 0.253164449168575
+  }
+}

@@ -1,0 +1,264 @@
+{
+  "Uuid": "dce8abec-fafd-4652-945e-164c7cf2d719",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Surface",
+  "Description": "Recreate Surfaces",
+  "Name": "Recreate Surfaces",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki, karam@aecedx.com\n\nimport clr\nimport System\n\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nimport traceback\nimport random\nimport string\n\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\n\nclr.AddReference('RevitServices')\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\ndoc = DocumentManager.Instance.CurrentDBDocument\n\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nfrom Autodesk.Revit.DB.Structure import StructuralType\n\nfrom Autodesk.DesignScript import Geometry as dg\n\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n\nimport math\n\ndef recreatesurfaces(surfaces,RevitCheck=True,ForceRecreate=False,doc=DocumentManager.Instance.CurrentDBDocument,temp_path=System.IO.Path.GetTempPath()):\n\tclass WarnSwallowImport(IFailuresPreprocessor):\n\t\tdef PreprocessFailures(self, failuresAccessor):\n\t\t\tfailuresAccessor.DeleteAllWarnings()\n\t\t\treturn FailureProcessingResult.Continue\n\tdef flatten(x):\n\t    result = []\n\t    for el in x:\n\t        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n\t            result.extend(flatten(el))\n\t        else:\n\t            result.append(el)\n\t    return result\n\t\n\tdef tolist(obj1):\n\t\tif hasattr(obj1,'__iter__'): return obj1\n\t\telse: return [obj1]\n\tdef cleanupSurface(surface):\n\t\tdef isActuallygood(geomorsat,converted):\n\t\t\tgeometrymode = True\n\t\t\toriginalfaces = []\n\t\t\tif isinstance(geomorsat,dg.Solid) or isinstance(geomorsat,dg.PolySurface):\n\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\n\t\t\t\tfor exp in exploded:\n\t\t\t\t\toriginalfaces.append(exp)\n\t\t\t\t\tif exp.Closed:\n\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\telif isinstance(geomorsat,dg.Surface):\n\t\t\t\tif geometrymode == False:\n\t\t\t\t\toriginalfaces.append(geomorsat)\n\t\t\t\t\tif geomorsat.Closed:\n\t\t\t\t\t\toriginalfaces.append(geomorsat)\n\t\t\t\telse:\n\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\n\t\t\t\t\tfor exp in exploded:\n\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\t\t\t\tif exp.Closed:\n\t\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\telif isinstance(geomorsat,str):\n\t\t\t\tgeomsorsat = dg.Geometry.ImportFromSAT(geomorsat)\n\t\t\t\tfor geomorsat in geomsorsat:\n\t\t\t\t\tif isinstance(geomorsat,dg.Solid) or isinstance(geomorsat,dg.PolySurface):\n\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\n\t\t\t\t\t\tfor exp in exploded:\n\t\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\t\t\t\t\tif exp.Closed:\n\t\t\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\t\t\t\tif geometrymode == False and doc.IsFamilyDocument:\n\t\t\t\t\t\t\tgeomorsat.Dispose()\n\t\t\t\t\telif isinstance(geomorsat,dg.Surface):\n\t\t\t\t\t\tif geometrymode == False:\n\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\n\t\t\t\t\t\t\tif geomorsat.Closed:\n\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\n\t\t\t\t\t\t\tfor exp in exploded:\n\t\t\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\t\t\t\t\t\tif exp.Closed:\n\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\n\t\t\t\tif geometrymode:\n\t\t\t\t\tgeomorsat = list(geomsorsat)\n\t\t\toriginalnum = len(originalfaces)\n\t\t\tfor org in originalfaces:\n\t\t\t\torg.Dispose()\n\t\t\tFFfaces = []\n\t\t\tfor e in converted:\n\t\t\t\tgetfaces = e.Faces\n\t\t\t\tfor gotten in getfaces:\n\t\t\t\t\tFFfaces.append(gotten)\n\t\t\tFFfacesnum = len(FFfaces)\n\t\t\tif FFfacesnum >= originalnum:\n\t\t\t\tsamefaces = True\n\t\t\telse:\n\t\t\t\tsamefaces = False\n\t\t\treturn samefaces\n\t\tdef checkcompatible(geoms,RevitCheck):\n\t\t\tif RevitCheck == False:\n\t\t\t\treturn True\n\t\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\t\tdg.Geometry.ExportToSAT(geoms,sat_path)\n\t\t\tconverted = []\n\t\t\tshapeImporter = ShapeImporter()\n\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\n\t\t\tshapeImporter.Dispose()\n\t\t\tSystem.IO.File.Delete(sat_path)\n\t\t\tfor e in converted:\n\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\n\t\t\t\t\treturn False\n\t\t\tif len(converted) != 0:\n\t\t\t\tconverted = isActuallygood(geoms,converted)\n\t\t\treturn converted\n\t\tdef meternumber(value):\n\t\t\tvalue = value\n\t\t\treturn value\n\t\tdef metersurfarea(surface):\n\t\t\tarea = meternumber(surface.Area)\n\t\t\treturn area\n\t\tdef almostsame(surf1,surf2,tollerance = 3):\n\t\t\tif round(metersurfarea(surf1),tollerance) == round(metersurfarea(surf2),tollerance):\n\t\t\t\treturn True\n\t\t\telse:\n\t\t\t\treturn False\n\t\tdef subtractfunction(nurbs,cleanexplodes):\n\t\t\tdef loopclean(nurbs,thick,counter):\n\t\t\t\tresult = dg.Surface.SubtractFrom(nurbs,thick)[0]\n\t\t\t\tif counter != 0:\n\t\t\t\t\tnurbs.Dispose()\n\t\t\t\tthick.Dispose()\n\t\t\t\treturn result\n\t\t\tthickforms = []\n\t\t\tfor cleanex in cleanexplodes:\n\t\t\t\tsafearea = metersurfarea(cleanex)/10\n\t\t\t\tif safearea > meternumber(0.1):\n\t\t\t\t\tmaxthicken = meternumber(0.1)\n\t\t\t\telse:\n\t\t\t\t\tmaxthicken = safearea\n\t\t\t\tthickforms.append(dg.Surface.Thicken(cleanex,maxthicken,True))\n\t\t\tcounter = 0\n\t\t\tfor thick in thickforms:\n\t\t\t\tnurbs = loopclean(nurbs,thick,counter)\n\t\t\t\tcounter += 1\n\t\t\treturn nurbs\n\t\tdef tryingforall(surface,nurbs,cleanexplodes,geometrymode):\n\t\t\ttry:\n\t\t\t\tfinalsub = subtractfunction(nurbs,cleanexplodes)\n\t\t\t\treturn [finalsub]\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\tfinalsub = dg.Surface.Difference(nurbs,cleanexplodes)\n\t\t\t\t\treturn [finalsub]\n\t\t\t\texcept Exception as e:\n\t\t\t\t\tif str(e) == \"Cannot difference an empty list\" and almostsame(nurbs,surface):\n\t\t\t\t\t\tfinalsub = nurbs\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\treturn [finalsub]\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\treturn None\n\t\tdef gencleanexplodes(subtractnurbs):\n\t\t\tif isinstance(subtractnurbs, list):\n\t\t\t\tif len(subtractnurbs) == 0:\n\t\t\t\t\treturn []\n\t\t\telse:\n\t\t\t\texplodednurbs = dg.Geometry.Explode(subtractnurbs)\n\t\t\t\tcleanexplodes = []\n\t\t\t\tif safemode:\n\t\t\t\t\tfor ex in explodednurbs:\n\t\t\t\t\t\tif ex.Area < meternumber(0.002):\n\t\t\t\t\t\t\tex.Dispose()\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tcleanexplodes.append(ex)\n\t\t\t\telse:\n\t\t\t\t\tcleanexplodes = list(explodednurbs)\n\t\t\t\tsubtractnurbs.Dispose()\n\t\t\t\treturn cleanexplodes\n\t\tdef easymethod(surface,geometrymode):\n\t\t\ttry:\n\t\t\t\tnurbs = dg.Surface.ToNurbsSurface(surface)\n\t\t\t\tif almostsame(nurbs,surface):\n\t\t\t\t\ttry:\n\t\t\t\t\t\treturn True,[nurbs]\n\t\t\t\t\texcept:\n\t\t\t\t\t\treturn None,nurbs\n\t\t\t\telse:\n\t\t\t\t\treturn None,nurbs\n\t\t\texcept:\n\t\t\t\treturn None,None\n\t\tdef isplanarsurf(s):\n\t\t\tnorms = [0,0.333,0.666,1]\n\t\t\tpts = []\n\t\t\tfor n in norms:\n\t\t\t\tfor n2 in norms:\n\t\t\t\t\tpts.append(dg.Surface.PointAtParameter(s,n,n2))\n\t\t\tplane = dg.Plane.ByBestFitThroughPoints(pts)\n\t\t\tstatus = True\n\t\t\tfor p in pts:\n\t\t\t\ttry:\n\t\t\t\t\tinter = dg.Geometry.DoesIntersect(p,plane)\n\t\t\t\t\tif inter == False:\n\t\t\t\t\t\tstatus = False\n\t\t\t\t\t\tbreak\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\treturn status\n\t\tdef joincurves(crvs):\n\t\t\tdef PointsEqual(pt1, pt2):\n\t\t\t\ttolerance = 0.00001\n\t\t\t\tif (math.fabs(pt1.X - pt2.X) < tolerance and\n\t\t\t\t\tmath.fabs(pt1.Y - pt2.Y) < tolerance and\n\t\t\t\t\tmath.fabs(pt1.Z - pt2.Z) < tolerance):\n\t\t\t\t\treturn True\n\t\t\t\telse:\n\t\t\t\t\treturn False\n\t\t\tcrvs = flatten(tolist(crvs))\n\t\t\tcrvGroup = [-1 for x in range(len(crvs))]\n\t\t\tcrvGroup[0] = 0\n\t\t\tmaxGroupNum = 1\n\t\t\tstarts = []\n\t\t\tends = []\n\t\t\tfor crv in crvs:\n\t\t\t\tstarts.append(crv.PointAtParameter(0))\n\t\t\t\tends.append(crv.PointAtParameter(1))\n\t\t\tfor i in range(len(crvs)):\n\t\t\t\tif (crvGroup[i] == -1):\n\t\t\t\t\tcrvGroup[i] = i\n\t\t\t\tfor j in range(len(crvs)):\n\t\t\t\t\tif (i != j and\n\t\t\t\t\t\t(PointsEqual(starts[i], starts[j]) or\n\t\t\t\t\t\tPointsEqual(starts[i], ends[j]) or\n\t\t\t\t\t\tPointsEqual(ends[i], starts[j]) or\n\t\t\t\t\t\tPointsEqual(ends[i], ends[j]))):\n\t\t\t\t\t\tif (crvGroup[j] == -1):\n\t\t\t\t\t\t\tcrvGroup[j] = crvGroup[i]\n\t\t\t\t\t\telif (crvGroup[i] != crvGroup[j]):\n\t\t\t\t\t\t\toldNum = crvGroup[j]\n\t\t\t\t\t\t\tfor k in range(len(crvs)):\n\t\t\t\t\t\t\t\tif (crvGroup[k] == oldNum):\n\t\t\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\n\t\t\tgroups = []\n\t\t\texcluded = []\n\t\t\tfor n in crvGroup:\n\t\t\t\tinnercount = 0\n\t\t\t\ttmp = []\n\t\t\t\tfor n2 in crvGroup:\n\t\t\t\t\tif n == n2 and n2 not in excluded:\n\t\t\t\t\t\ttmp.append(crvs[innercount])\n\t\t\t\t\tinnercount += 1\n\t\t\t\tif len(tmp) == 0:\n\t\t\t\t\tcontinue\n\t\t\t\ttry:\n\t\t\t\t\ttmp = dg.PolyCurve.ByJoinedCurves(tmp)\n\t\t\t\t\tgroups.append(tmp)\n\t\t\t\texcept:\n\t\t\t\t\tfor t in tmp:\n\t\t\t\t\t\tgroups.append(dg.PolyCurve.ByJoinedCurves([t]))\n\t\t\t\texcluded.append(n)\n\t\t\tjoinedcurves = groups\n\t\t\treturn joinedcurves\n\t\tdef trimloopmethod(surface,nurbs,geometrymode):\n\t\t\ttry:\n\t\t\t\tif surface.Closed:\n\t\t\t\t\treturn None\n\t\t\t\ttry:\n\t\t\t\t\tjoinedperms = [dg.PolyCurve.ByJoinedCurves(surface.PerimeterCurves())]\n\t\t\t\texcept:\n\t\t\t\t\tjoinedperms = joincurves(surface.PerimeterCurves())\n\t\t\t\tfinalsub = dg.Surface.TrimWithEdgeLoops(nurbs,joinedperms)\n\t\t\t\tif almostsame(finalsub,surface):\n\t\t\t\t\treturn [finalsub]\n\t\t\t\telse:\n\t\t\t\t\treturn None\n\t\t\texcept:\n\t\t\t\treturn None\n\t\tdef thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter):\n\t\t\ttry:\n\t\t\t\ttmp_thicken = dg.Surface.Thicken(surface,pointOneMeter,True)\n\t\t\t\tisplanar = isplanarsurf(surface)\n\t\t\t\tif isplanar:\n\t\t\t\t\ttmp_pt = dg.Surface.PointAtParameter(surface,0.5,0.5)\n\t\t\t\t\ttmp_norm = dg.Surface.NormalAtPoint(surface,tmp_pt)\n\t\t\t\t\tintersecter = dg.Plane.ByOriginNormal(tmp_pt,tmp_norm)\n\t\t\t\t\tfinalsub = dg.Geometry.Intersect(intersecter,tmp_thicken)\n\t\t\t\t\tfor f in finalsub:\n\t\t\t\t\t\tif isinstance(f,dg.Surface):\n\t\t\t\t\t\t\tfinalsub = f\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\ttmp_thicken.Dispose()\n\t\t\t\telse:\n\t\t\t\t\tfinalsub = dg.Geometry.Intersect(nurbs,tmp_thicken)\n\t\t\t\t\tfor f in finalsub:\n\t\t\t\t\t\tif isinstance(f,dg.Surface):\n\t\t\t\t\t\t\tfinalsub = f\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\ttmp_thicken.Dispose()\n\t\t\t\treturn [finalsub]\n\t\t\texcept:\n\t\t\t\treturn None\n\t\tdef inithickenMethod(surface,nurbs,geometrymode):\n\t\t\ttry:\n\t\t\t\tsafearea = metersurfarea(surface)/10\n\t\t\t\tif safearea > meternumber(0.1):\n\t\t\t\t\tmaxthicken = meternumber(0.1)\n\t\t\t\telse:\n\t\t\t\t\tmaxthicken = safearea\n\t\t\t\tthickeninit = dg.Surface.Thicken(surface,maxthicken,True)\n\t\t\t\ttry:\n\t\t\t\t\tsubtractnurbs = dg.Surface.SubtractFrom(nurbs,thickeninit)[0]\n\t\t\t\texcept Exception as e:\n\t\t\t\t\tif \"index out of range\" in str(e) and almostsame(nurbs,surface):\n\t\t\t\t\t\tsubtractnurbs = []\n\t\t\t\t\telif \"index out of range\" in str(e):\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\n\t\t\t\t\t\texcept Exception as e:\n\t\t\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\n\t\t\t\t\t\t\t\tsubtractnurbs = []\n\t\t\t\tthickeninit.Dispose()\n\t\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\n\t\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\n\t\t\t\tif tryall != None:\n\t\t\t\t\treturn tryall\n\t\t\t\telse:\n\t\t\t\t\treturn None\n\t\t\texcept:\n\t\t\t\treturn None\n\t\tdef simplesubmethod(surface,nurbs,geometrymode):\n\t\t\ttry:\n\t\t\t\ttry:\n\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\n\t\t\t\texcept Exception as e:\n\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\treturn [nurbs]\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\treturn None\n\t\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\n\t\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\n\t\t\t\tif tryall != None:\n\t\t\t\t\treturn tryall\n\t\t\t\telse:\n\t\t\t\t\treturn None\n\t\t\texcept:\n\t\t\t\treturn None\n\t\tgeometrymode = True\n\t\tsafemode = False\n\t\tpointOneMeter = 0.1\n\t\tif ForceRecreate == False:\n\t\t\tif checkcompatible(surface,RevitCheck):\n\t\t\t\treturn surface\n\t\teasy = easymethod(surface,geometrymode)\n\t\tif easy[0] != None:\n\t\t\treturn easy[1][0]\n\t\telif easy[0] == None and easy[1] == None:\n\t\t\treturn surface\n\t\telse:\n\t\t\tnurbs = easy[1]\n\t\ttrimloop = trimloopmethod(surface,nurbs,geometrymode)\n\t\tif trimloop != None:\n\t\t\tif checkcompatible(trimloop[0],RevitCheck):\n\t\t\t\treturn trimloop[0]\n\t\tsimple = simplesubmethod(surface,nurbs,geometrymode)\n\t\tif simple != None:\n\t\t\tif checkcompatible(simple[0],RevitCheck):\n\t\t\t\treturn simple[0]\n\t\tinithick = inithickenMethod(surface,nurbs,geometrymode)\n\t\tif inithick != None:\n\t\t\tif checkcompatible(inithick[0],RevitCheck):\n\t\t\t\treturn inithick[0]\n\t\tthickeninter = thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter)\n\t\tif thickeninter != None:\n\t\t\tif checkcompatible(thickeninter[0],RevitCheck):\n\t\t\t\treturn thickeninter[0]\n\t\treturn surface\n\t\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttrans = Transaction(doc, 'Temporary Transaction')\n\ttrans.Start()\n\twarnhandle = WarnSwallowImport()\n\tfoptions = trans.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\tfoptions.SetClearAfterRollback(True)\n\ttrans.SetFailureHandlingOptions(foptions)\n\tsurfaces = flatten(tolist(surfaces))\n\tcleanedsurfs = []\n\tfor s in surfaces:\n\t\tcleanedsurfs.append(cleanupSurface(s))\n\tsurfaces = cleanedsurfs\n\ttrans.RollBack()\n\treturn surfaces\n\nOUT = recreatesurfaces(IN[0],IN[1],IN[2])",
+      "VariableInputPorts": true,
+      "Id": "5f3d7752eb45410ca14948ac70be860b",
+      "Inputs": [
+        {
+          "Id": "72520254f44142c6b0a81ff15f9b7ccc",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b47be0301e834d1c9d351d9890054bbe",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "63354505d8b442b1a098d60b9a5f4a02",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4972595d8365449e99c661c3e198ed4a",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSurfaces",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "dd3bd20e4c874a1799856a5d0b7754be",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "31c603d1267e4b3697e2716e692f310a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARSurfaces",
+      "Id": "0565d544dbf144fc965f28fae40aee18",
+      "Inputs": [
+        {
+          "Id": "d748a4e2a469483b95813c3d2d769d12",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARRevitCheck",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "5a09a2aa743a4b5fb5936eafc0161675",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f567b23c0687433fa1c8e5815687c4d1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARForceRecreate",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "9ce65e24e2fd45709b275ddf67fe80ea",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "fad36ad66f074899bf513fc22cf5e955",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "4972595d8365449e99c661c3e198ed4a",
+      "End": "d748a4e2a469483b95813c3d2d769d12",
+      "Id": "9a1ea0fec59a4da2ab3eb6a984d25c3e"
+    },
+    {
+      "Start": "31c603d1267e4b3697e2716e692f310a",
+      "End": "72520254f44142c6b0a81ff15f9b7ccc",
+      "Id": "bb7e07fa364f48e68b9d7448205756bb"
+    },
+    {
+      "Start": "f567b23c0687433fa1c8e5815687c4d1",
+      "End": "b47be0301e834d1c9d351d9890054bbe",
+      "Id": "8051aa7000844c71975aeb15c7285f9b"
+    },
+    {
+      "Start": "fad36ad66f074899bf513fc22cf5e955",
+      "End": "63354505d8b442b1a098d60b9a5f4a02",
+      "Id": "07aa765f4a034cd1887cd269d3fcc4ee"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -6556.81005859375,
+      "EyeY": 12582.3388671875,
+      "EyeZ": 47946.1015625,
+      "LookX": -7273.57470703125,
+      "LookY": -8582.3388671875,
+      "LookZ": 6170.76025390625,
+      "UpX": -0.37665453553199768,
+      "UpY": 0.86949491500854492,
+      "UpZ": 0.31954643130302429
+    },
+    "NodeViews": [
+      {
+        "Id": "5f3d7752eb45410ca14948ac70be860b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "dd3bd20e4c874a1799856a5d0b7754be",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -38.2594562785767,
+        "Y": -58.5847924265705
+      },
+      {
+        "Id": "0565d544dbf144fc965f28fae40aee18",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "5a09a2aa743a4b5fb5936eafc0161675",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -71.0594562785767,
+        "Y": 19.0152075734295
+      },
+      {
+        "Id": "9ce65e24e2fd45709b275ddf67fe80ea",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -90.5493277040123,
+        "Y": 116.333955734482
+      }
+    ],
+    "Annotations": [],
+    "X": 193.04145041197,
+    "Y": 234.532383840595,
+    "Zoom": 0.910063803931439
+  }
+}

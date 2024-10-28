@@ -1,0 +1,387 @@
+{
+  "Uuid": "3c9d0464-8643-5ffe-96e5-ab1769818209",
+  "IsCustomNode": false,
+  "Description": "",
+  "Name": "Document.Categories Lineweights Increment",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [
+    {
+      "Id": "4cc8cac550284ba1b57f2f4b9e164cf8",
+      "Name": "01.Change Subcategories As Well ?",
+      "Type": "boolean",
+      "Value": "true",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "59c393e8ca7741b8b925dcdb2a67a6be",
+      "Name": "02.Change Linestyles As Well ?",
+      "Type": "boolean",
+      "Value": "true",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "66de91b894ed4705bb91315df5c02b86",
+      "Name": "03.Projection Lineweights To Increment",
+      "Type": "number",
+      "Value": "1",
+      "NumberType": "Double",
+      "Description": "Creates a number.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "60a4677bfd0a4a2a96516fbf484569b0",
+      "Name": "04.Cut Lineweight To Increment",
+      "Type": "number",
+      "Value": "1",
+      "NumberType": "Double",
+      "Description": "Creates a number.",
+      "SelectedIndex": 0
+    }
+  ],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki: karam@aecedx.com\n\nimport clr\nclr.AddReference('RevitNodes')\nimport Revit\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\ndef changeOP(cat,withsubcats,extraweight,iscut=False):\n\ttry:\n\t\tif iscut:\n\t\t\tprojorcut = GraphicsStyleType.Cut\n\t\telse:\n\t\t\tprojorcut = GraphicsStyleType.Projection\n\t\toldweight = cat.GetLineWeight(projorcut)\n\t\tif oldweight != None and oldweight != -1:\n\t\t\tnew_weight = oldweight + extraweight\n\t\t\tif new_weight > 0 and new_weight < 17:\n\t\t\t\tcat.SetLineWeight(new_weight,projorcut)\n\t\t\telif new_weight > 15:\n\t\t\t\tcat.SetLineWeight(16,projorcut)\n\t\t\telif new_weight < 1:\n\t\t\t\tcat.SetLineWeight(1,projorcut)\n\t\tif withsubcats:\n\t\t\tsubcats = cat.SubCategories\n\t\t\tfor subcat in subcats:\n\t\t\t\toldsubweight = subcat.GetLineWeight(projorcut)\n\t\t\t\tif oldsubweight != None and oldsubweight != -1:\n\t\t\t\t\tnew_subweight = oldsubweight + extraweight\n\t\t\t\t\tif new_subweight > 0 and new_subweight < 17:\n\t\t\t\t\t\tsubcat.SetLineWeight(new_subweight,projorcut)\n\t\t\t\t\telif new_subweight > 15:\n\t\t\t\t\t\tsubcat.SetLineWeight(16,projorcut)\n\t\t\t\t\telif new_subweight < 1:\n\t\t\t\t\t\tsubcat.SetLineWeight(1,projorcut)\n\t\treturn \"Success\"\n\texcept:\n\t\treturn \"Fail\"\n\nwithsubcats = IN[0]\nwithlinestyles = IN[1]\nprojval = IN[2]\ncutval = IN[3]\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nstatus = []\nTransactionManager.Instance.EnsureInTransaction(doc)\nallcats = doc.Settings.Categories\nfor cat in allcats:\n\tif withlinestyles == False:\n\t\tif cat.Name == \"Lines\":\n\t\t\tbreak\n\tif projval != 0:\n\t\tstatus.append(changeOP(cat,withsubcats,projval))\n\tif cutval != 0:\n\t\tstatus.append(changeOP(cat,withsubcats,projval,True))\nTransactionManager.Instance.TransactionTaskDone()\n\nOUT = status",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "3c33d1eea3b74fe09e59a055ab2eeec4",
+      "Inputs": [
+        {
+          "Id": "90eff59d64a14f53a804305727b5b775",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d93eb63d2dad495dac18836d469bc82e",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1f30f975e9fc4535836d49e5eec718f6",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8d77d2c6aa6f4e5aa7ea520afd1059d5",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "60bfd0b9753b4f2a8fd32178df303e09",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": true,
+      "Id": "4cc8cac550284ba1b57f2f4b9e164cf8",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "849906d3dd754579b8a71ac7b95e9e5f",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "e3b15dcf-8a04-4048-81bc-0e3c0480d780",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "e28524d7e5a249159b92bfda5132b6a7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "84fb421a71424749b621bda4bcc0d9c1",
+          "Name": "VAROut",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Debug Python"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": true,
+      "Id": "59c393e8ca7741b8b925dcdb2a67a6be",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "35622161cca84138800c34f400808e2c",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 1.0,
+      "Id": "66de91b894ed4705bb91315df5c02b86",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "59ffb3922b434d69b729d7d70a3654f1",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 1.0,
+      "Id": "60a4677bfd0a4a2a96516fbf484569b0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "235bf944cec0497b8021ec4991867eab",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "849906d3dd754579b8a71ac7b95e9e5f",
+      "End": "90eff59d64a14f53a804305727b5b775",
+      "Id": "e3a776f692ab43e7ac15616ab9b1b9ab",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "35622161cca84138800c34f400808e2c",
+      "End": "d93eb63d2dad495dac18836d469bc82e",
+      "Id": "a65a3e779d694b51969616023a3af088",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "59ffb3922b434d69b729d7d70a3654f1",
+      "End": "1f30f975e9fc4535836d49e5eec718f6",
+      "Id": "a877763fe7674ef0b115ce5c41b699e7",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "235bf944cec0497b8021ec4991867eab",
+      "End": "8d77d2c6aa6f4e5aa7ea520afd1059d5",
+      "Id": "9ad3a3ea56f54e95be362a451e27b57a",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "e3b15dcf-8a04-4048-81bc-0e3c0480d780"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Synthesize toolkit",
+      "Version": "12.5.1",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "e28524d7e5a249159b92bfda5132b6a7"
+      ]
+    }
+  ],
+  "Thumbnail": "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",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [
+    {
+      "ExtensionGuid": "28992e1d-abb9-417f-8b1b-05e053bee670",
+      "Name": "Properties",
+      "Version": "2.13",
+      "Data": {}
+    },
+    {
+      "ExtensionGuid": "DFBD9CC0-DB40-457A-939E-8C8555555A9D",
+      "Name": "Generative Design",
+      "Version": "2.0",
+      "Data": {}
+    }
+  ],
+  "Author": "karam@aecedx.com",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "3c33d1eea3b74fe09e59a055ab2eeec4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 247.836143360244,
+        "Y": 235.124441605552
+      },
+      {
+        "Name": "01.Change Subcategories As Well ?",
+        "ShowGeometry": true,
+        "Id": "4cc8cac550284ba1b57f2f4b9e164cf8",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -118.94477945558,
+        "Y": 146.100457171539
+      },
+      {
+        "Name": "Debug Python No Message",
+        "ShowGeometry": true,
+        "Id": "e28524d7e5a249159b92bfda5132b6a7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 5262.89860752709,
+        "Y": 3642.69199748386
+      },
+      {
+        "Name": "02.Change Linestyles As Well ?",
+        "ShowGeometry": true,
+        "Id": "59c393e8ca7741b8b925dcdb2a67a6be",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -118.653624066369,
+        "Y": 215.446687102884
+      },
+      {
+        "Name": "03.Projection Lineweights To Increment",
+        "ShowGeometry": true,
+        "Id": "66de91b894ed4705bb91315df5c02b86",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -122.281445754389,
+        "Y": 280.74091227822
+      },
+      {
+        "Name": "04.Cut Lineweight To Increment",
+        "ShowGeometry": true,
+        "Id": "60a4677bfd0a4a2a96516fbf484569b0",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -118.506881367347,
+        "Y": 344.879875024741
+      }
+    ],
+    "Annotations": [
+      {
+        "Id": "d1b00ce812a04922a7fd276b44fda247",
+        "Title": "Input",
+        "DescriptionText": null,
+        "IsExpanded": true,
+        "WidthAdjustment": 0.0,
+        "HeightAdjustment": 0.0,
+        "Nodes": [
+          "4cc8cac550284ba1b57f2f4b9e164cf8",
+          "66de91b894ed4705bb91315df5c02b86",
+          "59c393e8ca7741b8b925dcdb2a67a6be",
+          "60a4677bfd0a4a2a96516fbf484569b0"
+        ],
+        "HasNestedGroups": false,
+        "Left": -132.28144575438898,
+        "Top": 80.100457171539,
+        "Width": 391.2,
+        "Height": 396.579417853202,
+        "FontSize": 30.0,
+        "InitialTop": 146.100457171539,
+        "InitialHeight": 343.779417853202,
+        "TextblockHeight": 56.0,
+        "Background": "#FFD8D8D8"
+      }
+    ],
+    "X": 305.50085816067,
+    "Y": -20.425027041234966,
+    "Zoom": 1.11850082204501
+  }
+}

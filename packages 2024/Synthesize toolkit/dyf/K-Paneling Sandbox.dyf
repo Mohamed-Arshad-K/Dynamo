@@ -1,0 +1,1464 @@
+{
+  "Uuid": "33fa46cd-197f-4991-938b-09de8c1aed0f",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "K-Paneling",
+  "Name": "K-Paneling Sandbox",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Proudly Created By Karam Baki : karam@aecedx.com\n# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\nimport math\n\nimport System\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nfrom distutils.version import LooseVersion\n\nfrom threading import Thread\nimport multiprocessing\n\nclass ThreadWithReturnValue(Thread):\n    def __init__(self, group=None, target=None, name=None,\n                    args=(), kwargs={}, Verbose=None):\n        Thread.__init__(self, group, target, name, args, kwargs, Verbose)\n        self._return = None\n    def run(self):\n        if self._Thread__target is not None:\n            self._return = self._Thread__target(*self._Thread__args,\n                                                **self._Thread__kwargs)\n    def join(self):\n        Thread.join(self)\n        return self._return\n\ndef multithreadrun2inputs(listofstuff,targetDef,input1,input2):\n\n\tdef chop(l1, n):\n\t\treturn [l1[x:x+n] for x in xrange(0, len(l1), n)]\n\tdef tolist(obj1):\n\t\tif obj1 == []:\n\t\t\treturn [[]]\n\t\tif hasattr(obj1,'__iter__'): return obj1\n\t\telse: return [obj1]\n\tcpus = multiprocessing.cpu_count() - 1\n\telemsnum = len(listofstuff)\n\tif elemsnum < cpus:\n\t\tcpus = elemsnum\n\ttry:\n\t\tchopped = chop(listofstuff,elemsnum/cpus)\n\texcept:\n\t\treturn []\n\tthreads = []\n\tfor chop in chopped:\n\t\tth = ThreadWithReturnValue(target=targetDef, args=(chop,input1,input2))\n\t\tth.start()\n\t\tthreads.append(th)\n\tresults = []\n\tfor th in threads:\n\t\tresult = tolist(th.join())\n\t\tfor r in result:\n\t\t\tresults.append(r)\n\treturn results\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef empty2null(inpo):\n\tresult = []\n\tif isinstance(inpo, (list,)):\n\t\tif inpo.Count == 0:\n\t\t\tresult = None\n\t\telse:\n\t\t\tfor each in inpo:\n\t\t\t\tif each == []:\n\t\t\t\t\tresult.append(None)\n\t\t\t\telse:\n\t\t\t\t\tresult.append(each)\n\telif inpo == []:\n\t\tresult = None\n\telse:\n\t\tresult = inpo\n\treturn result\n\ndef cleanupSurface(surface):\n\tdef meternumber(value):\n\t\tvalue = value\n\t\treturn value\n\tdef metersurfarea(surface):\n\t\tarea = meternumber(surface.Area)\n\t\treturn area\n\tdef almostsame(surf1,surf2,tollerance = 3):\n\t\tif round(metersurfarea(surf1),tollerance) == round(metersurfarea(surf2),tollerance):\n\t\t\treturn True\n\t\telse:\n\t\t\treturn False\n\tdef subtractfunction(nurbs,cleanexplodes):\n\t\tdef loopclean(nurbs,thick,counter):\n\t\t\tresult = dg.Surface.SubtractFrom(nurbs,thick)[0]\n\t\t\tif counter != 0:\n\t\t\t\tnurbs.Dispose()\n\t\t\tthick.Dispose()\n\t\t\treturn result\n\t\tthickforms = []\n\t\tfor cleanex in cleanexplodes:\n\t\t\tsafearea = metersurfarea(cleanex)/10\n\t\t\tif safearea > meternumber(0.1):\n\t\t\t\tmaxthicken = meternumber(0.1)\n\t\t\telse:\n\t\t\t\tmaxthicken = safearea\n\t\t\tthickforms.append(dg.Surface.Thicken(cleanex,maxthicken,True))\n\t\tcounter = 0\n\t\tfor thick in thickforms:\n\t\t\tnurbs = loopclean(nurbs,thick,counter)\n\t\t\tcounter += 1\n\t\treturn nurbs\n\tdef tryingforall(surface,nurbs,cleanexplodes,geometrymode):\n\t\ttry:\n\t\t\tfinalsub = subtractfunction(nurbs,cleanexplodes)\n\t\t\treturn [finalsub]\n\t\texcept:\n\t\t\ttry:\n\t\t\t\tfinalsub = dg.Surface.Difference(nurbs,cleanexplodes)\n\t\t\t\treturn [finalsub]\n\t\t\texcept Exception as e:\n\t\t\t\tif str(e) == \"Cannot difference an empty list\" and almostsame(nurbs,surface):\n\t\t\t\t\tfinalsub = nurbs\n\t\t\t\t\ttry:\n\t\t\t\t\t\treturn [finalsub]\n\t\t\t\t\texcept:\n\t\t\t\t\t\treturn None\n\tdef gencleanexplodes(subtractnurbs):\n\t\tif isinstance(subtractnurbs, list):\n\t\t\tif len(subtractnurbs) == 0:\n\t\t\t\treturn []\n\t\telse:\n\t\t\texplodednurbs = dg.Geometry.Explode(subtractnurbs)\n\t\t\tcleanexplodes = []\n\t\t\tif safemode:\n\t\t\t\tfor ex in explodednurbs:\n\t\t\t\t\tif ex.Area < meternumber(0.002):\n\t\t\t\t\t\tex.Dispose()\n\t\t\t\t\telse:\n\t\t\t\t\t\tcleanexplodes.append(ex)\n\t\t\telse:\n\t\t\t\tcleanexplodes = list(explodednurbs)\n\t\t\tsubtractnurbs.Dispose()\n\t\t\treturn cleanexplodes\n\tdef easymethod(surface,geometrymode):\n\t\ttry:\n\t\t\tnurbs = dg.Surface.ToNurbsSurface(surface)\n\t\t\tif almostsame(nurbs,surface):\n\t\t\t\ttry:\n\t\t\t\t\treturn True,[nurbs]\n\t\t\t\texcept:\n\t\t\t\t\treturn None,nurbs\n\t\t\telse:\n\t\t\t\treturn None,nurbs\n\t\texcept:\n\t\t\treturn None,None\n\tdef isplanarsurf(s):\n\t\tnorms = [0,0.333,0.666,1]\n\t\tpts = []\n\t\tfor n in norms:\n\t\t\tfor n2 in norms:\n\t\t\t\tpts.append(dg.Surface.PointAtParameter(s,n,n2))\n\t\tplane = dg.Plane.ByBestFitThroughPoints(pts)\n\t\tstatus = True\n\t\tfor p in pts:\n\t\t\ttry:\n\t\t\t\tinter = dg.Geometry.DoesIntersect(p,plane)\n\t\t\t\tif inter == False:\n\t\t\t\t\tstatus = False\n\t\t\t\t\tbreak\n\t\t\texcept:\n\t\t\t\tpass\n\t\treturn status\n\tdef joincurves(crvs):\n\t\tdef PointsEqual(pt1, pt2):\n\t\t\ttolerance = 0.00001\n\t\t\tif (math.fabs(pt1.X - pt2.X) < tolerance and\n\t\t\t\tmath.fabs(pt1.Y - pt2.Y) < tolerance and\n\t\t\t\tmath.fabs(pt1.Z - pt2.Z) < tolerance):\n\t\t\t\treturn True\n\t\t\telse:\n\t\t\t\treturn False\n\t\tcrvs = flatten(tolist(crvs))\n\t\tcrvGroup = [-1 for x in range(len(crvs))]\n\t\tcrvGroup[0] = 0\n\t\tmaxGroupNum = 1\n\t\tstarts = []\n\t\tends = []\n\t\tfor crv in crvs:\n\t\t\tstarts.append(crv.PointAtParameter(0))\n\t\t\tends.append(crv.PointAtParameter(1))\n\t\tfor i in range(len(crvs)):\n\t\t\tif (crvGroup[i] == -1):\n\t\t\t\tcrvGroup[i] = i\n\t\t\tfor j in range(len(crvs)):\n\t\t\t\tif (i != j and\n\t\t\t\t\t(PointsEqual(starts[i], starts[j]) or\n\t\t\t\t\tPointsEqual(starts[i], ends[j]) or\n\t\t\t\t\tPointsEqual(ends[i], starts[j]) or\n\t\t\t\t\tPointsEqual(ends[i], ends[j]))):\n\t\t\t\t\tif (crvGroup[j] == -1):\n\t\t\t\t\t\tcrvGroup[j] = crvGroup[i]\n\t\t\t\t\telif (crvGroup[i] != crvGroup[j]):\n\t\t\t\t\t\toldNum = crvGroup[j]\n\t\t\t\t\t\tfor k in range(len(crvs)):\n\t\t\t\t\t\t\tif (crvGroup[k] == oldNum):\n\t\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\n\t\tgroups = []\n\t\texcluded = []\n\t\tfor n in crvGroup:\n\t\t\tinnercount = 0\n\t\t\ttmp = []\n\t\t\tfor n2 in crvGroup:\n\t\t\t\tif n == n2 and n2 not in excluded:\n\t\t\t\t\ttmp.append(crvs[innercount])\n\t\t\t\tinnercount += 1\n\t\t\tif len(tmp) == 0:\n\t\t\t\tcontinue\n\t\t\ttry:\n\t\t\t\ttmp = dg.PolyCurve.ByJoinedCurves(tmp)\n\t\t\t\tgroups.append(tmp)\n\t\t\texcept:\n\t\t\t\tfor t in tmp:\n\t\t\t\t\tgroups.append(dg.PolyCurve.ByJoinedCurves([t]))\n\t\t\texcluded.append(n)\n\t\tjoinedcurves = groups\n\t\treturn joinedcurves\n\tdef trimloopmethod(surface,nurbs,geometrymode):\n\t\ttry:\n\t\t\tif surface.Closed:\n\t\t\t\treturn None\n\t\t\ttry:\n\t\t\t\tjoinedperms = [dg.PolyCurve.ByJoinedCurves(surface.PerimeterCurves())]\n\t\t\texcept:\n\t\t\t\tjoinedperms = joincurves(surface.PerimeterCurves())\n\t\t\tfinalsub = dg.Surface.TrimWithEdgeLoops(nurbs,joinedperms)\n\t\t\tif almostsame(finalsub,surface):\n\t\t\t\treturn [finalsub]\n\t\t\telse:\n\t\t\t\treturn None\n\t\texcept:\n\t\t\treturn None\n\tdef thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter):\n\t\ttry:\n\t\t\ttmp_thicken = dg.Surface.Thicken(surface,pointOneMeter,True)\n\t\t\tisplanar = isplanarsurf(surface)\n\t\t\tif isplanar:\n\t\t\t\ttmp_pt = dg.Surface.PointAtParameter(surface,0.5,0.5)\n\t\t\t\ttmp_norm = dg.Surface.NormalAtPoint(surface,tmp_pt)\n\t\t\t\tintersecter = dg.Plane.ByOriginNormal(tmp_pt,tmp_norm)\n\t\t\t\tfinalsub = dg.Geometry.Intersect(intersecter,tmp_thicken)\n\t\t\t\tfor f in finalsub:\n\t\t\t\t\tif isinstance(f,dg.Surface):\n\t\t\t\t\t\tfinalsub = f\n\t\t\t\t\t\tbreak\n\t\t\t\ttmp_thicken.Dispose()\n\t\t\telse:\n\t\t\t\tfinalsub = dg.Geometry.Intersect(nurbs,tmp_thicken)\n\t\t\t\tfor f in finalsub:\n\t\t\t\t\tif isinstance(f,dg.Surface):\n\t\t\t\t\t\tfinalsub = f\n\t\t\t\t\t\tbreak\n\t\t\t\ttmp_thicken.Dispose()\n\t\t\treturn [finalsub]\n\t\texcept:\n\t\t\treturn None\n\tdef inithickenMethod(surface,nurbs,geometrymode):\n\t\ttry:\n\t\t\tsafearea = metersurfarea(surface)/10\n\t\t\tif safearea > meternumber(0.1):\n\t\t\t\tmaxthicken = meternumber(0.1)\n\t\t\telse:\n\t\t\t\tmaxthicken = safearea\n\t\t\tthickeninit = dg.Surface.Thicken(surface,maxthicken,True)\n\t\t\ttry:\n\t\t\t\tsubtractnurbs = dg.Surface.SubtractFrom(nurbs,thickeninit)[0]\n\t\t\texcept Exception as e:\n\t\t\t\tif \"index out of range\" in str(e) and almostsame(nurbs,surface):\n\t\t\t\t\tsubtractnurbs = []\n\t\t\t\telif \"index out of range\" in str(e):\n\t\t\t\t\ttry:\n\t\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\n\t\t\t\t\texcept Exception as e:\n\t\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\n\t\t\t\t\t\t\tsubtractnurbs = []\n\t\t\tthickeninit.Dispose()\n\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\n\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\n\t\t\tif tryall != None:\n\t\t\t\treturn tryall\n\t\t\telse:\n\t\t\t\treturn None\n\t\texcept:\n\t\t\treturn None\n\tdef simplesubmethod(surface,nurbs,geometrymode):\n\t\ttry:\n\t\t\ttry:\n\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\n\t\t\texcept Exception as e:\n\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\n\t\t\t\t\ttry:\n\t\t\t\t\t\treturn [nurbs]\n\t\t\t\t\texcept:\n\t\t\t\t\t\treturn None\n\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\n\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\n\t\t\tif tryall != None:\n\t\t\t\treturn tryall\n\t\t\telse:\n\t\t\t\treturn None\n\t\texcept:\n\t\t\treturn None\n\tgeometrymode = True\n\tsafemode = False\n\tpointOneMeter = 0.1\n\teasy = easymethod(surface,geometrymode)\n\tif easy[0] != None:\n\t\treturn easy[1][0]\n\telif easy[0] == None and easy[1] == None:\n\t\treturn surface\n\telse:\n\t\tnurbs = easy[1]\n\ttrimloop = trimloopmethod(surface,nurbs,geometrymode)\n\tif trimloop != None:\n\t\treturn trimloop[0]\n\tsimple = simplesubmethod(surface,nurbs,geometrymode)\n\tif simple != None:\n\t\treturn simple[0]\n\tinithick = inithickenMethod(surface,nurbs,geometrymode)\n\tif inithick != None:\n\t\treturn inithick[0]\n\tthickeninter = thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter)\n\tif thickeninter != None:\n\t\treturn thickeninter[0]\n\telse:\n\t\treturn surface\n\ndef isplanarsurf(s):\n\tnorms = [0,0.333,0.666,1]\n\tpts = []\n\tfor n in norms:\n\t\tfor n2 in norms:\n\t\t\tpts.append(dg.Surface.PointAtParameter(s,n,n2))\n\tplane = dg.Plane.ByBestFitThroughPoints(pts)\n\tstatus = True\n\tfor p in pts:\n\t\ttry:\n\t\t\tinter = dg.Geometry.DoesIntersect(p,plane)\n\t\t\tif inter == False:\n\t\t\t\tstatus = False\n\t\t\t\tbreak\n\t\texcept:\n\t\t\tpass\n\treturn status\n\ndef iscurvesurf(s):\n\tnorms = [0,0.333,0.666,1]\n\ttry:\n\t\tfor n in norms:\n\t\t\tcurve1 = dg.Geometry.Explode(dg.Curve.ByIsoCurveOnSurface(s,0,n))[0]\n\t\t\tcurve2 = dg.Geometry.Explode(dg.Curve.ByIsoCurveOnSurface(s,1,n))[0]\n\t\t\tif (isinstance(curve1, dg.Line) or isinstance(curve1, dg.Circle)) and (isinstance(curve2, dg.Line) or isinstance(curve2, dg.Circle)):\n\t\t\t\tcontinue\n\t\t\telse:\n\t\t\t\tisgood = False\n\t\t\t\ttry:\n\t\t\t\t\tarclength1 = dg.Arc.ByThreePoints(curve1.StartPoint,dg.Curve.PointAtParameter(curve1,0.5),curve1.EndPoint).Length\n\t\t\t\t\tif round(arclength1,2) == round(curve1.Length):\n\t\t\t\t\t\tcontinue\n\t\t\t\t\telse:\n\t\t\t\t\t\treturn False\n\t\t\t\texcept:\t\n\t\t\t\t\tisgood = True\n\t\t\t\t\tpass\n\t\t\t\ttry:\n\t\t\t\t\tarclength2 = dg.Arc.ByThreePoints(curve2.StartPoint,dg.Curve.PointAtParameter(curve2,0.5),curve2.EndPoint).Length\n\t\t\t\t\tif round(arclength2,2) == round(curve2.Length):\n\t\t\t\t\t\tcontinue\n\t\t\t\t\telse:\n\t\t\t\t\t\treturn False\n\t\t\t\texcept:\n\t\t\t\t\tisgood = True\n\t\t\t\t\tpass\n\t\t\t\tif isgood:\n\t\t\t\t\tcontinue\n\t\treturn True\n\texcept:\n\t\treturn False\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\nsurfs= (tolist(IN[0]))\nbord = IN[1]\nborw = IN[2]\ndistanceU = empty2null(tolist(IN[3]))\ndistanceV = empty2null(tolist(IN[4]))\npanmethodU = IN[5]\npanmethodV = IN[6]\nuwidth = IN[7]\nudepth = IN[8]\nvwidth = IN[9]\nvdepth = IN[10]\nextendfix = IN[11]\nprecision = IN[12]\npanelthickness = IN[13]\ncreatepanels = IN[14]\nsafethickfactor = IN[15]\ncustomgridsu = empty2null(IN[16])\ncustomgridsv = empty2null(IN[17])\ncustomgridsw = empty2null(IN[18])\nwwidth = IN[19]\nwdepth = IN[20]\nremoveconflict = IN[21]\nuoffset = IN[22]\nvoffset = IN[23]\nwoffset = IN[24]\npanelsoffset = IN[25]\nframeoffset = IN[26]\n\ncleanedsurfs = []\nfor s in surfs:\n\tif isplanarsurf(s) or iscurvesurf(s):\n\t\tcleanedsurfs.append(s)\n\telse:\n\t\tcleanedsurfs.append(cleanupSurface(s))\nsurfs = cleanedsurfs\n\nmincompare = []\nif udepth != 0:\n\tmincompare.append(udepth)\nif vdepth != 0:\n\tmincompare.append(vdepth)\nif bord != 0:\n\tmincompare.append(bord)\nmindepth = min(mincompare)\n\nif bord == 0:\n\tborw = 0\nif borw == 0:\n\tbord = 0\n\ndef matchlist(surfs,replica):\n\tfixdcustomgridsw = []\n\tnums = range(len(surfs))\n\tfor n in nums:\n\t\tfixdcustomgridsw.append(replica)\n\treturn fixdcustomgridsw\n\nif customgridsw == None:\n\tcustomgridsw = matchlist(surfs,[None])\n\nif empty2null(IN[3]) == None:\n\tdistanceU = matchlist(surfs,0)\n\nif empty2null(IN[4]) == None:\n\tdistanceV = matchlist(surfs,0)\n\nprecision = precision * 0.3048\nextendfix = extendfix * 0.3048\nsafethickfactor = safethickfactor * 0.3048\n\ndef joincurves(crvs):\n\tdef PointsEqual(pt1, pt2):\n\t\ttolerance = 0.00001\n\t\tif (math.fabs(pt1.X - pt2.X) < tolerance and\n\t\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\n\t\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\n\t\t\treturn True\n\t\telse:\n\t\t\treturn False\n\tcrvs = flatten(tolist(crvs))\n\tcrvGroup = [-1 for x in range(len(crvs))]\n\tcrvGroup[0] = 0\n\tmaxGroupNum = 1\n\tstarts = []\n\tends = []\n\tfor crv in crvs:\n\t\tstarts.append(crv.PointAtParameter(0))\n\t\tends.append(crv.PointAtParameter(1))\n\tfor i in range(len(crvs)):\n\t\tif (crvGroup[i] == -1):\n\t\t\tcrvGroup[i] = i\n\t\tfor j in range(len(crvs)):\n\t\t\tif (i != j and\n\t\t\t\t(PointsEqual(starts[i], starts[j]) or\n\t\t\t\tPointsEqual(starts[i], ends[j]) or\n\t\t\t\tPointsEqual(ends[i], starts[j]) or\n\t\t\t\tPointsEqual(ends[i], ends[j]))):\n\t\t\t\tif (crvGroup[j] == -1):\n\t\t\t\t\tcrvGroup[j] = crvGroup[i]\n\t\t\t\telif (crvGroup[i] != crvGroup[j]):\n\t\t\t\t\toldNum = crvGroup[j]\n\t\t\t\t\tfor k in range(len(crvs)):\n\t\t\t\t\t\tif (crvGroup[k] == oldNum):\n\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\n\tgroups = []\n\texcluded = []\n\tfor n in crvGroup:\n\t\tinnercount = 0\n\t\ttmp = []\n\t\tfor n2 in crvGroup:\n\t\t\tif n == n2 and n2 not in excluded:\n\t\t\t\ttmp.append(crvs[innercount])\n\t\t\tinnercount += 1\n\t\tif len(tmp) == 0:\n\t\t\tcontinue\n\t\ttry:\n\t\t\ttmp = dg.PolyCurve.ByJoinedCurves(tmp)\n\t\t\tgroups.append(tmp)\n\t\texcept:\n\t\t\tfor t in tmp:\n\t\t\t\tgroups.append(t)\n\t\texcluded.append(n)\n\tjoinedcurves = groups\n\treturn joinedcurves\n\ndef fixcurve(curve,precision):\n\texlength = curve.Length/precision\n\tnormed  = normalize(exlength)\n\ttmpin = []\n\tfor norm in normed:\n\t\tpin = dg.Curve.PointAtParameter(curve,norm)\n\t\ttmpin.append(pin)\n\twanted = dg.NurbsCurve.ByPoints(tmpin)\n\treturn wanted\n\ndef exlines(curve,extendfix,precision,start,end):\n\texplodeus = dg.Geometry.Explode(curve)\n\tfixedcurves = []\n\tcounter = 0\n\tlastitem = len(explodeus) - 1\n\tfor ex in explodeus:\n\t\tif len(explodeus) > 1 and counter == 0 and start == True:\n\t\t\tfixedcurves.append(fixcurve(dg.Curve.ExtendStart(fixcurve(ex,precision),extendfix),precision))\n\t\telif len(explodeus) > 1 and counter == lastitem and end == True:\n\t\t\tfixedcurves.append(fixcurve(dg.Curve.ExtendEnd(fixcurve(ex,precision),extendfix),precision))\n\t\telse:\n\t\t\tfixedme = fixcurve(ex,precision)\n\t\t\tif start == True:\n\t\t\t\tfixedme = fixcurve(dg.Curve.ExtendStart(fixedme),precision)\n\t\t\tif end == True:\n\t\t\t\tfixedme = fixcurve(dg.Curve.ExtendEnd(fixedme),precision)\n\t\t\tfixedcurves.append(fixedme)\n\t\tcounter += 1\n\twantedfix = dg.PolyCurve.ByJoinedCurves(fixedcurves)\n\treturn wantedfix\n\ndef truemeasure(c,currentsurf):\n\ttry:\n\t\tsplits = dg.Geometry.Split(c,currentsurf)\n\texcept:\n\t\tsplits = []\n\tinnercounter = 0\n\tgoodsplits = []\n\tfor s in splits:\n\t\tpoint = dg.Curve.PointAtParameter(s,0.5)\n\t\tif dg.Geometry.DoesIntersect(currentsurf,point) and round(s.Length,1) != 0:\n\t\t\tgoodsplits.append(splits[innercounter])\n\t\tinnercounter += 1\n\ttotalmeasure = []\n\tfor spl in goodsplits:\n\t\ttry:\n\t\t\ttotalmeasure.append(spl.Length)\n\t\texcept:\n\t\t\tpass\n\twantedlength = sum(totalmeasure)\n\treturn wantedlength\n\ndef bulktruemeasure(currentsurf,uv):\n\ttimes = normalize(20)\n\tlengths = []\n\tfor t in times:\n\t\tlengths.append(truemeasure(dg.Surface.GetIsoline(currentsurf,uv,t),currentsurf))\n\twanted = round(max(lengths),3)\n\treturn wanted\n\ndef getbestold(fixedexploded,bord,solid):\n\ttmpareas = []\n\tfor x in fixedexploded:\n\t\ttmpareas.append(x.Area)\n\tstatus = \"Again\"\n\twhile status == \"Again\":\n\t\tmaxarea = max(tmpareas)\n\t\tinnercount = 0\n\t\tfor r in tmpareas:\n\t\t\tif maxarea == r:\n\t\t\t\tpoint_onsurf = dg.Surface.PointAtParameter(fixedexploded[innercount])\n\t\t\t\tvec_onsurf = dg.Surface.NormalAtParameter(fixedexploded[innercount])\n\t\t\t\ttransformed = dg.Geometry.Translate(point_onsurf,vec_onsurf,bord/1.5)\n\t\t\t\tif dg.Geometry.DoesIntersect(transformed,solid):\n\t\t\t\t\tfixedexploded.pop(innercount)\n\t\t\t\t\ttmpareas.pop(innercount)\n\t\t\t\t\tstatus = \"Again\"\n\t\t\t\t\tbreak\n\t\t\t\telse:\n\t\t\t\t\tsurfi = fixedexploded.pop(innercount)\n\t\t\t\t\twanted1 = dg.Surface.Thicken(surfi,borw*-1,False)\n\t\t\t\t\tsurfi.Dispose()\n\t\t\t\t\ttmpareas.pop(innercount)\n\t\t\t\t\tstatus = \"Stop\"\n\t\t\t\t\tbreak\n\t\t\tinnercount += 1\n\treturn wanted1,fixedexploded\n\ndef framesv1(surfs,bord,borw):\n\tthickned = []\n\twantedwitdh = borw  * 2\n\twanteddepth = wantedwitdh + bord\n\tthickned = dg.Surface.Thicken(surfs,wanteddepth,True)\n\tcount = 0\n\tthinedshell = dg.Solid.ThinShell(thickned,borw,0)\n\texploded = dg.Geometry.Explode(thinedshell)\n\tfixedexploded = []\n\tfor x in exploded:\n\t\tfixedexploded.append(x)\n\twanted = getbestold(fixedexploded,bord,thickned)\n\twanted1 = wanted[0]\n\twanted2 = getbestold(wanted[1],bord,thickned)[0]\n\tallwants = [wanted1,wanted2]\n\tfinalresult = dg.Solid.DifferenceAll(thinedshell,allwants)\n\tthickned.Dispose()\n\tthinedshell.Dispose()\n\tfor x in fixedexploded:\n\t\tx.Dispose()\n\treturn finalresult\n\ndef framesv2(surfs,bord,borw):\n\tframes = []\n\tthicken = dg.Surface.Thicken(surfs,bord)\n\texploded = dg.Geometry.Explode(thicken)[2:]\n\tjoined = joinsurfs(exploded)\n\tprejointhicken = []\n\tfor j in joined:\n\t\tprejointhicken.append(dg.Surface.Thicken(j,-borw,False))\n\tunioned = dg.Solid.ByUnion(prejointhicken)\n\tfor x in exploded:\n\t\tx.Dispose()\n\tfor j in joined:\n\t\tj.Dispose()\n\tthicken.Dispose()\n\tfor j in prejointhicken:\n\t\tj.Dispose()\n\treturn unioned\n\ndef framesv3(surfs,bord,borw):\n\tframes = []\n\ttry:\n\t\tthicken = dg.Surface.Thicken(surfs,bord)\n\texcept:\n\t\tpermpan = dg.PolyCurve.ByJoinedCurves(surfs.PerimeterCurves())\n\t\tpatchedpan = dg.Surface.ByPatch(permpan)\n\t\tthicken = dg.Surface.Thicken(patchedpan,bord,True)\n\t\tpermpan.Dispose()\n\texploded = dg.Geometry.Explode(thicken)[2:]\n\tthickenex = []\n\tfor x in exploded:\n\t\ttry:\n\t\t\tthickenex.append(dg.Surface.Thicken(x,borw*2,True))\t\n\t\texcept:\n\t\t\tpass\n\ts = patchedpan\n\tfor int in thickenex:\n\t\ts = dg.Surface.SubtractFrom(s,int)[0]\n\tslisted = [s]\n\tinverse = dg.Surface.Difference(patchedpan,slisted)\n\treturn inverse,thickenex\n\ndef joinsurfs(surfs):\n\tdef surf_doesinter(a,b,tollerance = 0.00001):\n\t\tif round(dg.Geometry.DistanceTo(a,b),2) < tollerance:\n\t\t\treturn True\n\t\telse:\n\t\t\treturn False\n\tsurfacesflatten = flatten(surfs)\n\tsurfacesflatten = [x for x in surfacesflatten if x]\n\tif surfacesflatten != None and surfacesflatten != []:\n\t\tcrvs = flatten(tolist(surfs))\n\t\tcrvGroup = [-1 for x in range(len(crvs))]\n\t\tcrvGroup[0] = 0\n\t\tmaxGroupNum = 1\n\t\tfor i in range(len(crvs)):\n\t\t\tif (crvGroup[i] == -1):\n\t\t\t\tcrvGroup[i] = i\n\t\t\tfor j in range(len(crvs)):\n\t\t\t\ttry:\n\t\t\t\t\tif i != j and surf_doesinter(crvs[i], crvs[j]):\n\t\t\t\t\t\tif (crvGroup[j] == -1):\n\t\t\t\t\t\t\tcrvGroup[j] = crvGroup[i]\n\t\t\t\t\t\telif (crvGroup[i] != crvGroup[j]):\n\t\t\t\t\t\t\toldNum = crvGroup[j]\n\t\t\t\t\t\t\tfor k in range(len(crvs)):\n\t\t\t\t\t\t\t\tif (crvGroup[k] == oldNum):\n\t\t\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\tgroups = []\n\t\texcluded = []\n\t\tfor n in crvGroup:\n\t\t\tinnercount = 0\n\t\t\ttmp = []\n\t\t\tfor n2 in crvGroup:\n\t\t\t\tif n == n2 and n2 not in excluded:\n\t\t\t\t\ttmp.append(crvs[innercount])\n\t\t\t\tinnercount += 1\n\t\t\tif len(tmp) == 0:\n\t\t\t\tcontinue\n\t\t\ttry:\n\t\t\t\ttmp = dg.Surface.ByUnion(tmp)\n\t\t\t\tgroups.append(tmp)\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\ttmp = dg.PolySurface.ByJoinedSurfaces(tmp)\n\t\t\t\t\tgroups.append(tmp)\n\t\t\t\texcept:\n\t\t\t\t\tfor t in tmp:\n\t\t\t\t\t\tgroups.append(t)\n\t\t\texcluded.append(n)\n\t\tjoinedsurfs = groups\n\t\treturn joinedsurfs\n\telse:\n\t\treturn surfs\n\ndef normalize(length,nostartend = False,twominonly = False):\n\tif length != None:\n\t\tif length <= 3 and twominonly == False:\n\t\t\tlength = 4\n\t\telif length <= 3 and twominonly == True:\n\t\t\tif length < 2:\n\t\t\t\tlength = 2\n\t\tif nostartend:\n\t\t\tlength += 2\n\t\ta = range(0,int(length))\n\t\tpoints = []\n\t\tamin, amax = min(a), max(a)\n\t\titem = []\n\t\tfor val in a:\n\t\t\titem.append(float(val-amin) / float(amax-amin))\n\telse:\n\t\titem = [None]\n\tif nostartend == True:\n\t\titem.pop(0)\n\t\titem.pop(-1)\n\treturn item\n\ndef initialgrids(subbedsurfs,distanceU,distanceV,panmethodU,panmethodV,allsurfs):\n\tnurbs_surfs = []\n\tfor a in allsurfs:\n\t\tnurbs_surfs.append(a)\n\t\n\tisolineU = []\n\tisolineV = []\n\t\n\tcounter = 0\n\tfor n in nurbs_surfs:\n\t\tdisU = distanceU[counter]\n\t\tdisV = distanceV[counter]\n\t\tcounter += 1\n\t\tif panmethodU == False and disU != 0:\n\t\t\tulen = disU + 2\n\t\telif disU != 0:\n\t\t\twanUlen = bulktruemeasure(n,0)\n\t\t\tutest = math.ceil(wanUlen/disU)\n\t\t\ttry:\n\t\t\t\tif wanUlen/utest < disU:\n\t\t\t\t\tutest = utest - 1\n\t\t\t\tulen = utest + 1\n\t\t\texcept:\n\t\t\t\tulen = None\n\t\telse:\n\t\t\tulen = None\n\t\tisolineU.append(ulen)\n\t\t\n\t\tif panmethodV == False and disV != 0:\n\t\t\tvlen = disV + 2\n\t\telif disV != 0:\n\t\t\twanVlen = bulktruemeasure(n,1)\n\t\t\tvtest = math.ceil(wanVlen/disV)\n\t\t\ttry:\n\t\t\t\tif wanVlen/vtest < disV:\n\t\t\t\t\tvtest = vtest - 1\n\t\t\t\tvlen = vtest + 1\n\t\t\texcept:\n\t\t\t\tvlen = None\n\t\telse:\n\t\t\tvlen = None\n\t\tisolineV.append(vlen)\n\t\n\tnormsU = []\n\tfor u in isolineU:\n\t\tnormedu = normalize(u,False,True)\n\t\tnormedu = normedu[1:]\n\t\tif normedu == []:\n\t\t\tnormedu = [[]]\n\t\tnormsU.append(normedu)\n\t\t\n\tpermall = []\n\tfor surf in allsurfs:\n\t\tperms = surf.PerimeterCurves()\n\t\tpermsfix = []\n\t\tfor perm in perms:\n\t\t\tpermsfix.append(perm)\n\t\tpermall.append(len(permsfix))\n\t\tfor perm in perms:\n\t\t\tperm.Dispose()\n\t\t\n\tgridsu = []\n\tcounter = 0\n\tfor surf in allsurfs:\n\t\ttmp = []\n\t\tcurrentpu = normsU[counter]\n\t\tfor p in currentpu:\n\t\t\ttry:\n\t\t\t\tif permall[counter] == 1:\n\t\t\t\t\ttmp.append(dg.Surface.GetIsoline(subbedsurfs[counter],1,p))\n\t\t\t\telse:\n\t\t\t\t\tif p == 0 or p == 1:\n\t\t\t\t\t\ttmp.append(dg.Surface.GetIsoline(subbedsurfs[counter],1,p))\n\t\t\t\t\telse:\n\t\t\t\t\t\ttmp.append(dg.Surface.GetIsoline(surf,1,p))\n\t\t\texcept:\n\t\t\t\ttmp.append(None)\n\t\tcounter += 1\n\t\tgridsu.append(tmp)\n\t\n\tnormsV = []\n\tfor v in isolineV:\n\t\tnormedv = normalize(v,False,True)\n\t\tnormedv = normedv[1:]\n\t\tif normedv == []:\n\t\t\tnormedv = [[]]\n\t\tnormsV.append(normedv)\n\t\n\tgridsv = []\n\tcounter = 0\n\tfor surf in allsurfs:\n\t\ttmp = []\n\t\tcurrentpv = normsV[counter]\n\t\tfor p in currentpv:\n\t\t\ttry:\n\t\t\t\tif permall[counter] == 1:\n\t\t\t\t\ttmp.append(dg.Surface.GetIsoline(subbedsurfs[counter],0,p))\n\t\t\t\telse:\n\t\t\t\t\tif p == 0 or p == 1:\n\t\t\t\t\t\ttmp.append(dg.Surface.GetIsoline(subbedsurfs[counter],0,p))\n\t\t\t\t\telse:\n\t\t\t\t\t\ttmp.append(dg.Surface.GetIsoline(surf,0,p))\n\t\t\texcept:\n\t\t\t\ttmp.append(None)\n\t\tcounter += 1\n\t\tgridsv.append(tmp)\n\treturn gridsu,gridsv\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndef doesinter(a,b,tollerance = 0.05):\n\tif round(dg.Geometry.DistanceTo(a,b),2) < tollerance:\n\t\treturn True\n\telse:\n\t\treturn False\n\ndef gridfunction(currentsurf,extended,precision,uwidth,udepth,isplanar):\n\texlength = extended.Length/precision\n\tnormed  = normalize(exlength)\n\ttmpin1 = []\n\ttmpin2 = []\n\tres = []\n\tplanarbool = []\n\tdirectconvert = False\n\ttry:\n\t\texplodedcurves = dg.PolyCurve.ByJoinedCurves([extended]).Curves()\n\texcept:\n\t\ttry:\n\t\t\texplodedcurves = dg.Geometry.Explode(extended)\n\t\texcept:\n\t\t\texplodedcurves = [extended]\n\tif len(explodedcurves) > 1:\n\t\ttry:\n\t\t\tif isplanar:\n\t\t\t\tpin = dg.Curve.PointAtParameter(extended,0.5)\n\t\t\t\tpinnormal = dg.Surface.NormalAtPoint(currentsurf,pin)\n\t\t\t\ttranpin = dg.Geometry.Translate(extended,pinnormal,udepth/2.0)\n\t\t\t\ttranpin2 = dg.Geometry.Translate(extended,pinnormal,-udepth/2.0)\n\t\t\t\twanted1 = tranpin\n\t\t\t\twanted2 = tranpin2\n\t\t\t\tdirectconvert = True\n\t\t\telse:\n\t\t\t\treturned = explodedcurves\n\t\t\t\tretwanted1 = []\n\t\t\t\tretwanted2 = []\n\t\t\t\tfor ret in returned:\n\t\t\t\t\tretlength = ret.Length/precision\n\t\t\t\t\tretnormed  = normalize(retlength)\n\t\t\t\t\trettmpin1 = []\n\t\t\t\t\trettmpin2 = []\n\t\t\t\t\tfor retnorm in retnormed:\n\t\t\t\t\t\tretpin = dg.Curve.PointAtParameter(ret,retnorm)\n\t\t\t\t\t\tretpinnormal = dg.Surface.NormalAtPoint(currentsurf,retpin)\n\t\t\t\t\t\trettranpin = dg.Geometry.Translate(retpin,retpinnormal,udepth/2.0)\n\t\t\t\t\t\trettranpin2 = dg.Geometry.Translate(retpin,retpinnormal,-udepth/2.0)\n\t\t\t\t\t\trettmpin1.append(rettranpin)\n\t\t\t\t\t\trettmpin2.append(rettranpin2)\n\t\t\t\t\tretwanted1.append(dg.NurbsCurve.ByPoints(rettmpin1))\n\t\t\t\t\tretwanted2.append(dg.NurbsCurve.ByPoints(rettmpin2))\n\t\t\t\twanted1 = dg.PolyCurve.ByJoinedCurves(retwanted1)\n\t\t\t\twanted2 = dg.PolyCurve.ByJoinedCurves(retwanted2)\n\t\t\t\tdirectconvert = True\n\t\texcept:\n\t\t\tdirectconvert = False\n\tif directconvert == False:\n\t\tfor norm in normed:\n\t\t\tpin = dg.Curve.PointAtParameter(extended,norm)\n\t\t\tpinnormal = dg.Surface.NormalAtPoint(currentsurf,pin)\n\t\t\ttranpin = dg.Geometry.Translate(pin,pinnormal,udepth/2.0)\n\t\t\ttranpin2 = dg.Geometry.Translate(pin,pinnormal,-udepth/2.0)\n\t\t\ttmpin1.append(tranpin)\n\t\t\ttmpin2.append(tranpin2)\n\t\twanted1 = dg.NurbsCurve.ByPoints(tmpin1)\n\t\twanted2 = dg.NurbsCurve.ByPoints(tmpin2)\n\tloftbody = False\n\ttry:\n\t\tloftbody = dg.Surface.ByLoft([wanted1,wanted2])\n\texcept:\n\t\texploded1 = dg.Geometry.Explode(wanted1)\n\t\texploded2 = dg.Geometry.Explode(wanted2)\n\t\twcount = 0\n\t\tfor w in exploded1:\n\t\t\tw2 = exploded2[wcount]\n\t\t\twcount += 1\n\t\t\tloftmini = dg.Surface.ByLoft([w,w2])\n\t\t\tw.Dispose()\n\t\t\tw2.Dispose()\n\t\t\ttry:\n\t\t\t\tres.append(dg.Surface.Thicken(loftmini,uwidth,True))\n\t\t\t\tloftmini.Dispose()\n\t\t\texcept:\n\t\t\t\tloftmini.Dispose()\n\tif len(res) == 0 and loftbody != False:\n\t\ttry:\n\t\t\tres.append(dg.Surface.Thicken(loftbody,uwidth,True))\n\t\t\tloftbody.Dispose()\n\t\texcept:\n\t\t\texplodedloft = dg.Geometry.Explode(loftbody)\n\t\t\tfor exp in explodedloft:\n\t\t\t\ttry:\n\t\t\t\t\tres.append(dg.Surface.Thicken(exp,uwidth,True))\n\t\t\t\t\texp.Dispose()\n\t\t\t\texcept:\n\t\t\t\t\texp.Dispose()\n\tplanarbool.append(isplanar)\n\treturn res,planarbool\n\ndef solidgrids(allsurfs,inversedlist,borw,gridsu,uwidth,udepth,extendfix,splitmode):\n\tcounter = 0\n\tsplittedu = []\n\tplanaru = []\n\tfor listu in gridsu:\n\t\ttmp = []\n\t\tplanartmp = []\n\t\tcurrentsurf = allsurfs[counter]\n\t\tisplanar= isplanarsurf(currentsurf)\n\t\tcurrentinvert = inversedlist[counter]\n\t\ttry:\n\t\t\ttry:\n\t\t\t\tif borw == 0 or splitmode == True:\n\t\t\t\t\tpercurves = currentsurf.PerimeterCurves()\n\t\t\t\telse:\n\t\t\t\t\tpercurves = currentinvert.PerimeterCurves()\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\tif borw == 0 or splitmode == True:\n\t\t\t\t\t\tpercurves = currentsurf.FlipNormalDirection().PerimeterCurves()\n\t\t\t\t\telse:\n\t\t\t\t\t\tpercurves = currentinvert.PerimeterCurves()\n\t\t\t\texcept:\n\t\t\t\t\tpercurves = [None]\n\t\t\tfor c in listu:\n\t\t\t\ttry:\n\t\t\t\t\tif splitmode == True and c != None:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tsplits = dg.Geometry.Intersect(c,currentsurf)\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tsplits = []\n\t\t\t\t\t\t\tcex = dg.Geometry.Explode(c)\n\t\t\t\t\t\t\tfor ce in cex:\n\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\tsplits.append(dg.Geometry.Intersect(ce,currentsurf))\n\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\tsplits.append(ce)\n\t\t\t\t\t\t\tsplits = flatten(splits)\n\t\t\t\t\telif splitmode == False and c != None:\n\t\t\t\t\t\tsplits = [c]\n\t\t\t\t\telse:\n\t\t\t\t\t\tsplits = []\n\t\t\t\texcept:\n\t\t\t\t\tsplits = []\n\t\t\t\tinnercounter = 0\n\t\t\t\twantall = []\n\t\t\t\tplanarall = []\n\t\t\t\tgoodsplits = []\n\t\t\t\tfor s in splits:\n\t\t\t\t\tif splitmode == False:\n\t\t\t\t\t\tptsnormalize = normalize(s.Length/(2*precision),True)\n\t\t\t\t\telse:\n\t\t\t\t\t\tptsnormalize = normalize(2,True)\n\t\t\t\t\tpoint = []\n\t\t\t\t\tfor ptsn in ptsnormalize:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tpoint.append(dg.Curve.PointAtParameter(s,ptsn))\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\tbreakstatus = False\n\t\t\t\t\tfor per in percurves:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tallstatus = []\n\t\t\t\t\t\t\tfor popo in point:\n\t\t\t\t\t\t\t\tif doesinter(per,popo):\n\t\t\t\t\t\t\t\t\tallstatus.append(True)\n\t\t\t\t\t\t\t\telse:\n\t\t\t\t\t\t\t\t\tallstatus.append(False)\n\t\t\t\t\t\t\tif len(allstatus) == 0:\n\t\t\t\t\t\t\t\tallstatus.append(False)\n\t\t\t\t\t\t\tif all(allstatus):\n\t\t\t\t\t\t\t\tbreakstatus = True\n\t\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\tif breakstatus == True:\n\t\t\t\t\t\tinnercounter += 1\n\t\t\t\t\t\tcontinue\n\t\t\t\t\tfor popo in point:\n\t\t\t\t\t\tif doesinter(currentsurf,popo) and round(s.Length,1) != 0:\n\t\t\t\t\t\t\tgoodsplits.append(splits[innercounter])\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\tinnercounter += 1\n\t\t\t\ttry:\n\t\t\t\t\tif len(goodsplits) > 1:\n\t\t\t\t\t\tsplitsjoin = [dg.PolyCurve.ByJoinedCurves(goodsplits)]\n\t\t\t\t\t\ttestextend = dg.Curve.ExtendStart(splitsjoin[0],extendfix)\n\t\t\t\t\t\tsplits = splitsjoin\n\t\t\t\t\telse:\n\t\t\t\t\t\tsplits = goodsplits\n\t\t\t\texcept:\n\t\t\t\t\tsplits = goodsplits\n\t\t\t\ttry:\n\t\t\t\t\tjoinedsplits = joincurves(splits)\n\t\t\t\t\tsplits = joinedsplits\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\t\tinnercounter = 0\n\t\t\t\tfor s in splits:\n\t\t\t\t\tsplit_start = splits[innercounter].StartPoint\n\t\t\t\t\tsplit_end = splits[innercounter].EndPoint\n\t\t\t\t\tdoitstart = False\n\t\t\t\t\tdoitend = False\n\t\t\t\t\tfor per in percurves:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tif doesinter(per,split_start):\n\t\t\t\t\t\t\t\tdoitstart = True\n\t\t\t\t\t\t\tif doesinter(per,split_end):\n\t\t\t\t\t\t\t\tdoitend = True\n\t\t\t\t\t\t\tif doitstart == True and doitend == True:\n\t\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\ttry:\n\t\t\t\t\t\tif doitstart == True:\n\t\t\t\t\t\t\textended = dg.Curve.ExtendStart(splits[innercounter],extendfix)\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\textended = splits[innercounter]\n\t\t\t\t\t\tif doitend == True:\n\t\t\t\t\t\t\textended = dg.Curve.ExtendEnd(extended,extendfix)\n\t\t\t\t\t\telse:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\texcept:\n\t\t\t\t\t\textended = splits[innercounter]\n\t\t\t\t\t\tif doitstart == True or doitend == True:\n\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\textended = exlines(splits[innercounter],extendfix,precision,doitstart,doitend)\n\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\tpass\n\t\t\t\t\ttry:\n\t\t\t\t\t\tgridfunc = gridfunction(currentsurf,extended,precision,uwidth,udepth,isplanar)\n\t\t\t\t\t\twantall.append(gridfunc[0])\n\t\t\t\t\t\tplanarall.append(gridfunc[1])\n\t\t\t\t\texcept:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tgridfunc = gridfunction(currentsurf,extended,3*precision,uwidth,udepth,isplanar)\n\t\t\t\t\t\t\twantall.append(gridfunc[0])\n\t\t\t\t\t\t\tplanarall.append(gridfunc[1])\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\tinnercounter += 1\n\t\t\t\ttmp.append(wantall)\n\t\t\t\tplanartmp.append(planarall)\n\t\texcept:\n\t\t\ttmp.append([])\n\t\t\tplanartmp.append([])\n\t\tsplittedu.append(flatten(tmp))\n\t\tplanaru.append(flatten(planartmp))\n\t\tcounter += 1\n\treturn splittedu,planaru\n\ndef surfacesubtract(surf,solids,isplanar=None):\n\tsolids = tolist(solids)\n\tif isplanar != None:\n\t\tisplanar = tolist(isplanar)\n\t\tif all(isplanar) == True:\n\t\t\ttry:\n\t\t\t\ttryunion = dg.Solid.ByUnion(solids)\n\t\t\t\tsolids = [tryunion]\n\t\t\texcept:\n\t\t\t\tpass\n\tresult = []\n\ts = surf\n\ts = trysoliddif(s,solids)\n\ttry:\n\t\tslistedexplode = dg.Geometry.Explode(s)\n\t\tinverse = dg.Surface.Difference(surf,slistedexplode)\n\texcept:\n\t\tsfixed = []\n\t\texploded = slistedexplode\n\t\tareas = []\n\t\tfor i in exploded:\n\t\t\tareas.append(i.Area)\n\t\tmaxarea = max(areas)\n\t\tcounter = 0\n\t\tfor a in areas:\n\t\t\tif maxarea == a:\n\t\t\t\twantedsurf = exploded[counter]\n\t\t\t\tbreak\n\t\t\tcounter += 1\n\t\tsfixed.append(wantedsurf)\n\t\ttry:\n\t\t\tinverse = dg.Surface.Difference(surf,sfixed)\n\t\texcept:\n\t\t\tinverse = None\n\ttry:\n\t\texplodedS = dg.Geometry.Explode(s)\n\t\tareasS = []\n\t\tfor i in explodedS:\n\t\t\tareasS.append(i.Area)\n\t\tmaxarea = max(areasS)\n\t\tcounter = 0\n\t\tfor a in areasS:\n\t\t\tif maxarea == a:\n\t\t\t\ts = explodedS[counter]\n\t\t\t\tbreak\n\t\t\tcounter += 1\n\texcept:\n\t\tpass\n\treturn s,inverse\n\ndef operateframes(surfs,bord,borw):\n\tsubtractedlist = []\n\tinversedlist = []\n\tfor s in surfs:\n\t\ttry:\n\t\t\talready = False\n\t\t\tsolidframe = framesv1(s,bord,borw)\n\t\t\tif solidframe == None:\n\t\t\t\tsolidframe = framesv2(s,bord,borw)\n\t\t\t\talready = True\n\t\t\tsubtract = surfacesubtract(s,solidframe)\n\t\t\tsubtracted = subtract[0]\n\t\t\tinversed = subtract[1]\n\t\t\tsubtractedlist.append(subtracted)\n\t\t\tinversedlist.append(inversed)\n\t\texcept:\n\t\t\ttry:\n\t\t\t\tif already == False:\n\t\t\t\t\tsolidframe = framesv2(s,bord,borw)\n\t\t\t\t\tsubtract = surfacesubtract(s,solidframe)\n\t\t\t\t\tsubtracted = subtract[0]\n\t\t\t\t\tinversed = subtract[1]\n\t\t\t\t\tsubtractedlist.append(subtracted)\n\t\t\t\t\tinversedlist.append(inversed)\n\t\t\t\telse:\n\t\t\t\t\tsubtractedlist.append(s)\n\t\t\t\t\tinversedlist.append(None)\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\tsolidframe = framesv3(s,bord,borw)\n\t\t\t\t\tsf = s\n\t\t\t\t\tfor int in solidframe[1]:\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\ttestifwork = dg.Surface.SubtractFrom(sf,int)\n\t\t\t\t\t\t\tif len(testifwork) != 0:\n\t\t\t\t\t\t\t\tsf = testifwork[0]\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\tsubtractedlist.append(sf)\n\t\t\t\t\tinversedlist.append(solidframe[0])\n\t\t\t\texcept:\n\t\t\t\t\tsubtractedlist.append(s)\n\t\t\t\t\tinversedlist.append(None)\n\t\ttry:\n\t\t\tsolidframe.Dispose()\n\t\texcept:\n\t\t\tpass\n\treturn subtractedlist,inversedlist\n\ndef trythicken(poly,thickness,offset = 0):\n\toffsetpoly = tryoffset(poly,offset)\n\ttry:\n\t\tsolid = dg.Surface.Thicken(offsetpoly,thickness,True)\n\texcept:\n\t\tsolids = []\n\t\textracted = dg.Geometry.Explode(poly)\n\t\tfor e in extracted:\n\t\t\te = tryoffset(e,offset)\n\t\t\ttry:\n\t\t\t\tsolids.append(dg.Surface.Thicken(e,thickness,True))\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\tpermpan = dg.PolyCurve.ByJoinedCurves(e.PerimeterCurves())\n\t\t\t\t\tpatchedpan = dg.Surface.ByPatch(permpan)\n\t\t\t\t\tsolids.append(dg.Surface.Thicken(patchedpan,thickness,True))\n\t\t\t\t\tpermpan.Dispose()\n\t\t\t\t\tpatchedpan.Dispose()\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\ttry:\n\t\t\tsolid = dg.Solid.ByUnion(solids)\n\t\t\tfor s in solids:\n\t\t\t\ts.Dispose()\n\t\texcept:\n\t\t\tsolid = solids\n\treturn solid\n\ndef m_trythicken(chop,thickness,offset = 0):\n\tresult = []\n\tfor c in chop:\n\t\tresult.append(trythicken(c,thickness,offset))\n\t\tc.Dispose()\n\treturn result\n\ndef gridremover(gridsu,customgridsu):\n\tgridcounter = 0\n\tallgrids = []\n\tfor eachfacegrid in gridsu:\n\t\tcustomface = customgridsu[gridcounter]\n\t\tgoodgrid = []\n\t\tfor grid in eachfacegrid:\n\t\t\tisgood = True\n\t\t\tfor g in customface:\n\t\t\t\ttry:\n\t\t\t\t\tif dg.Geometry.DoesIntersect(grid,g):\n\t\t\t\t\t\tisgood = False\n\t\t\t\t\t\tbreak\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\tif isgood == True:\n\t\t\t\tgoodgrid.append(grid)\n\t\tif len(goodgrid) != 0:\n\t\t\tallgrids.append(goodgrid)\n\t\telse:\n\t\t\tallgrids.append([None])\n\t\tgridcounter += 1\n\treturn allgrids\n\ndef gridcombine(solidu,soliducustom):\n\tlistcounter = 0\n\tcombinedlist = []\n\tfor gridlist in solidu:\n\t\tcustomlist = soliducustom[listcounter]\n\t\tcombinedlist.append(gridlist+customlist)\n\t\tlistcounter += 1\n\treturn combinedlist\n\ndef trysurfdif(surf,surfstovoid,thickness,is_sand=False):\n\tif is_sand == False:\n\t\ttry:\n\t\t\tcleansurfstovoid = []\n\t\t\tfor tov in surfstovoid:\n\t\t\t\texploded = dg.Geometry.Explode(tov)\n\t\t\t\tif len(exploded) > 1:\n\t\t\t\t\tcleansurfstovoid.append(exploded)\n\t\t\t\telse:\n\t\t\t\t\tfor exp in exploded:\n\t\t\t\t\t\texp.Dispose()\n\t\t\t\t\tcleansurfstovoid.append(tov)\n\t\t\tsurfstovoid = flatten(cleansurfstovoid)\n\t\t\ts = dg.Surface.Difference(surf,surfstovoid)\n\t\texcept:\n\t\t\tthickened = []\n\t\t\tfor su in surfstovoid:\n\t\t\t\ttry:\n\t\t\t\t\tthickened.append(dg.Surface.Thicken(su,thickness,True))\n\t\t\t\texcept:\n\t\t\t\t\texplodeme = dg.Geometry.Explode(su)\n\t\t\t\t\tfor ex in explodeme:\n\t\t\t\t\t\tthickened.append(dg.Surface.Thicken(ex,thickness,True))\n\t\t\ts = surf\n\t\t\tfor int in thickened:\n\t\t\t\ttry:\n\t\t\t\t\ttestifwork = dg.Surface.SubtractFrom(s,int)\n\t\t\t\t\tif len(testifwork) != 0:\n\t\t\t\t\t\ts = testifwork[0]\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\t\tint.Dispose()\n\telse:\n\t\ttry:\n\t\t\tthickened = []\n\t\t\tfor su in surfstovoid:\n\t\t\t\ttry:\n\t\t\t\t\tthickened.append(dg.Surface.Thicken(su,thickness,True))\n\t\t\t\texcept:\n\t\t\t\t\texplodeme = dg.Geometry.Explode(su)\n\t\t\t\t\tfor ex in explodeme:\n\t\t\t\t\t\tthickened.append(dg.Surface.Thicken(ex,thickness,True))\n\t\t\ts = surf\n\t\t\tfor int in thickened:\n\t\t\t\ttry:\n\t\t\t\t\ttestifwork = dg.Surface.SubtractFrom(s,int)\n\t\t\t\t\tif len(testifwork) != 0:\n\t\t\t\t\t\ts = testifwork[0]\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\t\tint.Dispose()\n\t\texcept:\n\t\t\tcleansurfstovoid = []\n\t\t\tfor tov in surfstovoid:\n\t\t\t\texploded = dg.Geometry.Explode(tov)\n\t\t\t\tif len(exploded) > 1:\n\t\t\t\t\tcleansurfstovoid.append(exploded)\n\t\t\t\telse:\n\t\t\t\t\tfor exp in exploded:\n\t\t\t\t\t\texp.Dispose()\n\t\t\t\t\tcleansurfstovoid.append(tov)\n\t\t\tsurfstovoid = flatten(cleansurfstovoid)\n\t\t\ts = dg.Surface.Difference(surf,surfstovoid)\n\treturn s\n\ndef trysoliddif(surf,solidsstovoid):\n\ts = surf\n\tfailed = []\n\tfor int in solidsstovoid:\n\t\ttry:\n\t\t\ttestifwork = dg.Surface.SubtractFrom(s,int)\n\t\t\tif len(testifwork) != 0:\n\t\t\t\ts = testifwork[0]\n\t\t\telse:\n\t\t\t\tfailed.append(int)\n\t\texcept:\n\t\t\tfailed.append(int)\n\tif len(failed) != 0:\n\t\tresfail = []\n\t\tfor f in failed:\n\t\t\tresfail.append(dg.Geometry.Intersect(surf,f))\n\t\tresfail = flatten(resfail)\n\t\ttry:\n\t\t\tfor sone in resfail:\n\t\t\t\ts = dg.Surface.Difference(s,[sone])\n\t\texcept:\n\t\t\tpass\n\treturn s\n\ndef customgridoperate(gridsu,customgridsu,subtractedlist,inversedlist,borw,uwidth,safethickfactor,extendfix,removeconflict):\n\tif customgridsu != None:\n\t\tif removeconflict:\n\t\t\tgridsu =  gridremover(gridsu,customgridsu)\n\t\tsogu = solidgrids(subtractedlist,inversedlist,borw,gridsu,uwidth,safethickfactor,extendfix,True)\n\t\tsolidu = sogu[0]\n\t\tsogupla = sogu[1]\n\t\tsogucus = solidgrids(subtractedlist,inversedlist,borw,customgridsu,uwidth,safethickfactor,extendfix,False)\n\t\tsoliducustom = sogucus[0]\n\t\tsoguplacus = sogucus[1]\n\t\tsolidu = gridcombine(solidu,soliducustom)\n\t\tsogupla = gridcombine(sogupla,soguplacus)\n\telse:\n\t\tsogu = solidgrids(subtractedlist,inversedlist,borw,gridsu,uwidth,safethickfactor,extendfix,True)\n\t\tsolidu = sogu[0]\n\t\tsogupla = sogu[1]\n\treturn solidu,sogupla\n\ndef gridsurfaces(s,solidu,solidu_element,sogupla_element):\n\tif len(flatten(solidu)) != 0:\n\t\tures = surfacesubtract(s,solidu_element,sogupla_element)\n\t\tfor sol in solidu_element:\n\t\t\tsol.Dispose()\n\telse:\n\t\tures = [None,None]\n\treturn ures\n\ndef getexploded(usurfs,udepth,borw,offset = 0):\n\tif usurfs != False and usurfs != None:\n\t\texplodedusurfs = dg.Geometry.Explode(usurfs)\n\t\tallsolidu = []\n\t\tfixedexplodedusurfs = []\n\t\tfor x in explodedusurfs:\n\t\t\tx = tryoffset(x,offset)\n\t\t\tif borw != 0:\n\t\t\t\tallsolidu.append(trythicken(x,udepth))\n\t\t\telse:\n\t\t\t\tallsolidu.append(x)\n\t\t\tfixedexplodedusurfs.append(x)\n\telse:\n\t\tallsolidu  =[]\n\t\tfixedexplodedusurfs = []\n\treturn fixedexplodedusurfs,allsolidu\n\ndef tryoffset(surf,offset):\n\ttry:\n\t\tif offset != 0:\n\t\t\tsurf = dg.Surface.Offset(surf,offset)\n\texcept:\n\t\tpass\n\treturn surf\n\ndef tryunion(flattenedsolids):\n\tif len(flattenedsolids) > 1:\n\t\tsolids = [x for x in flattenedsolids if x]\n\t\tif len(solids) > 1:\n\t\t\tpass\n\t\telse:\n\t\t\treturn flattenedsolids\n\t\tunioned = [solids[0]]\n\t\tsolids = solids[1:]\n\t\tfor s in solids:\n\t\t\ti = 0\n\t\t\tunionDone = False\n\t\t\twhile i < len(unioned):\n\t\t\t\ttry:\n\t\t\t\t\tunioned[i] = unioned[i].Union(s)\n\t\t\t\t\tunionDone = True\n\t\t\t\t\tbreak\n\t\t\t\texcept:\ti += 1\n\t\t\tif not unionDone: unioned.append(s)\n\t\ttry:\n\t\t\tfor f in flattenedsolids:\n\t\t\t\tf.Dispose()\n\t\texcept:\n\t\t\tpass\n\t\treturn unioned\n\telse:\n\t\treturn flattenedsolids\n\ndef safeversion():\n\tclr.AddReference(\"System.Windows.Forms\")\n\tfrom System.Windows.Forms import Form,Label\n\tfrom System.Reflection import Assembly\n\tdynamo = Assembly.Load('DynamoCore')\n\tif dynamo.GetName().Version.MinorRevision == 4533:\n\t\ttext = []\n\t\ttext.append(\"ERROR: Dynamo Sandbox Version Unsupported\")\n\t\ttext.append(\"\\nIt seems you have downloaded a Sandbox version number 2.11, it contains a bug and the script won't run.\\n\\nTo fix this issue please download newer version or contact Karam directly to advise you karam@aecedx.com\")\n\t\ttext = \"\\n\".join(text)\n\t\tform = Form()\n\t\tform.Width = 600\n\t\tform.Height = 200\n\t\tlabel = Label()\n\t\tlabel.Text = text\n\t\tlabel.Width = 600\n\t\tlabel.Height = 600\n\t\tlabel.Parent = form\t\n\t\tform.ShowDialog()\n\t\treturn False\n\treturn True\n\nif safeversion():\n\toperate = operateframes(surfs,safethickfactor/2.0,borw)\n\tsubtractedlist = operate[0]\n\tinversedlist = operate[1]\n\tinitialgrids = initialgrids(subtractedlist,distanceU,distanceV,panmethodU,panmethodV,surfs)\n\tgridsu = initialgrids[0]\n\tgridsv = initialgrids[1]\n\tcustomopU = customgridoperate(gridsu,customgridsu,subtractedlist,inversedlist,borw,uwidth,safethickfactor,extendfix,removeconflict)\n\tsolidu = customopU[0]\n\tsogupla = customopU[1]\n\tcustomopV = customgridoperate(gridsv,customgridsv,subtractedlist,inversedlist,borw,vwidth,safethickfactor,extendfix,removeconflict)\n\tsolidv = customopV[0]\n\tsogvpla = customopV[1]\n\t\n\tsogw = solidgrids(subtractedlist,inversedlist,borw,customgridsw,wwidth,safethickfactor,extendfix,True)\n\tsolidw = sogw[0]\n\tsogwpla = sogw[1]\n\t\t\n\tunionlist = []\n\tpanelsublist = []\n\tlaterpans = []\n\tcounter = 0\n\tfor s in subtractedlist:\n\t\tures = gridsurfaces(s,solidu,solidu[counter],sogupla[counter])\n\t\tvres = gridsurfaces(s,solidv,solidv[counter],sogvpla[counter])\n\t\twres = gridsurfaces(s,solidw,solidw[counter],sogwpla[counter])\n\t\tusurfs = ures[1]\n\t\tvsurfs = vres[1]\n\t\twsurfs = wres[1]\t\t\n\t\tjoinedsolids = []\n\t\tallsolidu = []\n\t\tallsolidv = []\n\t\tallsolidw = []\n\t\tfixedexplodedusurfs = []\n\t\tfixedexplodedvsurfs = []\n\t\tfixedexplodedwsurfs = []\n\t\tstatus = False\n\t\tif udepth != vdepth or (udepth != wdepth and wsurfs != None) or (vdepth != wdepth and wsurfs != None) or uoffset != voffset or (uoffset != woffset and wsurfs != None) or (voffset != woffset and wsurfs != None):\n\t\t\tstatus = \"DifferentUV\"\n\t\t\texplodeopU = getexploded(usurfs,udepth,borw,uoffset)\n\t\t\tfixedexplodedusurfs = explodeopU[0]\n\t\t\tallsolidu = explodeopU[1]\n\t\t\texplodeopV = getexploded(vsurfs,vdepth,borw,voffset)\n\t\t\tfixedexplodedvsurfs = explodeopV[0]\n\t\t\tallsolidv = explodeopV[1]\n\t\t\texplodeopW = getexploded(wsurfs,wdepth,borw,woffset)\n\t\t\tfixedexplodedwsurfs = explodeopW[0]\n\t\t\tallsolidw = explodeopW[1]\t\t\t\t\n\t\t\tallexploded = fixedexplodedusurfs + fixedexplodedvsurfs + fixedexplodedwsurfs\n\t\telse:\n\t\t\tstatus = \"SameUV\"\n\t\t\tallexploded = joinsurfs([usurfs,vsurfs,wsurfs])\n\t\t\tjoinedsolids = []\n\t\t\t#if borw != 0:\n\t\t\t#\tjoinedsolids = multithreadrun2inputs(allexploded,m_trythicken,udepth,uoffset)\n\t\t\t#else:\n\t\t\t#\tfor expo in allexploded:\n\t\t\t#\t\tjoinedsolids.append(expo)\n\t\t\tfor expo in allexploded:\n\t\t\t\tif borw != 0:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tjoinedsolids.append(trythicken(expo,udepth,uoffset))\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\telse:\n\t\t\t\t\tjoinedsolids.append(expo)\n\t\t\tallexploded = [x for x in allexploded if x]\n\t\tif len(allexploded) != 0 and borw != 0 and createpanels == True:\n\t\t\tpanelsub = trysurfdif(s,allexploded,mindepth,True)\n\t\t\texplodedpan = dg.Geometry.Explode(panelsub)\n\t\t\ttmp = []\n\t\t\t#tmp = multithreadrun2inputs(explodedpan,m_trythicken,panelthickness,panelsoffset)\n\t\t\tfor ep in explodedpan:\n\t\t\t\ttmp.append(trythicken(ep,panelthickness,panelsoffset))\n\t\t\t\tep.Dispose()\n\t\t\tpanelsublist.append(tmp)\n\t\telif len(allexploded) != 0 and borw == 0 and createpanels == True:\n\t\t\tpanelsub = trysurfdif(s,allexploded,mindepth,True)\n\t\t\texplodedpan = dg.Geometry.Explode(panelsub)\n\t\t\tfor ep in explodedpan:\n\t\t\t\tlaterpans.append(ep)\n\t\telif createpanels == True:\n\t\t\tpanelsublist.append(trythicken(s,panelthickness,panelsoffset))\n\t\tif len(allsolidu) != 0 or len(allsolidv) != 0 or len(allsolidw) != 0:\n\t\t\tif borw != 0:\n\t\t\t\tjoinedsolids = allsolidu + allsolidv + allsolidw\n\t\t\telse:\n\t\t\t\tjoinedsolids = [allsolidu] + [allsolidv] + [allsolidw]\n\t\tif len(joinedsolids) != 0 and len(joinedsolids) > 1:\n\t\t\ttry:\n\t\t\t\tif borw != 0:\n\t\t\t\t\tunioned = dg.Solid.ByUnion(joinedsolids)\n\t\t\t\t\tfor j in joinedsolids:\n\t\t\t\t\t\tj.Dispose()\n\t\t\t\telse:\n\t\t\t\t\tunioned = joinedsolids\n\t\t\texcept:\n\t\t\t\tunioned = joinedsolids\n\t\t\tunionlist.append(unioned)\n\t\telif len(joinedsolids) != 0:\n\t\t\tunioned = joinedsolids[0]\n\t\t\tunionlist.append(unioned)\n\t\telse:\n\t\t\tunionlist.append(None)\n\t\tcounter += 1\n\tfixedinvertedlist = []\n\tfor inv in inversedlist:\n\t\tif inv != None:\n\t\t\tfixedinvertedlist.append(dg.Geometry.Explode(inv))\n\tthickframes = []\n\tif len(fixedinvertedlist) != 0:\n\t\tfixedinvertedlist = flatten(fixedinvertedlist)\n\t\tjoinedframes = joinsurfs(fixedinvertedlist)\n\t\t#thickframes = multithreadrun2inputs(joinedframes,m_trythicken,bord,frameoffset)\n\t\tfor joi in joinedframes:\n\t\t\ttry:\n\t\t\t\tthickframes.append(trythicken(joi,bord,frameoffset))\n\t\t\texcept:\n\t\t\t\tpass\n\t\t\tjoi.Dispose()\n\t\tfor fi in fixedinvertedlist:\n\t\t\tfi.Dispose()\n\tif borw == 0 and len(laterpans) != 0 and createpanels == True:\n\t\tjoinedall = joinsurfs(laterpans)\n\t\t#panelsublist = multithreadrun2inputs(joinedall,m_trythicken,panelthickness,panelsoffset)\n\t\tfor jall in joinedall:\n\t\t\tpanelsublist.append(trythicken(jall,panelthickness,panelsoffset))\n\t\t\tjall.Dispose()\n\t\tfor l in laterpans:\n\t\t\tl.Dispose()\n\tif borw == 0:\n\t\tif status == \"DifferentUV\":\n\t\t\tunionresult = []\n\t\t\ttransposed = list(map(list, zip(*unionlist)))\n\t\t\tuslist = joinsurfs(flatten(transposed[0]))\n\t\t\tvslist = joinsurfs(flatten(transposed[1]))\n\t\t\twslist = joinsurfs(flatten(transposed[2]))\n\t\t\tsolids = []\n\t\t\t#solids.append(multithreadrun2inputs(uslist,m_trythicken,udepth,uoffset))\n\t\t\t#solids.append(multithreadrun2inputs(vslist,m_trythicken,vdepth,voffset))\n\t\t\t#solids.append(multithreadrun2inputs(wslist,m_trythicken,wdepth,woffset))\n\t\t\tfor us in uslist:\n\t\t\t\tsolids.append(trythicken(us,udepth,uoffset))\n\t\t\tfor vs in vslist:\n\t\t\t\tsolids.append(trythicken(vs,vdepth,voffset))\n\t\t\tfor ws in wslist:\n\t\t\t\tsolids.append(trythicken(ws,wdepth,woffset))\n\t\t\tflattenedsolids = flatten(solids)\n\t\t\tunionresult = tryunion(flattenedsolids)\n\t\telif status == \"SameUV\":\n\t\t\tallexploded = joinsurfs(flatten(unionlist))\n\t\t\tunionresult = []\n\t\t\t#unionresult = multithreadrun2inputs(allexploded,m_trythicken,udepth,uoffset)\n\t\t\tfor expo in allexploded:\n\t\t\t\ttry:\n\t\t\t\t\tunionresult.append(trythicken(expo,udepth,uoffset))\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\telse:\n\t\t\tunionresult = []\t\t\n\telse:\n\t\tunionresult = unionlist\n\tOUT = unionresult,panelsublist,thickframes\nelse:\n\tOUT = [None],[None],[None]",
+      "VariableInputPorts": true,
+      "Id": "8240f4fbf936465683387dec03d15a37",
+      "Inputs": [
+        {
+          "Id": "e64918d7ef424c10922adae4d967d6bb",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4676e056da2e4a608a66406f4e5ce898",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1c35806e180340bd866500432644088f",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3123d967ae9542e29eb336259745b6e7",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1f899c07fe3f42a89d66d890ae544307",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "06d5a53d6cb34b788e998b46158124fb",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "cecbc726fc2a4c66b354ac84528ea248",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3436e7a43c374dd6a7e60087b449bbe5",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8fbc3a88377a4e1cb59264473c9ab9e4",
+          "Name": "IN[8]",
+          "Description": "Input #8",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4b700a0e293f45819b7828c27a081029",
+          "Name": "IN[9]",
+          "Description": "Input #9",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2ace61f37d3b4c1aa1002d0e138b2283",
+          "Name": "IN[10]",
+          "Description": "Input #10",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "51f1396ca047452993689f65d6854905",
+          "Name": "IN[11]",
+          "Description": "Input #11",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e4a8d8aaaf6549f99ac1cc46048355c0",
+          "Name": "IN[12]",
+          "Description": "Input #12",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "32fb56d651154e9cac742c2cf0cd380d",
+          "Name": "IN[13]",
+          "Description": "Input #13",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e51731939cbe429db827f9e83473e4bf",
+          "Name": "IN[14]",
+          "Description": "Input #14",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "0f8d0287b54843e6a15477b5ebbb6a1e",
+          "Name": "IN[15]",
+          "Description": "Input #15",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f2602bcef0484c63ada3ee9316d6e446",
+          "Name": "IN[16]",
+          "Description": "Input #16",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "bbbcd842ae2f4178850da7dfe33f18a6",
+          "Name": "IN[17]",
+          "Description": "Input #17",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8706ed72e06d45a09daa2c021091351b",
+          "Name": "IN[18]",
+          "Description": "Input #18",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "77872f6509e74f829833c4c947d3a55d",
+          "Name": "IN[19]",
+          "Description": "Input #19",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8091562220c5400fa71c09f2e759f308",
+          "Name": "IN[20]",
+          "Description": "Input #20",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4e8241c2e31d429b80934d8292180f9c",
+          "Name": "IN[21]",
+          "Description": "Input #21",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "02f19fea2d9949ed8f8dfc9b77008262",
+          "Name": "IN[22]",
+          "Description": "Input #22",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3ae3c4bdca854c59aca49b127c66ae19",
+          "Name": "IN[23]",
+          "Description": "Input #23",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "5a267586e8a34ebcb41493d631ded7e5",
+          "Name": "IN[24]",
+          "Description": "Input #24",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "93b5bac4398b431997266f9ef87e9677",
+          "Name": "IN[25]",
+          "Description": "Input #25",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "48d3320402854a8683077ad99513b174",
+          "Name": "IN[26]",
+          "Description": "Input #26",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3911245f07144289ae3ac33d439d81df",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROutput",
+      "Id": "2b4edd33e7644a649c3e4c40e7c45d5b",
+      "Inputs": [
+        {
+          "Id": "7509377edb084bed8ff3b185be252c46",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSurfaces",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "30be9eb0c5564914b70f18192d1f8850",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "159abdbd51c64cf7a0a4115ebc46f33d",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARBorderDepth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.2",
+        "Description": ""
+      },
+      "Id": "333d82bb2d8b43c0af52db8ec2e434d6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b93e9f13013746d6bab9a8ad16d4bda8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARBorderWidth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.1",
+        "Description": ""
+      },
+      "Id": "abc834845b8741ffa2b9868eb245b756",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d127df7dfa114e3b97de25353d97306e",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDistanceU",
+        "TypeName": "double",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "3b53dfa589e742e9af4a69b001c45f33",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "58a803acdde648d99fc3a7ab7e5d68c4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDistanaceV",
+        "TypeName": "double",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "540151a1c6c2489f98c5039a9e5a72c9",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4746e8c2380b4b43a87bf5d3f697ad6a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARMethodU",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "b1e582827a8f4193ac5468f61e5e3aa2",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "61ca575136a94a659d894a4b44d20d31",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARMethodV",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "b14e0129c438498a93bd3d72b628151a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b8f159d035bd4e058069d8ee37ee1a9b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARUWidth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.2",
+        "Description": ""
+      },
+      "Id": "337742479e554e25b3a5e8322ffdd628",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ddad3ef5a78c4465ac5b655f5f7314df",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARUDepth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.15",
+        "Description": ""
+      },
+      "Id": "60c887bddeab458ab2f03d8d0318594f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5c13d60754a74b7091bee9d627e12f13",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARVWidth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.2",
+        "Description": ""
+      },
+      "Id": "f240abe15956422fa7a6331bef3eea65",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "fe71f67ab81f4f76a481a284db6e7c6c",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARVDepth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.2",
+        "Description": ""
+      },
+      "Id": "29bf950237054dd689913ed1f78f76d0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8e9fe3e747424467a1fc8b3de96b722d",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARExtendFix",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "3.3",
+        "Description": ""
+      },
+      "Id": "5784a4e9919c46da9f339e716563c204",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3ddd3d943e1746a783e5303e3167cff1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPrecision",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "1.15",
+        "Description": ""
+      },
+      "Id": "3c8c5fa6a1654f3b969d430b212538e9",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e39ebc81c03f4eba9592462a43abf8fc",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPanelThickness",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.03",
+        "Description": ""
+      },
+      "Id": "9f3399b4ee1343c0a4ecec9cf8a76ed8",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3013ad5e330f4850b9519207421b33ac",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCreatePanels",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "6cef63deaf68478fbac105912a166e6b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5211d065cd774760858225aab4b61dcc",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSafeThickenFactor",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "1.65",
+        "Description": ""
+      },
+      "Id": "91425e3badcb4c1a91afcc830705582e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "25ad9221c525436b87005b80c8a20b06",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCustomGridU",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "8dccefbd6bb74ac282eed93a51689542",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "fed9b6de89f9468fa0fee803ad27427f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCustomGridV",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "611c749b62b9487481290fdd30784959",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "34c634d6e1bb474ca1efe3bccf07c219",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCustomGridW",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "bcc636763a1942fe82788a2f4fee47fd",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "39900680c7e9449aa242fa7b020c700a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARWWidth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.2",
+        "Description": ""
+      },
+      "Id": "609b74dbf1a64c42bf1823e756bb2ddd",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b123286fe09b48969f2a4e415b8120ab",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARWDepth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0.05",
+        "Description": ""
+      },
+      "Id": "8321a2666d6148528d9d89fc3ef53804",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1d5b135de0924fdfa844a0d42410a8c1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARRemoveSameGridConflict",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "796e02ee682e431481cbbad5e68c7675",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7352b0e6d1b744c093804b29494bc4ab",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARUOffset",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "6910e38fbe8b44f99608bd64dae1a1ab",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ed4689d9afe94ba18191a3e97ebf2171",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARVOffset",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "04ee4ff823d8443f8835456afe8ddd61",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c6652c72868e479db7dcc5d662f067da",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARWOffset",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "653921947a714eda8598a02ee1128089",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "934a603c166145c9aad827006238f8c7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPanelOffset",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "aa65f70d74884feba238ba22e693ab70",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a7ec9dd14c324d24a7ca47cbc6295617",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARBorderOffset",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "2ce5f5ef914c40b5842351f1f800c287",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5f9faca15d5d476f8796dce7e7fdefcf",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "3911245f07144289ae3ac33d439d81df",
+      "End": "7509377edb084bed8ff3b185be252c46",
+      "Id": "2e9fd4762eeb418483bbb9f34bad9d8e"
+    },
+    {
+      "Start": "159abdbd51c64cf7a0a4115ebc46f33d",
+      "End": "e64918d7ef424c10922adae4d967d6bb",
+      "Id": "a1656bd0d4244ccc8f95e917db3ec355"
+    },
+    {
+      "Start": "b93e9f13013746d6bab9a8ad16d4bda8",
+      "End": "4676e056da2e4a608a66406f4e5ce898",
+      "Id": "268e0b303fb74f31a6929e28ae70364e"
+    },
+    {
+      "Start": "d127df7dfa114e3b97de25353d97306e",
+      "End": "1c35806e180340bd866500432644088f",
+      "Id": "0ace24680cc6491fbb3f5cf6b25e7d9a"
+    },
+    {
+      "Start": "58a803acdde648d99fc3a7ab7e5d68c4",
+      "End": "3123d967ae9542e29eb336259745b6e7",
+      "Id": "95475b20ce6b49b5815a558e0446abea"
+    },
+    {
+      "Start": "4746e8c2380b4b43a87bf5d3f697ad6a",
+      "End": "1f899c07fe3f42a89d66d890ae544307",
+      "Id": "6eae4d25fd7143a1aabc82d14005c35c"
+    },
+    {
+      "Start": "61ca575136a94a659d894a4b44d20d31",
+      "End": "06d5a53d6cb34b788e998b46158124fb",
+      "Id": "3c30e6e483c2467da9e096aefdfbb9d8"
+    },
+    {
+      "Start": "b8f159d035bd4e058069d8ee37ee1a9b",
+      "End": "cecbc726fc2a4c66b354ac84528ea248",
+      "Id": "13be517d6b954a7795660e547aea7556"
+    },
+    {
+      "Start": "ddad3ef5a78c4465ac5b655f5f7314df",
+      "End": "3436e7a43c374dd6a7e60087b449bbe5",
+      "Id": "1bd05347cbdc4bcb9cd8d341ad295e1b"
+    },
+    {
+      "Start": "5c13d60754a74b7091bee9d627e12f13",
+      "End": "8fbc3a88377a4e1cb59264473c9ab9e4",
+      "Id": "18c68c008b264050bea6d5a918755d24"
+    },
+    {
+      "Start": "fe71f67ab81f4f76a481a284db6e7c6c",
+      "End": "4b700a0e293f45819b7828c27a081029",
+      "Id": "006e68acb89646e49de1377aca786ea9"
+    },
+    {
+      "Start": "8e9fe3e747424467a1fc8b3de96b722d",
+      "End": "2ace61f37d3b4c1aa1002d0e138b2283",
+      "Id": "f458ed4806014893bd3f200d7bae85d0"
+    },
+    {
+      "Start": "3ddd3d943e1746a783e5303e3167cff1",
+      "End": "51f1396ca047452993689f65d6854905",
+      "Id": "827e7911578d4190bc50e1b8e6e62188"
+    },
+    {
+      "Start": "e39ebc81c03f4eba9592462a43abf8fc",
+      "End": "e4a8d8aaaf6549f99ac1cc46048355c0",
+      "Id": "e21cc47741594e599cd4ba31d463f453"
+    },
+    {
+      "Start": "3013ad5e330f4850b9519207421b33ac",
+      "End": "32fb56d651154e9cac742c2cf0cd380d",
+      "Id": "976852b8ecd34215ad3a396d44a9894f"
+    },
+    {
+      "Start": "5211d065cd774760858225aab4b61dcc",
+      "End": "e51731939cbe429db827f9e83473e4bf",
+      "Id": "ca2e1a4d45404b939a9a92d4ee5f66c6"
+    },
+    {
+      "Start": "25ad9221c525436b87005b80c8a20b06",
+      "End": "0f8d0287b54843e6a15477b5ebbb6a1e",
+      "Id": "7c1fe0016a5b40e689e8a5f7a4a44f57"
+    },
+    {
+      "Start": "fed9b6de89f9468fa0fee803ad27427f",
+      "End": "f2602bcef0484c63ada3ee9316d6e446",
+      "Id": "ade36498815340659ba55c01fa3ba81a"
+    },
+    {
+      "Start": "34c634d6e1bb474ca1efe3bccf07c219",
+      "End": "bbbcd842ae2f4178850da7dfe33f18a6",
+      "Id": "d4517de1376d4a798f9cad0ec3528e97"
+    },
+    {
+      "Start": "39900680c7e9449aa242fa7b020c700a",
+      "End": "8706ed72e06d45a09daa2c021091351b",
+      "Id": "2e762688287a4623882d41b59bacc7f0"
+    },
+    {
+      "Start": "b123286fe09b48969f2a4e415b8120ab",
+      "End": "77872f6509e74f829833c4c947d3a55d",
+      "Id": "4e671b9e439e4953a1d181b6294388d8"
+    },
+    {
+      "Start": "1d5b135de0924fdfa844a0d42410a8c1",
+      "End": "8091562220c5400fa71c09f2e759f308",
+      "Id": "6abdc269adaf40d1b2aa1a3cc39d9d50"
+    },
+    {
+      "Start": "7352b0e6d1b744c093804b29494bc4ab",
+      "End": "4e8241c2e31d429b80934d8292180f9c",
+      "Id": "25a9f53e4d8f471fa7db08501912cbcc"
+    },
+    {
+      "Start": "ed4689d9afe94ba18191a3e97ebf2171",
+      "End": "02f19fea2d9949ed8f8dfc9b77008262",
+      "Id": "73bd1c9020f14a3eb4e7ed49abf8af8b"
+    },
+    {
+      "Start": "c6652c72868e479db7dcc5d662f067da",
+      "End": "3ae3c4bdca854c59aca49b127c66ae19",
+      "Id": "89bd68d71dfd4fe380ef95cb01cad53f"
+    },
+    {
+      "Start": "934a603c166145c9aad827006238f8c7",
+      "End": "5a267586e8a34ebcb41493d631ded7e5",
+      "Id": "9686338e71b54060a9a661960cae62ac"
+    },
+    {
+      "Start": "a7ec9dd14c324d24a7ca47cbc6295617",
+      "End": "93b5bac4398b431997266f9ef87e9677",
+      "Id": "cf7e42bf32394144801924c5da5af0d8"
+    },
+    {
+      "Start": "5f9faca15d5d476f8796dce7e7fdefcf",
+      "End": "48d3320402854a8683077ad99513b174",
+      "Id": "8311c5a7bd374858b5d022ca8595cf4f"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "8240f4fbf936465683387dec03d15a37",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1655.4362162041,
+        "Y": 937.250842716346
+      },
+      {
+        "Id": "2b4edd33e7644a649c3e4c40e7c45d5b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1976.65560868015,
+        "Y": 942.870332608367
+      },
+      {
+        "Id": "30be9eb0c5564914b70f18192d1f8850",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 141.59460099964,
+        "Y": -85.5835932498587
+      },
+      {
+        "Id": "333d82bb2d8b43c0af52db8ec2e434d6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 57.2,
+        "Y": 37.2
+      },
+      {
+        "Id": "abc834845b8741ffa2b9868eb245b756",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 50.4,
+        "Y": 114.4
+      },
+      {
+        "Id": "3b53dfa589e742e9af4a69b001c45f33",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 53.2,
+        "Y": 184.4
+      },
+      {
+        "Id": "540151a1c6c2489f98c5039a9e5a72c9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 45.6,
+        "Y": 269.6
+      },
+      {
+        "Id": "b1e582827a8f4193ac5468f61e5e3aa2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 68.4,
+        "Y": 358.8
+      },
+      {
+        "Id": "b14e0129c438498a93bd3d72b628151a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 80.7460617080412,
+        "Y": 429.351312763986
+      },
+      {
+        "Id": "337742479e554e25b3a5e8322ffdd628",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 103.2,
+        "Y": 506.4
+      },
+      {
+        "Id": "60c887bddeab458ab2f03d8d0318594f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 120.0,
+        "Y": 596.8
+      },
+      {
+        "Id": "f240abe15956422fa7a6331bef3eea65",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 142.4,
+        "Y": 694.4
+      },
+      {
+        "Id": "29bf950237054dd689913ed1f78f76d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 178.4,
+        "Y": 771.2
+      },
+      {
+        "Id": "5784a4e9919c46da9f339e716563c204",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 187.395865175928,
+        "Y": 859.2
+      },
+      {
+        "Id": "3c8c5fa6a1654f3b969d430b212538e9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 205.6,
+        "Y": 974.4
+      },
+      {
+        "Id": "9f3399b4ee1343c0a4ecec9cf8a76ed8",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 209.6,
+        "Y": 1083.2
+      },
+      {
+        "Id": "6cef63deaf68478fbac105912a166e6b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 220.8,
+        "Y": 1185.6
+      },
+      {
+        "Id": "91425e3badcb4c1a91afcc830705582e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 191.65110727373,
+        "Y": 1320.55138114391
+      },
+      {
+        "Id": "8dccefbd6bb74ac282eed93a51689542",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 235.165827716277,
+        "Y": 1400.02405968342
+      },
+      {
+        "Id": "611c749b62b9487481290fdd30784959",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 234.592044118106,
+        "Y": 1525.14713600726
+      },
+      {
+        "Id": "bcc636763a1942fe82788a2f4fee47fd",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.268890926514,
+        "Y": 1596.22710471457
+      },
+      {
+        "Id": "609b74dbf1a64c42bf1823e756bb2ddd",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 338.015568347219,
+        "Y": 1701.10953294272
+      },
+      {
+        "Id": "8321a2666d6148528d9d89fc3ef53804",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 351.264952531183,
+        "Y": 1798.6107645748
+      },
+      {
+        "Id": "796e02ee682e431481cbbad5e68c7675",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 333.414860492527,
+        "Y": 1869.31006985668
+      },
+      {
+        "Id": "6910e38fbe8b44f99608bd64dae1a1ab",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 361.667866131382,
+        "Y": 1968.596926182
+      },
+      {
+        "Id": "04ee4ff823d8443f8835456afe8ddd61",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 367.002987753874,
+        "Y": 2038.89024660963
+      },
+      {
+        "Id": "653921947a714eda8598a02ee1128089",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 390.516196013481,
+        "Y": 2134.35095427446
+      },
+      {
+        "Id": "aa65f70d74884feba238ba22e693ab70",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 383.306056723593,
+        "Y": 2228.47357429893
+      },
+      {
+        "Id": "2ce5f5ef914c40b5842351f1f800c287",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 380.10313693534,
+        "Y": 2311.21980357259
+      }
+    ],
+    "Annotations": [],
+    "X": 84.106236353657025,
+    "Y": 37.396281423185307,
+    "Zoom": 0.194159612759337
+  }
+}

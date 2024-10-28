@@ -1,0 +1,347 @@
+{
+  "Uuid": "8f445cca-78d8-4387-a787-cfe69f1e7516",
+  "IsCustomNode": true,
+  "Category": "PracticalBIM.Splitting",
+  "Description": "Splits Columns by Level and Offset",
+  "Name": "SplitColumnsbyLevelandOffset",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "DSRevitNodesUI.ElementTypes, DSRevitNodesUI",
+      "SelectedIndex": 170,
+      "SelectedString": "Level",
+      "NodeType": "ExtensionNode",
+      "Id": "fcc4d1a914cb4dec97c2657bc3a373b6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a096c4f8733b419d83bb5774e73a76dd",
+          "Name": "Types",
+          "Description": "The selected Types",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "All element subtypes."
+    },
+    {
+      "ConcreteType": "DSRevitNodesUI.ElementsOfType, DSRevitNodesUI",
+      "NodeType": "ExtensionNode",
+      "Id": "5ffc1f397cd34b57bc1a7ae9256a96d3",
+      "Inputs": [
+        {
+          "Id": "b64b073b55bf44558cff0ecd9fc6b4c3",
+          "Name": "element type",
+          "Description": "An element type.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "439f7d30c1fd437babcbe59d4b870562",
+          "Name": "elements",
+          "Description": "All elements in the active document of a given type.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "All elements in the active document of a given type."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "true;",
+      "Id": "cbda9b0dcec246ce9df1cbb570817c2a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1c2c7f30d13a43f0b3228392d0fdc025",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\n\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as geom\n\nclr.AddReference(\"RevitServices\")\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\ndoc =  DocumentManager.Instance.CurrentDBDocument\n \nclr.AddReference(\"RevitNodes\")\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n \nclr.AddReference(\"RevitAPI\")\nfrom Autodesk.Revit.DB import *\n\n# Convert to list if not list...\ndef tolist(obj1):\n    if hasattr(obj1,\"__iter__\"): return obj1\n    else: return [obj1]\n\n# Gets the centreline of the column...\ndef GetColumnCentreline(e):\t\n\tcrv = None\t\n\tfs = e.Symbol\n\tfm = fs.Family\t\n\tif not fm.GetType() == DirectShape:\n\t\tif not fm.IsInPlace:\n\t\t\tif e.IsSlantedColumn:\n\t\t\t\ttry:\n\t\t\t\t\tcrv = e.Location.Curve.ToProtoType()\n\t\t\t\texcept:\n\t\t\t\t\treturn\n\t\t\telse:\n\t\t\t\tloc = e.Location.Point.ToPoint()\n\t\t\t\t\n\t\t\t\tbLev = (e.Document.GetElement(e.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_PARAM).AsElementId()).Elevation + e.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM).AsDouble()) * ft2mm\n\t\t\t\ttLev = (e.Document.GetElement(e.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_PARAM).AsElementId()).Elevation + e.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM).AsDouble()) * ft2mm\n\t\t\t\t\n\t\t\t\tcrv = geom.Line.ByStartPointEndPoint(geom.Point.ByCoordinates(loc.X,loc.Y,bLev), geom.Point.ByCoordinates(loc.X,loc.Y,tLev))\n\treturn crv\n\n# Convert Level to DS Plane...\ndef LevelToPlane(l):\n\tpt = geom.Point.ByCoordinates(0,0,round(l.Elevation * ft2mm,0)+offset)\n\tn = geom.Vector.ZAxis()\n\treturn geom.Plane.ByOriginNormal(pt,n)\n\n# Get the nearest Level above in list of Levels to gien Elevation...\ndef NearestLevelAbove(elev,lvls):\n\tlvlAbv = None\n\tfor l in lvls:\n\t\tif round(l.Elevation*ft2mm,0) > elev:\n\t\t\tlvlAbv = l\n\t\t\tbreak\t\t\t\n\treturn lvlAbv\n\n# Get the nearest Level in list of Levels to gien Elevation...\ndef NearestLevel(elev, lvls):\n\treturn min(lvls, key=lambda x:abs(round(x.Elevation*ft2mm,0)-elev))\n\n# Calculates the location to split column with parameterised column length (between 0 & 1)...\ndef CalculateSplitParameter(col,lvls):\n\t# Switch out for mathematical method to speed up computation...\n\t# abs(NewColBaseElevation-LevelAboveElevation)/NewCol length should give split parameter...\n\tif col:\n\t\tcrv = GetColumnCentreline(col)\n\t\telev = round(crv.StartPoint.Z,0)\n\t\tl = NearestLevelAbove(elev,lvls)\t\t\n\t\t\n\t\tx = geom.Geometry.Intersect(crv,LevelToPlane(l))\n\t\tif x:\n\t\t\tx = x[0]\n\t\t\treturn geom.Curve.ParameterAtPoint(crv,x)\n\t\t\t\t\n\treturn None\n\n# IN Variables...\nrun = tolist(IN[0])[0]\ncolumns = tolist(UnwrapElement(IN[1]))\nlvls = tolist(UnwrapElement(IN[2]))\noffset = 0\nif IN[3]:\n\toffset = tolist(IN[3])[0]\n\n\n# OUT Variables...\noutList = []\n\n# Main Body...\nif run:\n\tft2mm = 304.8\n\tlvls = sorted(lvls, key=lambda x: x.Elevation)\n\t\n\t# Start Transaction to allow for Document modification...\n\tTransactionManager.Instance.EnsureInTransaction(doc)\n\tfor c in columns:\n\t\t# Ensure only Structural Columns are used (modify if Arch Columns category is required)\n\t\tif c.Category.Name == Category.GetCategory(doc,BuiltInCategory.OST_StructuralColumns).Name:\n\t\t\tarr = []\n\t\t\tarr.append(c)\n\t\t\tnewCol = None\n\t\t\tcrv = GetColumnCentreline(c)\n\t\t\t\n\t\t\tbLvlIndex = lvls.index(NearestLevel(crv.StartPoint.Z,lvls))\n\t\t\ttLvlIndex = lvls.index(NearestLevel(crv.EndPoint.Z,lvls))\n\t\t\t\n\t\t\ti = bLvlIndex\n\t\t\twhile i <= tLvlIndex:\n\t\t\t\ttry:\t\n\t\t\t\t\tif not newCol:\n\t\t\t\t\t\tp = CalculateSplitParameter(c,lvls)\n\t\t\t\t\t\tnewCol = doc.GetElement(c.Split(p))\n\t\t\t\t\t\tarr.append(newCol)\t\t\t\n\t\t\t\t\telse:\n\t\t\t\t\t\tp = CalculateSplitParameter(newCol,lvls)\n\t\t\t\t\t\tnewCol = doc.GetElement(newCol.Split(p))\n\t\t\t\t\t\tarr.append(newCol)\n\t\t\t\texcept Exception, ex:\n\t\t\t\t\tarr.append(ex.message)\n\t\t\t\ti = i+1\t\t\n\t\t\toutList.append(arr)\n\t\telse:\n\t\t\toutList.append(\"Element is not of Category Structural Column\")\t\t\t\n\t\t\n\tTransactionManager.Instance.TransactionTaskDone()\n\tOUT = outList\nelse:\n\tOUT = \"Please set Run to True\"",
+      "VariableInputPorts": true,
+      "Id": "ec99c1dfb0f5434d98c1c92510727b14",
+      "Inputs": [
+        {
+          "Id": "fd10508dcaee4c23ae1c892bf4242a11",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "0975a09b6d1e41a5b3be5bfc14f56ebf",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "df07846055ca498989669efd6e5874e1",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "23f94054ff0e4baf999474c6f7b06baa",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b3b1216d70874bb59942e2ce23e4a425",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "SelectedColumns",
+        "TypeName": "var",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "a20740ba61ba405580e76f2bb64a894c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f7b3afccf4af47f890383648de24b2fe",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "Offsetinmm",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "89ea765fb6694ed7ac64e5c4783abb4e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8606aacc5bba47d39a2d2a7c1bf39f99",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "SplittedColumns:Element[]",
+      "Id": "77a4276c7c984bc3b29afae9f2220f28",
+      "Inputs": [
+        {
+          "Id": "29423289374e42f3814bd2560cba28c3",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "a096c4f8733b419d83bb5774e73a76dd",
+      "End": "b64b073b55bf44558cff0ecd9fc6b4c3",
+      "Id": "68d0549575894ca1856bceacb2262123"
+    },
+    {
+      "Start": "439f7d30c1fd437babcbe59d4b870562",
+      "End": "df07846055ca498989669efd6e5874e1",
+      "Id": "54b137c1255347d99a2c514f16045efa"
+    },
+    {
+      "Start": "1c2c7f30d13a43f0b3228392d0fdc025",
+      "End": "fd10508dcaee4c23ae1c892bf4242a11",
+      "Id": "0d24d194404448b5878061cf7ba08c6f"
+    },
+    {
+      "Start": "b3b1216d70874bb59942e2ce23e4a425",
+      "End": "29423289374e42f3814bd2560cba28c3",
+      "Id": "ee1281c334fa4fb598e81c4b60894361"
+    },
+    {
+      "Start": "f7b3afccf4af47f890383648de24b2fe",
+      "End": "0975a09b6d1e41a5b3be5bfc14f56ebf",
+      "Id": "3133ceeb20d242b68ad5663217666e49"
+    },
+    {
+      "Start": "8606aacc5bba47d39a2d2a7c1bf39f99",
+      "End": "23f94054ff0e4baf999474c6f7b06baa",
+      "Id": "a60a5ac42d0f413db4e8b6ec286e278d"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.2.1.5175",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 951.9031982421875,
+      "EyeY": 14272.572265625,
+      "EyeZ": 67276.4765625,
+      "LookX": -951.9031982421875,
+      "LookY": 728.67706298828125,
+      "LookZ": -67276.4765625,
+      "UpX": 0.0031825418118387461,
+      "UpY": 0.97437006235122681,
+      "UpZ": 0.22492854297161102
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Element Types",
+        "Id": "fcc4d1a914cb4dec97c2657bc3a373b6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.00000000000003,
+        "Y": 249.66957514580196
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "All Elements of Type",
+        "Id": "5ffc1f397cd34b57bc1a7ae9256a96d3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 432.77548155851224,
+        "Y": 229.910063625963
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Code Block",
+        "Id": "cbda9b0dcec246ce9df1cbb570817c2a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 715.983075206246,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Column.SplitAtLevel",
+        "Id": "ec99c1dfb0f5434d98c1c92510727b14",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 840.9580156385191,
+        "Y": 39.180971536584025
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "a20740ba61ba405580e76f2bb64a894c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "89ea765fb6694ed7ac64e5c4783abb4e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 150.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "77a4276c7c984bc3b29afae9f2220f28",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1124.8316039389122,
+        "Y": 65.282589519102032
+      }
+    ],
+    "Annotations": [],
+    "X": -271.79180799958556,
+    "Y": 184.13833959964433,
+    "Zoom": 0.6586748521582152
+  }
+}

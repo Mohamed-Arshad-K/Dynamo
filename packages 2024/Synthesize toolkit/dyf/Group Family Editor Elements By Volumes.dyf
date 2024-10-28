@@ -1,0 +1,214 @@
+{
+  "Uuid": "34945bf3-c6b0-4b4a-860d-8dfa55a01ca0",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "Group Family Editor Elements By Volumes",
+  "Name": "Group Family Editor Elements By Volumes",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# Import Math\nimport math\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\n# Simple Warning Swallow Class\nclass WarnSwallowSimple(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef totalvolume(doc,elem,mat_fec,rounding):\n\ttotalvolume = []\n\tmats = elem.GetMaterialIds(False)\n\tif len(mats) == 0:\n\t\tmat = matcreateorget(mat_fec,\"Default\")\n\t\tparam = elem.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM)\n\t\ttry:\n\t\t\tparam.Set(mat)\n\t\t\tdoc.Regenerate()\n\t\t\tmats = elem.GetMaterialIds(False)\n\t\texcept:\n\t\t\tif doc.FamilyManager.CanElementParameterBeAssociated(param):\n\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(param, None)\n\t\t\t\tparam.Set(mat)\n\t\t\t\tdoc.Regenerate()\n\t\t\t\tmats = elem.GetMaterialIds(False)\n\tfor m in mats:\n\t\tmatvol = cusround(elem.GetMaterialVolume(m),rounding)\n\t\tif matvol == 0:\n\t\t\tmatvol = cusround(elem.GetMaterialArea(m,False),rounding)\n\t\tif matvol == 0:\n\t\t\tmatvol = cusround(elem.GetMaterialArea(m,True),rounding)\n\t\ttotalvolume.append(matvol)\n\ttotalvolume = sum(totalvolume)\n\treturn totalvolume\n\t\ndef matcreateorget(mat_fec,material):\n\tfam_mat = False\n\tfor m in mat_fec:\n\t\tif m.Name.lower() == material.lower():\n\t\t\tfam_mat = m.Id\n\t\t\tbreak\n\tif fam_mat == False:\n\t\tnewmat = Material.Create(doc, material)\n\t\tdefcolor = Color(120,120,120)\n\t\tmatelement = doc.GetElement(newmat)\n\t\tmatelement.Color = defcolor\n\t\tif \"transparen\" in material.lower():\n\t\t\tmatelement.Transparency = 50\n\t\tfam_mat = newmat\n\treturn fam_mat\n\ndef unique(myList):\n\ttmplist = []\n\tfor m in myList:\n\t\tif m != \"\":\n\t\t\ttmplist.append(m)\n\tmyList = tmplist\n\tuniqueList = []\n\tfor item in myList :\n\t\titemExist = False\n\t\tfor x in uniqueList :\n\t\t\tif x == item :\n\t\t\t\titemExist = True\n\t\t\t\tbreak\n\t\tif not itemExist :\n\t\t\tuniqueList.append(item)\n\treturn uniqueList\n\ndef cusround(x,rounding):\n    return int(round(x /rounding)) * rounding\n\n\nelements=UnwrapElement(flatten(tolist(IN[0])))\nrounding=IN[1]\n\nmat_fec = FilteredElementCollector(doc).OfClass(Material)\n\nTransactionManager.Instance.ForceCloseTransaction()\ntrans1 = Transaction(doc, 'Getting Volumes')\ntrans1.Start()\nwarnhandle = WarnSwallowSimple()\nfoptions = trans1.GetFailureHandlingOptions()\nfoptions.SetFailuresPreprocessor(warnhandle)\ntrans1.SetFailureHandlingOptions(foptions)\n\nvolumes = []\nfor elem in elements:\n\ttry:\n\t\tvolumes.append(totalvolume(doc,elem,mat_fec,rounding))\n\texcept:\n\t\tvolumes.append(0)\n\ntrans1.RollBack()\n\nsortsource = sorted(unique(volumes))\ngroups = []\nfor s in sortsource:\n\ttmp = []\n\tcount = 0\n\tfor vol in volumes:\n\t\telem = elements[count]\n\t\tif vol == s:\n\t\t\ttmp.append(elem)\n\t\tcount += 1\n\tgroups.append(tmp)\n\t\n# Assign your output to the OUT variable.\nOUT = groups",
+      "VariableInputPorts": true,
+      "Id": "202e44d94b6649f18767421baf095656",
+      "Inputs": [
+        {
+          "Id": "360f924be27b4e7eab1670bf53597966",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "275e8c45693543b199464739622ca241",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "ea8d266a93cb4cd28d4341391e59f5a4",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "9d4ac50ef02c4ac2a6dae8803221d3fd",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6b1065c22c654b0eb57a4a8f80bc35bf",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARGroupedElements",
+      "Id": "052cb0afadba49dfb29e37e4bb5e0a84",
+      "Inputs": [
+        {
+          "Id": "d71901abaf7f4c0ea27a980288e37d70",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARRounding",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "10",
+        "Description": ""
+      },
+      "Id": "530b2d284d7f4154ad6d0014cda1ff85",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "91c6299d098443379ef511f6e0107d9a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "ea8d266a93cb4cd28d4341391e59f5a4",
+      "End": "d71901abaf7f4c0ea27a980288e37d70",
+      "Id": "8aabd4325487457a86c863d314177587"
+    },
+    {
+      "Start": "6b1065c22c654b0eb57a4a8f80bc35bf",
+      "End": "360f924be27b4e7eab1670bf53597966",
+      "Id": "0fce222919b345c6aba123db0aa033dc"
+    },
+    {
+      "Start": "91c6299d098443379ef511f6e0107d9a",
+      "End": "275e8c45693543b199464739622ca241",
+      "Id": "1ee69a1a93c14f75abd1260e07080e46"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "202e44d94b6649f18767421baf095656",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "9d4ac50ef02c4ac2a6dae8803221d3fd",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "052cb0afadba49dfb29e37e4bb5e0a84",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "530b2d284d7f4154ad6d0014cda1ff85",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1.52739896263986,
+        "Y": 78.7173024550551
+      }
+    ],
+    "Annotations": [],
+    "X": 135.952270379219,
+    "Y": 195.613787966143,
+    "Zoom": 0.803321593462598
+  }
+}

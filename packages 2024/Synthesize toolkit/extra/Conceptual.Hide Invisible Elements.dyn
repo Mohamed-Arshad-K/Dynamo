@@ -1,0 +1,275 @@
+{
+  "Uuid": "3c9d0464-8643-5ffe-96e5-ab1769818209",
+  "IsCustomNode": false,
+  "Description": "",
+  "Name": "Conceptual.Hide Invisible Elements",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [
+    {
+      "Id": "1f819040377f4b38a6ca6ebe58eb07a0",
+      "Name": "01.Subcategory to Move Invisible Masses Into",
+      "Type": "string",
+      "Value": "Dynamo Hidden Masses",
+      "Description": "Creates a string.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "841fc5edabbd4a359d2d4c6b1e70c3b3",
+      "Name": "02.Mode: False = Hidden | True = Visible",
+      "Type": "boolean",
+      "Value": "false",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    }
+  ],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\nclr.AddReference(\"RevitAPIUI\")\nfrom Autodesk.Revit.UI import TaskDialog\n\ndoc = DocumentManager.Instance.CurrentDBDocument\n\ndef changesubcat(doc,togolist,subcategory,hideit):\n\tif doc.IsFamilyDocument == True and subcategory != \"\" and subcategory != None:\n\t\ttry:\t\n\t\t\tsubcat1 = subcategory\n\t\t\tcurrent_fam_cat = doc.OwnerFamily.FamilyCategory\n\t\t\tsub_fec = current_fam_cat.SubCategories\n\t\t\tsub_cat = False\n\t\t\tfor sub in sub_fec:\n\t\t\t\tif sub.Name.lower() == subcat1.lower():\n\t\t\t\t\tsub_cat = sub\n\t\t\t\t\tbreak\n\t\t\tif sub_cat == False:\n\t\t\t\tnewsubcat = doc.Settings.Categories.NewSubcategory(current_fam_cat, subcat1)\n\t\t\t\tsub_cat = newsubcat\n\t\t\tfor s2 in togolist:\n\t\t\t\ttry:\n\t\t\t\t\ts2.Subcategory = sub_cat\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\tdoc.ActiveView.SetCategoryHidden(sub_cat.Id,hideit)\n\t\texcept: pass\n\treturn \"Done\"\n\nsubcategory = IN[0]\nhideit = IN[1]\n\nif hideit:\n\thideit = False\nelse:\n\thideit = True\n\ntohide = []\n\nisgood = True\n\nif doc.IsFamilyDocument == False:\n\tisgood = False\n\ttitle = \"AECedx - Karam\"\n\tTaskDialog.Show(title, \"Works In Conceptual Mass Only\")\n\tOUT = \"Nothing to Do\"\nelse:\n\tif doc.OwnerFamily.FamilyCategory.Name != \"Mass\":\n\t\tisgood =False\n\t\ttitle = \"AECedx - Karam\"\n\t\tTaskDialog.Show(title, \"Works In Conceptual Mass Only\")\n\tOUT = \"Nothing to Do\"\nif isgood:\n\tsub_fec = doc.OwnerFamily.FamilyCategory.SubCategories\n\tfor sub in sub_fec:\n\t\tif sub.Name.lower() == \"form\":\n\t\t\tdefaultsubcat = sub.Id\n\t\t\tbreak\n\t\n\tTransactionManager.Instance.EnsureInTransaction(doc)\n\tcollector = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements();\n\tfor c in collector:\n\t\tparam = c.LookupParameter(\"Visible\")\n\t\tif param != None:\n\t\t\tif param.AsInteger() == 0:\n\t\t\t\ttohide.append(c)\n\t\t\telse:\n\t\t\t\tcurrentsubparam = c.LookupParameter(\"Subcategory\")\n\t\t\t\tif currentsubparam != None:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tcurrentsub = doc.GetElement(currentsubparam.AsElementId()).Name == subcategory\n\t\t\t\t\t\tcurrentsubparam.Set(defaultsubcat)\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\tchangesubcat(doc,tohide,subcategory,hideit)\n\tTransactionManager.Instance.TransactionTaskDone()\n\t\n\tOUT = tohide",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "6e7c27b0659943708c75c2e55c009c28",
+      "Inputs": [
+        {
+          "Id": "27dbc8eb1ea044faa1816ab8e25f6089",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8f263e12888547e4a441f1bde26d2f9a",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "146c04cb73664008aae58bb9028b7791",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "Dynamo Hidden Masses",
+      "Id": "1f819040377f4b38a6ca6ebe58eb07a0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "859a8309607b42a2ba8f70369198d025",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": false,
+      "Id": "841fc5edabbd4a359d2d4c6b1e70c3b3",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e4e700547e05455b93033d8773c8579d",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "e3b15dcf-8a04-4048-81bc-0e3c0480d780",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "c39fea23f794478cb8c745d7cc1af321",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "9e2ffbcd6a584d53a8fe482b9d88b8ce",
+          "Name": "VAROut",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Debug Python"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "859a8309607b42a2ba8f70369198d025",
+      "End": "27dbc8eb1ea044faa1816ab8e25f6089",
+      "Id": "f85f135ff13c40ac8a962290c7ec01cc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "e4e700547e05455b93033d8773c8579d",
+      "End": "8f263e12888547e4a441f1bde26d2f9a",
+      "Id": "1c94836dd04042bbbe0f2b1c8553fef3",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "e3b15dcf-8a04-4048-81bc-0e3c0480d780"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Synthesize toolkit",
+      "Version": "12.5.1",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "c39fea23f794478cb8c745d7cc1af321"
+      ]
+    }
+  ],
+  "Thumbnail": "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",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [
+    {
+      "ExtensionGuid": "28992e1d-abb9-417f-8b1b-05e053bee670",
+      "Name": "Properties",
+      "Version": "2.13",
+      "Data": {}
+    },
+    {
+      "ExtensionGuid": "DFBD9CC0-DB40-457A-939E-8C8555555A9D",
+      "Name": "Generative Design",
+      "Version": "2.0",
+      "Data": {}
+    }
+  ],
+  "Author": "karam@aecedx.com",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "6e7c27b0659943708c75c2e55c009c28",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 334.242147801966,
+        "Y": 77.1239312232592
+      },
+      {
+        "Name": "01.Subcategory to Move Invisible Masses Into",
+        "ShowGeometry": true,
+        "Id": "1f819040377f4b38a6ca6ebe58eb07a0",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -19.8922060764984,
+        "Y": 100.607316530866
+      },
+      {
+        "Name": "02.Mode: False = Hidden | True = Visible",
+        "ShowGeometry": true,
+        "Id": "841fc5edabbd4a359d2d4c6b1e70c3b3",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -11.7181031160153,
+        "Y": 172.021371598297
+      },
+      {
+        "Name": "Debug Python No Message",
+        "ShowGeometry": true,
+        "Id": "c39fea23f794478cb8c745d7cc1af321",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 343.132543428775,
+        "Y": 249.758731565902
+      }
+    ],
+    "Annotations": [
+      {
+        "Id": "9e539ee1382943c7ac7693b483b609a8",
+        "Title": "Input",
+        "DescriptionText": null,
+        "IsExpanded": true,
+        "WidthAdjustment": 0.0,
+        "HeightAdjustment": 0.0,
+        "Nodes": [
+          "1f819040377f4b38a6ca6ebe58eb07a0",
+          "841fc5edabbd4a359d2d4c6b1e70c3b3"
+        ],
+        "HasNestedGroups": false,
+        "Left": -29.8922060764984,
+        "Top": 34.607316530866,
+        "Width": 439.2,
+        "Height": 269.214055067431,
+        "FontSize": 30.0,
+        "InitialTop": 100.607316530866,
+        "InitialHeight": 216.41405506743104,
+        "TextblockHeight": 56.0,
+        "Background": "#FFD8D8D8"
+      }
+    ],
+    "X": 62.23220961855809,
+    "Y": 61.268622730992696,
+    "Zoom": 1.13758205229474
+  }
+}

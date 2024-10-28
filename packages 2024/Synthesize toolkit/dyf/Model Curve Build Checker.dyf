@@ -1,0 +1,164 @@
+{
+  "Uuid": "1b34ca7f-fae6-4537-b107-4816f3eaacd0",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Lines",
+  "Description": "Model Curve Build Checker",
+  "Name": "Model Curve Build Checker",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurves=UnwrapElement(IN[0])\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\n# Create Empty List\nbuilt = []\ngoodcurves = []\nfor c in curves:\n\ttry:\n\t\tbuilt.append(Revit.Elements.ModelCurve.ByCurve(c))\n\t\tgoodcurves.append(c)\n\texcept:\n\t\ttry:\n\t\t\tstp = c.StartPoint\n\t\t\tste = c.EndPoint\n\t\t\tline = dg.Line.ByStartPointEndPoint(stp,ste)\n\t\t\tgoodcurves.append(line)\n\t\texcept:\n\t\t\tgoodcurves.append(None)\n\t\t\t\n# Start a Transaction with Current Document (doc)\nTransactionManager.Instance.EnsureInTransaction(doc)\n\nfor b in built:\n\ttry:\n\t\tdoc.Delete(UnwrapElement(b).Id)\n\texcept:\n\t\tpass\n\t\n# End the Transaction with Current Document ()\nTransactionManager.Instance.TransactionTaskDone()\n# Assign your output to the OUT variable.\nOUT = goodcurves",
+      "VariableInputPorts": true,
+      "Id": "e800e88674b9457597fb11c212ef3aec",
+      "Inputs": [
+        {
+          "Id": "14bb7f13f0b2412e9f3d6181b124883a",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3d4b3095a683409bb6d7af5d11b83040",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCurves",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "a77ad596b81347c18f758d72066adffc",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8bffbcc6169a4ced8b1e6ee722ea20a9",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARCurves",
+      "Id": "7a11fc0b876b48858d7769c9d7298982",
+      "Inputs": [
+        {
+          "Id": "6fe894c8623a4b078895079d51e481da",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "3d4b3095a683409bb6d7af5d11b83040",
+      "End": "6fe894c8623a4b078895079d51e481da",
+      "Id": "c0be061b54a346a5905099fb77549bb2"
+    },
+    {
+      "Start": "8bffbcc6169a4ced8b1e6ee722ea20a9",
+      "End": "14bb7f13f0b2412e9f3d6181b124883a",
+      "Id": "f8c84356ece940f69a41c2fd7cb4e3e6"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 0.4453481137752533,
+      "EyeY": 17.401561737060547,
+      "EyeZ": 9.4064960479736328,
+      "LookX": -0.4453481137752533,
+      "LookY": -17.401561737060547,
+      "LookZ": -9.4064960479736328,
+      "UpX": -0.035799667239189148,
+      "UpY": 0.65342056751251221,
+      "UpZ": -0.756148099899292
+    },
+    "NodeViews": [
+      {
+        "Id": "e800e88674b9457597fb11c212ef3aec",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "a77ad596b81347c18f758d72066adffc",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.800000000000011,
+        "Y": 0.0
+      },
+      {
+        "Id": "7a11fc0b876b48858d7769c9d7298982",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 162.4,
+    "Y": 164.0,
+    "Zoom": 1.0
+  }
+}

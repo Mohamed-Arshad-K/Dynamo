@@ -1,0 +1,315 @@
+{
+  "Uuid": "cde8652c-25b7-45f2-a1d5-aed60bf79a3d",
+  "IsCustomNode": true,
+  "Category": "Sastrugi.Pointcloud.Geometry",
+  "Description": "(Sastrugi_Pointcloud_Geometry) This node extracts number of points within the linked Recap Project file for the selected Pointcloud. Only functional with Revit 2022 API.",
+  "Name": "❄_Pointcloud Get Point Count",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "/*Returns the total point count for\r\nthe asscociated Recap Project link PointCloud.\r\nOnly functional for the Revit 2022 API*/\r\nRCPTotalPoints;",
+      "Id": "60c264373cb5441eb153158fe032efe1",
+      "Inputs": [
+        {
+          "Id": "c91ccdf872b4488f83ae9cd323fd5621",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Python coding credit to Dynamo Forum user - @Ewan_Opie 2021\n# Sastrugi Package https://sites.google.com/view/sastrugi/home\n\nimport clr\nclr.AddReference(\"RevitNodes\")\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n\nclr.AddReference(\"RevitAPI\")\nimport Autodesk\nfrom Autodesk.Revit.DB import *\nfrom Autodesk.Revit.DB.PointClouds import *\n\n# Add Recap reference for Revit 2022 only\nclr.AddReference(\"C:\\Program Files\\Autodesk\\Revit 2022\\AdskRcManaged.dll\")\n\nclr.AddReference('DSCoreNodes') \nimport DSCore\nfrom DSCore import *\n\ndef tolist(obj1):\n\tif hasattr(obj1,\"__iter__\"): return obj1\n\telse: return [obj1]\t\n\ndef GetNumPoints(pc):\n\ttry:\n\t\tproj = pc.GetReCapProject()\n\t\ttotal_pts =  proj.GetNumberOfPoints()\n\t\treturn \"RCP Total Points = \"+ str(total_pts)\n\texcept:\n\t\treturn \"Revit 2022 Function Only\"\n\n\t\ncloud = tolist(UnwrapElement(IN[0]))\nrunMe = IN[1]\n\ncounts = []\ncounts2 = []\nif runMe:\n\tif len(cloud)>1:\n\t\tfor c in cloud:\n\t\t\tcounts.append(GetNumPoints(c))\n\telse:\n\t\tfor c in cloud:\n\t\t\tcounts2.append(GetNumPoints(c))\n\t\t\tcounts = DSCore.List.Flatten(counts2,1)\n\tOUT = counts\nelse:\n\tOUT = [\"Set RunMe to True\"]",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "d3cbb2a081b44ce19f13eb5cbf887983",
+      "Inputs": [
+        {
+          "Id": "dfda2ef63b1a4a798e58640272eee79d",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f1050c1539b34c7bb2fb21106398f541",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "006a688958274558ac5666b76cfcd262",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Revit.Elements.Element.ElementType",
+      "Id": "8020b213396e4031afb7977c5e18444b",
+      "Inputs": [
+        {
+          "Id": "e1166faf5913478ca1130b0b411b10b3",
+          "Name": "element",
+          "Description": "Revit.Elements.Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "5c0e9c0fc37243cf9906be76ff42111f",
+          "Name": "ElementType",
+          "Description": "Element Type or Null.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns the ElementType for this Element. Returns null if the Element cannot have an ElementType assigned.\n\nElement.ElementType: ElementType"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Flatten@var[]..[],int",
+      "Id": "2917935cbd5c4d8b9d69169c1c0e1556",
+      "Inputs": [
+        {
+          "Id": "caaf119232524e339a474346916c0035",
+          "Name": "list",
+          "Description": "List to flatten.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1ff2f06c4aae48d9bcc033330f233de2",
+          "Name": "amt",
+          "Description": "Layers of nesting to remove.\n\nint\nDefault value : -1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "39814aba6e014ac49e57f065bcfe5119",
+          "Name": "var[]..[]",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Flattens a nested list of lists by a certain amount.\n\nList.Flatten (list: var[]..[], amt: int = -1): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "PointcloudInstance",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "a4d3bb282ad247c9ab8e57f4ee855e64",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6fafebd60a664f648e3c22e4ea7a606f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "RunMe",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": "To prevent autorun issues this\ntoggle has been included"
+      },
+      "Id": "a5640a4d2e2249e3834363577f192471",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "be580e34488443539b89ef221dd57ccb",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "006a688958274558ac5666b76cfcd262",
+      "End": "c91ccdf872b4488f83ae9cd323fd5621",
+      "Id": "569d9b16242847378b5a1060e4b02e37"
+    },
+    {
+      "Start": "5c0e9c0fc37243cf9906be76ff42111f",
+      "End": "dfda2ef63b1a4a798e58640272eee79d",
+      "Id": "54da7060d49849509f7b6a52c5e3ffb7"
+    },
+    {
+      "Start": "39814aba6e014ac49e57f065bcfe5119",
+      "End": "e1166faf5913478ca1130b0b411b10b3",
+      "Id": "036b58e850b349abaa52475ad1f0472d"
+    },
+    {
+      "Start": "6fafebd60a664f648e3c22e4ea7a606f",
+      "End": "caaf119232524e339a474346916c0035",
+      "Id": "37745c8accb040f7b4d6caed99b08116"
+    },
+    {
+      "Start": "be580e34488443539b89ef221dd57ccb",
+      "End": "f1050c1539b34c7bb2fb21106398f541",
+      "Id": "a0bb29b80fe5441983e2c24961292089"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.10.1.3976",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "60c264373cb5441eb153158fe032efe1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1322.3557513023668,
+        "Y": 866.60244158430123
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Py - Read RCP File",
+        "Id": "d3cbb2a081b44ce19f13eb5cbf887983",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1093.5682117008541,
+        "Y": 866.91488657033119
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Element.ElementType",
+        "Id": "8020b213396e4031afb7977c5e18444b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 812.787896681731,
+        "Y": 867.464409202131
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "List.Flatten",
+        "Id": "2917935cbd5c4d8b9d69169c1c0e1556",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 590.2796067824853,
+        "Y": 867.71975812488358
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "a4d3bb282ad247c9ab8e57f4ee855e64",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 276.04711002951433,
+        "Y": 869.516391161024
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "a5640a4d2e2249e3834363577f192471",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 275.89855405946696,
+        "Y": 987.1756250477863
+      }
+    ],
+    "Annotations": [],
+    "X": -851.07437415046161,
+    "Y": -515.849037606191,
+    "Zoom": 0.87323933894951822
+  }
+}

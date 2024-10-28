@@ -1,0 +1,315 @@
+{
+  "Uuid": "b9f10ed0-500e-4211-9f66-8b37a307dfda",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Topography",
+  "Description": "Street Lines Prepare",
+  "Name": "Street Lines Prepare",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "List": {
+        "Key": "DSCore.List",
+        "Value": "DSCoreNodes.dll"
+      },
+      "Vector": {
+        "Key": "Autodesk.DesignScript.Geometry.Vector",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Math": {
+        "Key": "DSCore.Math",
+        "Value": "DSCoreNodes.dll"
+      },
+      "DSCore.List": {
+        "Key": "DSCore.List",
+        "Value": "DSCoreNodes.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\r\n# Enable Python support and load DesignScript library\r\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript import Geometry as dg\r\n\r\n# EXTENSION Enable ToDSType\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Enable Revit Elements\r\nfrom Revit.Elements import *\r\n\r\n# EXTENSION Enable Geometry Conversion Methods\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\n# Enable Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB.Architecture import *\r\n# Enable DocumentManager and TransactionManager\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Enable ICollection List Translate\r\nclr.AddReference(\"System\")\r\nimport System.Collections.Generic\r\nfrom System.Collections.Generic import List\r\nimport math\r\nfrom itertools import compress\r\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\r\n#cadfile=UnwrapElement(IN[0])\r\n\r\n# Choose The Current Document\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\r\nuiapp = DocumentManager.Instance.CurrentUIApplication\r\napp = uiapp.Application\r\n\r\nimport System\r\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\r\nimport sys\r\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\r\nimport traceback\r\nimport random\r\nimport string\r\nimport re\r\ntemp_path = System.IO.Path.GetTempPath()\r\ndef smartFreeForm(geoms,scaleup,doc,centermode=False,category=\"Generic Models\",importinstance=False,singlefinalprocess=False,safemode=False,temp_path=System.IO.Path.GetTempPath(),bypasscheck=False,returnfailures=False):\r\n\tclass WarnSwallowImport(IFailuresPreprocessor):\r\n\t\tdef PreprocessFailures(self, failuresAccessor):\r\n\t\t\tfailuresAccessor.DeleteAllWarnings()\r\n\t\t\treturn FailureProcessingResult.Continue\r\n\tdef finalimport(importinstance,geoms,satopt,singlefinalprocess):\r\n\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\tdg.Geometry.ExportToSAT(geoms,sat_path)\r\n\t\tif importinstance:\r\n\t\t\timported = doc.Import(sat_path,satopt,None)\r\n\t\t\telement = doc.GetElement(imported)\r\n\t\t\telement.Pinned = False\r\n\t\t\tresult = [element]\r\n\t\telse:\r\n\t\t\tresult = []\r\n\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\r\n\t\t\tif doc.IsFamilyDocument:\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tresult.append(FreeFormElement.Create(doc,e))\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\telse:\r\n\t\t\t\tform = DirectShape.CreateElement(doc,doc.Settings.Categories.get_Item(category).Id)\r\n\t\t\t\ttry:\r\n\t\t\t\t\tform.SetShape(converted)\r\n\t\t\t\texcept:\r\n\t\t\t\t\tdoc.Delete(form.Id)\r\n\t\t\t\t\timported = doc.Import(sat_path,satopt,None)\r\n\t\t\t\t\telement = doc.GetElement(imported)\r\n\t\t\t\t\telement.Pinned = False\r\n\t\t\t\t\tform = element\r\n\t\t\t\tresult.append(form)\r\n\t\t\tshapeImporter.Dispose()\r\n\t\tSystem.IO.File.Delete(sat_path)\r\n\t\treturn result\r\n\tdef allisone(testlist):\r\n\t\tfor t in testlist:\r\n\t\t\tif t != 1:\r\n\t\t\t\treturn False\r\n\t\treturn True\r\n\tdef tolist(obj1):\r\n\t\tif hasattr(obj1,'__iter__'): return obj1\r\n\t\telse: return [obj1]\r\n\tdef flatten(x):\r\n\t\tresult = []\r\n\t\tfor el in x:\r\n\t\t\tif hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n\t\t\t\tresult.extend(flatten(el))\r\n\t\t\telse:\r\n\t\t\t\tresult.append(el)\r\n\t\treturn result\r\n\tdef movecenter(doc,elements):\r\n\t\ttry:\r\n\t\t\telements = flatten(elements)\r\n\t\t\tpts = []\r\n\t\t\tfor e in elements:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tbbox = e.get_BoundingBox(None)\r\n\t\t\t\t\tpts.append(bbox.Max.ToPoint())\r\n\t\t\t\t\tpts.append(bbox.Min.ToPoint())\r\n\t\t\t\texcept:\r\n\t\t\t\t\tpass\r\n\t\t\tXs = []\r\n\t\t\tYs = []\r\n\t\t\tZs = []\r\n\t\t\tfor pt in pts:\r\n\t\t\t\tXs.append(pt.X)\r\n\t\t\t\tYs.append(pt.Y)\r\n\t\t\t\tZs.append(pt.Z)\r\n\t\t\tbigbox = dg.BoundingBox.ByCorners(dg.Point.ByCoordinates(max(Xs),max(Ys),max(Zs)),dg.Point.ByCoordinates(min(Xs),min(Ys),min(Zs)))\r\n\t\t\tminp = bigbox.MinPoint\r\n\t\t\tmaxp = bigbox.MaxPoint\r\n\t\t\tmidpoint = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minp,dg.Point.ByCoordinates(maxp.X,maxp.Y,minp.Z)),0.5)\r\n\t\t\tmainvec = dg.Vector.ByTwoPoints(midpoint, dg.Point.Origin())\r\n\t\t\tscaledvec = mainvec.Scale(unitconverter(1,doc,False))\r\n\t\t\tfor e in elements:\r\n\t\t\t\tElementTransformUtils.MoveElement(doc,e.Id,scaledvec.ToXyz())\r\n\t\t\treturn mainvec\r\n\t\texcept:\r\n\t\t\treturn None\r\n\tdef unitconverter(value,doc,frominternal=True):\r\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\t\tif frominternal:\r\n\t\t\t\tvalue = UnitUtils.ConvertFromInternalUnits(value,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\t\telse:\r\n\t\t\t\tvalue = UnitUtils.ConvertToInternalUnits(value,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\telse:\r\n\t\t\tif frominternal:\r\n\t\t\t\tvalue = UnitUtils.ConvertFromInternalUnits(value,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\t\telse:\r\n\t\t\t\tvalue = UnitUtils.ConvertToInternalUnits(value,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\treturn value\r\n\tdef smartrevitsolid(surfs,doc,importinstance,safemode,geometrymode,disposeinit,temp_path):\r\n\t\tdef polysurfaceOP(surfaces,chunks=12):\r\n\t\t\tdef smartpolysurface(surfaces,times,round=0):\r\n\t\t\t\tif len(surfaces) > chunks:\r\n\t\t\t\t\tif times == 0:\r\n\t\t\t\t\t\treturn surfaces\r\n\t\t\t\t\tresult = []\r\n\t\t\t\t\tchopped = [surfaces[x:x+chunks] for x in xrange(0, len(surfaces), chunks)]\r\n\t\t\t\t\tfor chop in chopped:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tjoined = dg.PolySurface.ByJoinedSurfaces(chop)\r\n\t\t\t\t\t\t\t#if round != 0:\r\n\t\t\t\t\t\t\t#\tfor c in chop:\r\n\t\t\t\t\t\t\t#\t\tc.Dispose()\r\n\t\t\t\t\t\t\tresult.append(joined)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tfor c in chop:\r\n\t\t\t\t\t\t\t\tresult.append(c)\r\n\t\t\t\t\ttimes -= 1\r\n\t\t\t\t\tround += 1\r\n\t\t\t\t\tresult = smartpolysurface(result,times,round)\r\n\t\t\t\t\treturn result\r\n\t\t\t\telse:\r\n\t\t\t\t\tif isinstance(surfaces, dg.PolySurface):\r\n\t\t\t\t\t\treturn surfaces\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\treturn dg.PolySurface.ByJoinedSurfaces(surfaces)\r\n\t\t\tsurfaces = flatten(tolist(surfaces))\r\n\t\t\tn = len(surfaces)\r\n\t\t\ttimes = 0\r\n\t\t\twhile n > 1:\r\n\t\t\t\tn //= chunks\r\n\t\t\t\ttimes += 1\r\n\t\t\ttimes *= 1.5\r\n\t\t\ttimes = int(round(times))\r\n\t\t\tjoined = smartpolysurface(surfaces,times)\r\n\t\t\tif isinstance(joined, list):\r\n\t\t\t\ttry:\r\n\t\t\t\t\tjoined = dg.PolySurface.ByJoinedSurfaces(joined)\r\n\t\t\t\texcept:\r\n\t\t\t\t\tjoined = joined\r\n\t\t\treturn joined\r\n\t\tdef isActuallygood(geomorsat,converted,firstTime,geometrymode,bypasscheck):\r\n\t\t\tif firstTime:\r\n\t\t\t\tif bypasscheck == False:\r\n\t\t\t\t\toriginalfaces = []\r\n\t\t\t\t\tif isinstance(geomorsat,dg.Solid) or isinstance(geomorsat,dg.PolySurface):\r\n\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\telif isinstance(geomorsat,dg.Surface):\r\n\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\t\tif geomorsat.Closed:\r\n\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\telif isinstance(geomorsat,str):\r\n\t\t\t\t\t\tgeomsorsat = dg.Geometry.ImportFromSAT(geomorsat)\r\n\t\t\t\t\t\tfor geomorsat in geomsorsat:\r\n\t\t\t\t\t\t\tif isinstance(geomorsat,dg.Solid) or isinstance(geomorsat,dg.PolySurface):\r\n\t\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\tif geometrymode == False and doc.IsFamilyDocument:\r\n\t\t\t\t\t\t\t\t\tgeomorsat.Dispose()\r\n\t\t\t\t\t\t\telif isinstance(geomorsat,dg.Surface):\r\n\t\t\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\t\t\t\tif geomorsat.Closed:\r\n\t\t\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\tif geometrymode:\r\n\t\t\t\t\t\t\tgeomorsat = list(geomsorsat)\r\n\t\t\t\t\toriginalnum = len(originalfaces)\r\n\t\t\t\t\tfor org in originalfaces:\r\n\t\t\t\t\t\torg.Dispose()\r\n\t\t\t\t\tFFfaces = []\r\n\t\t\t\t\tfor e in converted:\r\n\t\t\t\t\t\tgetfaces = e.Faces\r\n\t\t\t\t\t\tfor gotten in getfaces:\r\n\t\t\t\t\t\t\tFFfaces.append(gotten)\r\n\t\t\t\t\tFFfacesnum = len(FFfaces)\r\n\t\t\t\t\tif FFfacesnum >= originalnum:\r\n\t\t\t\t\t\tsamefaces = True\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tsamefaces = False\r\n\t\t\t\telse:\r\n\t\t\t\t\tsamefaces = True\r\n\t\t\t\tfreeforms = []\r\n\t\t\t\tif doc.IsFamilyDocument == False and singlefinalprocess and geometrymode == False and samefaces and importinstance == False:\r\n\t\t\t\t\tform = DirectShape.CreateElement(doc,doc.Settings.Categories.get_Item(category).Id)\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tform.SetShape(converted)\r\n\t\t\t\t\t\tfreeforms.append(form)\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tdoc.Delete(form.Id)\r\n\t\t\t\t\t\tsatopt = SATImportOptions()\r\n\t\t\t\t\t\tfreeforms.append(finalimport(True,geomsorsat,satopt,True)[0])\r\n\t\t\t\t\t\tsatopt.Dispose()\r\n\t\t\t\tif geometrymode == False and samefaces and importinstance == False:\r\n\t\t\t\t\tfor e in converted:\r\n\t\t\t\t\t\tif doc.IsFamilyDocument:\r\n\t\t\t\t\t\t\tform = FreeFormElement.Create(doc,e)\r\n\t\t\t\t\t\t\tfreeforms.append(form)\r\n\t\t\t\t\t\telif singlefinalprocess == False:\r\n\t\t\t\t\t\t\tform = DirectShape.CreateElement(doc,doc.Settings.Categories.get_Item(category).Id)\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tform.SetShape([e])\r\n\t\t\t\t\t\t\t\tfreeforms.append(form)\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tdoc.Delete(form.Id)\r\n\t\t\telse:\r\n\t\t\t\tsamefaces = False\r\n\t\t\tif geometrymode:\r\n\t\t\t\tif isinstance(geomorsat, list):\r\n\t\t\t\t\tfreeforms = geomorsat\r\n\t\t\t\telse:\r\n\t\t\t\t\tfreeforms = [geomorsat]\r\n\t\t\tif len(freeforms) == 0:\r\n\t\t\t\treturn [False]\r\n\t\t\tif firstTime == False:\r\n\t\t\t\treturn freeforms\r\n\t\t\telif samefaces and firstTime:\r\n\t\t\t\treturn freeforms\r\n\t\t\telse:\r\n\t\t\t\treturn [False]\r\n\t\tdef isbellowarea(surface):\r\n\t\t\tif round(meternumber(surface.Area),2) < meternumber(0.0025):\r\n\t\t\t\treturn True\r\n\t\t\telse:\r\n\t\t\t\treturn False\r\n\t\tdef isbellowlength(surface):\r\n\t\t\tedges = surface.Edges\r\n\t\t\tfor e in edges:\r\n\t\t\t\tcurvegeom = e.CurveGeometry\r\n\t\t\t\tlength = curvegeom.Length\r\n\t\t\t\tcurvegeom.Dispose()\r\n\t\t\t\tif length <= 0.0007803686370625:\r\n\t\t\t\t\treturn True\r\n\t\t\treturn False\r\n\t\tdef meternumber(value):\r\n\t\t\tvalue = value\r\n\t\t\treturn value\r\n\t\tdef metersurfarea(surface):\r\n\t\t\tarea = meternumber(surface.Area)\r\n\t\t\treturn area\r\n\t\tdef almostsame(surf1,surf2,tollerance = 2):\r\n\t\t\tif round(metersurfarea(surf1),tollerance) == round(metersurfarea(surf2),tollerance):\r\n\t\t\t\treturn True\r\n\t\t\telse:\r\n\t\t\t\treturn False\r\n\t\tdef quickSATcheck(sat_path,customscale=[1,1,1],importinstance=False,firstTime=True,geometrymode=False,bypasscheck=False):\r\n\t\t\tif allisone(customscale) == False:\r\n\t\t\t\treturn [False]\r\n\t\t\tconverted = []\r\n\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\r\n\t\t\tshapeImporter.Dispose()\r\n\t\t\tif bypasscheck:\r\n\t\t\t\tcleanconverted = []\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\r\n\t\t\t\t\t\tcontinue\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tcleanconverted.append(e)\r\n\t\t\t\tconverted = cleanconverted\r\n\t\t\telse:\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\r\n\t\t\t\t\t\treturn [False]\r\n\t\t\tif len(converted) != 0:\r\n\t\t\t\tconverted = isActuallygood(sat_path,converted,firstTime,geometrymode,bypasscheck)\r\n\t\t\tif (bypasscheck and importinstance) or (importinstance and converted[0] != False):\r\n\t\t\t\tsatopt = SATImportOptions()\r\n\t\t\t\timported = doc.Import(sat_path,satopt,None)\r\n\t\t\t\telement = doc.GetElement(imported)\r\n\t\t\t\telement.Pinned = False\r\n\t\t\t\tconverted = [element]\r\n\t\t\t\tsatopt.Dispose()\r\n\t\t\tif len(converted) == 0:\r\n\t\t\t\treturn [False]\r\n\t\t\treturn converted\r\n\t\tdef batchattempt(temp_path,surfs,importinstance,bypasscheck,scaleup,sendmessage):\r\n\t\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\t\tx_sat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\t\tdg.Geometry.ExportToSAT(surfs,x_sat_path)\r\n\t\t\tif importinstance and bypasscheck:\r\n\t\t\t\tsatopt = SATImportOptions()\r\n\t\t\t\timported = doc.Import(x_sat_path,satopt,None)\r\n\t\t\t\telement = doc.GetElement(imported)\r\n\t\t\t\telement.Pinned = False\r\n\t\t\t\tx_finalsurfaces = [element]\r\n\t\t\t\tsatopt.Dispose()\r\n\t\t\telse:\r\n\t\t\t\tx_finalsurfaces = quickSATcheck(x_sat_path,scaleup,importinstance,True,False,bypasscheck)\r\n\t\t\tSystem.IO.File.Delete(x_sat_path)\r\n\t\t\tif x_finalsurfaces[0] == False:\r\n\t\t\t\treturn [False]\r\n\t\t\telse:\r\n\t\t\t\tx_choppedfinal = []\r\n\t\t\t\tfor xf in x_finalsurfaces:\r\n\t\t\t\t\tx_choppedfinal.append([xf])\r\n\t\t\t\treturn x_choppedfinal,sendmessage,True\r\n\t\tdef SurfacesLaundry(surfs,doc,importinstance,geometrymode,temp_path):\r\n\t\t\t#scaleup = round(unitconverter(3.280839895,doc,True),8)\r\n\t\t\tdef tolist(obj1):\r\n\t\t\t\tif hasattr(obj1,'__iter__'): return obj1\r\n\t\t\t\telse: return [obj1]\t\r\n\t\t\tdef checkcompatible(geoms,customscale=[1,1,1],firstTime=False,geometrymode=True,bypasscheck=False):\r\n\t\t\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\t\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\t\t\tif allisone(customscale) == False:\r\n\t\t\t\t\tscaledgeoms = geoms.Scale(customscale[0],customscale[1],customscale[2])\r\n\t\t\t\t\tgeoms = scaledgeoms\r\n\t\t\t\tdg.Geometry.ExportToSAT(geoms,sat_path)\r\n\t\t\t\tconverted = []\r\n\t\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\r\n\t\t\t\tshapeImporter.Dispose()\r\n\t\t\t\tSystem.IO.File.Delete(sat_path)\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\r\n\t\t\t\t\t\treturn [False]\r\n\t\t\t\tif len(converted) != 0:\r\n\t\t\t\t\tconverted = isActuallygood(geoms,converted,firstTime,geometrymode,bypasscheck)\r\n\t\t\t\tif len(converted) == 0:\r\n\t\t\t\t\treturn [False]\r\n\t\t\t\treturn converted\r\n\t\t\tdef revitOP(finalsub,nurbs=None,cleanexplodes=None,customscale=[1,1,1],disposeNurbs=True,geometrymode=True):\r\n\t\t\t\tif nurbs == None and cleanexplodes == None:\r\n\t\t\t\t\ttestit = checkcompatible(finalsub,customscale,False,geometrymode)\r\n\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\traise Exception(\"Geometry Incompatible With Revit\")\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\tfinalsub.Dispose()\r\n\t\t\t\t\t\treturn testit\r\n\t\t\t\tcleanfinalsub = dg.Geometry.Explode(finalsub)\r\n\t\t\t\trevitgeom = []\r\n\t\t\t\tfor c in cleanfinalsub:\r\n\t\t\t\t\ttestit = checkcompatible(c,customscale,False,geometrymode)\r\n\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\tc.Dispose()\r\n\t\t\t\t\t\traise Exception(\"Geometry Incompatible With Revit\")\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\tc.Dispose()\r\n\t\t\t\t\t\trevitgeom.append(testit)\r\n\t\t\t\trevitgeom = flatten(revitgeom)\r\n\t\t\t\tif disposeNurbs:\r\n\t\t\t\t\tnurbs.Dispose()\r\n\t\t\t\tfor cleanex in cleanexplodes:\r\n\t\t\t\t\tcleanex.Dispose()\r\n\t\t\t\tfinalsub.Dispose()\r\n\t\t\t\treturn revitgeom\r\n\t\t\tdef cleanupSurface(surface):\r\n\t\t\t\tdef subtractfunction(nurbs,cleanexplodes):\r\n\t\t\t\t\tdef loopclean(nurbs,thick,counter):\r\n\t\t\t\t\t\tresult = dg.Surface.SubtractFrom(nurbs,thick)[0]\r\n\t\t\t\t\t\tif counter != 0:\r\n\t\t\t\t\t\t\tnurbs.Dispose()\r\n\t\t\t\t\t\tthick.Dispose()\r\n\t\t\t\t\t\treturn result\r\n\t\t\t\t\tthickforms = []\r\n\t\t\t\t\tfor cleanex in cleanexplodes:\r\n\t\t\t\t\t\tsafearea = metersurfarea(cleanex)/10\r\n\t\t\t\t\t\tif safearea > meternumber(0.1):\r\n\t\t\t\t\t\t\tmaxthicken = meternumber(0.1)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tmaxthicken = safearea\r\n\t\t\t\t\t\tthickforms.append(dg.Surface.Thicken(cleanex,maxthicken,True))\r\n\t\t\t\t\tcounter = 0\r\n\t\t\t\t\tfor thick in thickforms:\r\n\t\t\t\t\t\tnurbs = loopclean(nurbs,thick,counter)\r\n\t\t\t\t\t\tcounter += 1\r\n\t\t\t\t\treturn nurbs\r\n\t\t\t\tdef tryingforall(surface,nurbs,cleanexplodes,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfinalsub = subtractfunction(nurbs,cleanexplodes)\r\n\t\t\t\t\t\treturn revitOP(finalsub,nurbs,cleanexplodes,scaleup,True,geometrymode)\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tfinalsub = dg.Surface.Difference(nurbs,cleanexplodes)\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,nurbs,cleanexplodes,scaleup,True,geometrymode)\r\n\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\tif str(e) == \"Cannot difference an empty list\" and almostsame(nurbs,surface):\r\n\t\t\t\t\t\t\t\tfinalsub = nurbs\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\treturn revitOP(finalsub,nurbs,cleanexplodes,scaleup,False,geometrymode)\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\treturn None,finalsub\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\treturn None,finalsub\r\n\t\t\t\tdef gencleanexplodes(subtractnurbs):\r\n\t\t\t\t\tif isinstance(subtractnurbs, list):\r\n\t\t\t\t\t\tif len(subtractnurbs) == 0:\r\n\t\t\t\t\t\t\treturn []\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\texplodednurbs = dg.Geometry.Explode(subtractnurbs)\r\n\t\t\t\t\t\tcleanexplodes = []\r\n\t\t\t\t\t\tif safemode:\r\n\t\t\t\t\t\t\tfor ex in explodednurbs:\r\n\t\t\t\t\t\t\t\tif ex.Area < meternumber(0.002):\r\n\t\t\t\t\t\t\t\t\tex.Dispose()\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tcleanexplodes.append(ex)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tcleanexplodes = list(explodednurbs)\r\n\t\t\t\t\t\tsubtractnurbs.Dispose()\r\n\t\t\t\t\t\treturn cleanexplodes\r\n\t\t\t\tdef easymethod(surface,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tnurbs = dg.Surface.ToNurbsSurface(surface)\r\n\t\t\t\t\t\tif almostsame(nurbs,surface):\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\treturn True,revitOP(nurbs,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\treturn None,nurbs\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn None,nurbs\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn None,None\r\n\t\t\t\tdef isplanarsurf(s):\r\n\t\t\t\t\tnorms = [0,0.333,0.666,1]\r\n\t\t\t\t\tpts = []\r\n\t\t\t\t\tfor n in norms:\r\n\t\t\t\t\t\tfor n2 in norms:\r\n\t\t\t\t\t\t\tpts.append(dg.Surface.PointAtParameter(s,n,n2))\r\n\t\t\t\t\tplane = dg.Plane.ByBestFitThroughPoints(pts)\r\n\t\t\t\t\tstatus = True\r\n\t\t\t\t\tfor p in pts:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tinter = dg.Geometry.DoesIntersect(p,plane)\r\n\t\t\t\t\t\t\tif inter == False:\r\n\t\t\t\t\t\t\t\tstatus = False\r\n\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tpass\r\n\t\t\t\t\treturn status\r\n\t\t\t\tdef joincurves(crvs):\r\n\t\t\t\t\tdef PointsEqual(pt1, pt2):\r\n\t\t\t\t\t\ttolerance = 0.00001\r\n\t\t\t\t\t\tif (math.fabs(pt1.X - pt2.X) < tolerance and\r\n\t\t\t\t\t\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\r\n\t\t\t\t\t\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\r\n\t\t\t\t\t\t\treturn True\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn False\r\n\t\t\t\t\tcrvs = flatten(tolist(crvs))\r\n\t\t\t\t\tcrvGroup = [-1 for x in range(len(crvs))]\r\n\t\t\t\t\tcrvGroup[0] = 0\r\n\t\t\t\t\tmaxGroupNum = 1\r\n\t\t\t\t\tstarts = []\r\n\t\t\t\t\tends = []\r\n\t\t\t\t\tfor crv in crvs:\r\n\t\t\t\t\t\tstarts.append(crv.PointAtParameter(0))\r\n\t\t\t\t\t\tends.append(crv.PointAtParameter(1))\r\n\t\t\t\t\tfor i in range(len(crvs)):\r\n\t\t\t\t\t\tif (crvGroup[i] == -1):\r\n\t\t\t\t\t\t\tcrvGroup[i] = i\r\n\t\t\t\t\t\tfor j in range(len(crvs)):\r\n\t\t\t\t\t\t\tif (i != j and\r\n\t\t\t\t\t\t\t\t(PointsEqual(starts[i], starts[j]) or\r\n\t\t\t\t\t\t\t\tPointsEqual(starts[i], ends[j]) or\r\n\t\t\t\t\t\t\t\tPointsEqual(ends[i], starts[j]) or\r\n\t\t\t\t\t\t\t\tPointsEqual(ends[i], ends[j]))):\r\n\t\t\t\t\t\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\t\t\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t\t\t\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\t\t\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\t\t\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\t\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\t\t\t\t\tgroups = []\r\n\t\t\t\t\texcluded = []\r\n\t\t\t\t\tfor n in crvGroup:\r\n\t\t\t\t\t\tinnercount = 0\r\n\t\t\t\t\t\ttmp = []\r\n\t\t\t\t\t\tfor n2 in crvGroup:\r\n\t\t\t\t\t\t\tif n == n2 and n2 not in excluded:\r\n\t\t\t\t\t\t\t\ttmp.append(crvs[innercount])\r\n\t\t\t\t\t\t\tinnercount += 1\r\n\t\t\t\t\t\tif len(tmp) == 0:\r\n\t\t\t\t\t\t\tcontinue\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\ttmp = dg.PolyCurve.ByJoinedCurves(tmp)\r\n\t\t\t\t\t\t\tgroups.append(tmp)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tfor t in tmp:\r\n\t\t\t\t\t\t\t\tgroups.append(dg.PolyCurve.ByJoinedCurves([t]))\r\n\t\t\t\t\t\texcluded.append(n)\r\n\t\t\t\t\tjoinedcurves = groups\r\n\t\t\t\t\treturn joinedcurves\r\n\t\t\t\tdef trimloopmethod(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tif surface.Closed:\r\n\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tjoinedperms = [dg.PolyCurve.ByJoinedCurves(surface.PerimeterCurves())]\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tjoinedperms = joincurves(surface.PerimeterCurves())\r\n\t\t\t\t\t\tfinalsub = dg.Surface.TrimWithEdgeLoops(nurbs,joinedperms)\r\n\t\t\t\t\t\tif almostsame(finalsub,surface):\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\ttmp_thicken = dg.Surface.Thicken(surface,pointOneMeter,True)\r\n\t\t\t\t\t\tisplanar = isplanarsurf(surface)\r\n\t\t\t\t\t\tif isplanar:\r\n\t\t\t\t\t\t\ttmp_pt = dg.Surface.PointAtParameter(surface,0.5,0.5)\r\n\t\t\t\t\t\t\ttmp_norm = dg.Surface.NormalAtPoint(surface,tmp_pt)\r\n\t\t\t\t\t\t\tintersecter = dg.Plane.ByOriginNormal(tmp_pt,tmp_norm)\r\n\t\t\t\t\t\t\tfinalsub = dg.Geometry.Intersect(intersecter,tmp_thicken)\r\n\t\t\t\t\t\t\tfor f in finalsub:\r\n\t\t\t\t\t\t\t\tif isinstance(f,dg.Surface):\r\n\t\t\t\t\t\t\t\t\tfinalsub = f\r\n\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\ttmp_thicken.Dispose()\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfinalsub = dg.Geometry.Intersect(nurbs,tmp_thicken)\r\n\t\t\t\t\t\t\tfor f in finalsub:\r\n\t\t\t\t\t\t\t\tif isinstance(f,dg.Surface):\r\n\t\t\t\t\t\t\t\t\tfinalsub = f\r\n\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\ttmp_thicken.Dispose()\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\treturn None,finalsub\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef inithickenMethod(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tsafearea = metersurfarea(surface)/10\r\n\t\t\t\t\t\tif safearea > meternumber(0.1):\r\n\t\t\t\t\t\t\tmaxthicken = meternumber(0.1)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tmaxthicken = safearea\r\n\t\t\t\t\t\tthickeninit = dg.Surface.Thicken(surface,maxthicken,True)\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.SubtractFrom(nurbs,thickeninit)[0]\r\n\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\tif \"index out of range\" in str(e) and almostsame(nurbs,surface):\r\n\t\t\t\t\t\t\t\tsubtractnurbs = []\r\n\t\t\t\t\t\t\telif \"index out of range\" in str(e):\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\r\n\t\t\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\r\n\t\t\t\t\t\t\t\t\t\tsubtractnurbs = []\r\n\t\t\t\t\t\tthickeninit.Dispose()\r\n\t\t\t\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\r\n\t\t\t\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\r\n\t\t\t\t\t\tif tryall[0] != None:\r\n\t\t\t\t\t\t\treturn tryall\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn None,tryall[1]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef simplesubmethod(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\r\n\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\t\treturn revitOP(nurbs,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\t\treturn None,nurbs\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\r\n\t\t\t\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\r\n\t\t\t\t\t\tif tryall[0] != None:\r\n\t\t\t\t\t\t\treturn tryall\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn None,tryall[1]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\teasy = easymethod(surface,geometrymode)\r\n\t\t\t\tpointOneMeter = unitconverter(0.3280,doc,True)\r\n\t\t\t\tif easy[0] != None:\r\n\t\t\t\t\treturn easy[1]\r\n\t\t\t\telif easy[0] == None and easy[1] == None:\r\n\t\t\t\t\treturn None\r\n\t\t\t\telse:\r\n\t\t\t\t\tnurbs = easy[1]\r\n\t\t\t\tfailsafesurfs = []\r\n\t\t\t\ttrimloop = trimloopmethod(surface,nurbs,geometrymode)\r\n\t\t\t\tif trimloop[0] != None:\r\n\t\t\t\t\treturn trimloop\r\n\t\t\t\tsimple = simplesubmethod(surface,nurbs,geometrymode)\r\n\t\t\t\tif simple[0] != None:\r\n\t\t\t\t\treturn simple\r\n\t\t\t\telse:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfailsafesurfs.append(simple[1])\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\t\tinithick = inithickenMethod(surface,nurbs,geometrymode)\r\n\t\t\t\tif inithick[0] != None:\r\n\t\t\t\t\treturn inithick\r\n\t\t\t\telse:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfailsafesurfs.append(inithick[1])\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\t\tthickeninter = thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter)\r\n\t\t\t\tif thickeninter[0] != None:\r\n\t\t\t\t\treturn thickeninter\r\n\t\t\t\telse:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfailsafesurfs.append(thickeninter[1])\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\t\tfor failsurf in failsafesurfs:\r\n\t\t\t\t\tsurface = failsurf\r\n\t\t\t\t\teasy = easymethod(surface,geometrymode)\r\n\t\t\t\t\tif easy[0] != None:\r\n\t\t\t\t\t\treturn easy[1]\r\n\t\t\t\t\telif easy[0] == None and easy[1] == None:\r\n\t\t\t\t\t\treturn None\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tnurbs = easy[1]\r\n\t\t\t\t\ttrimloop = trimloopmethod(surface,nurbs,geometrymode)\r\n\t\t\t\t\tif trimloop[0] != None:\r\n\t\t\t\t\t\treturn trimloop\r\n\t\t\t\t\tsimple = simplesubmethod(surface,nurbs,geometrymode)\r\n\t\t\t\t\tif simple[0] != None:\r\n\t\t\t\t\t\treturn simple\r\n\t\t\t\t\tinithick = inithickenMethod(surface,nurbs,geometrymode)\r\n\t\t\t\t\tif inithick[0] != None:\r\n\t\t\t\t\t\treturn inithick\r\n\t\t\t\t\tthickeninter = thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter)\r\n\t\t\t\t\tif thickeninter[0] != None:\r\n\t\t\t\t\t\treturn thickeninter\r\n\t\t\t\treturn None\r\n\t\t\tsendmessage = False\r\n\t\t\tis_sat = False\r\n\t\t\tif isinstance(surfs,str) == False:\r\n\t\t\t\tsurfs = flatten(tolist(surfs))\r\n\t\t\t\tx_scaledown = round(unitconverter(0.3048,doc,False),8)\r\n\t\t\t\tx_pure = []\r\n\t\t\t\tfor xs in surfs:\r\n\t\t\t\t\tif isinstance(xs,dg.Solid) or isinstance(xs,dg.Surface) or isinstance(xs,dg.PolySurface) or isinstance(xs,dg.Cuboid):\r\n\t\t\t\t\t\tif x_scaledown != 1:\r\n\t\t\t\t\t\t\tx_pure.append(xs.Scale(x_scaledown))\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tx_pure.append(xs)\r\n\t\t\t\tsurfs = x_pure\r\n\t\t\t\tbOP = batchattempt(temp_path,surfs,importinstance,bypasscheck,scaleup,sendmessage)\r\n\t\t\t\tif bOP[0] == False:\r\n\t\t\t\t\tpass\r\n\t\t\t\telse:\r\n\t\t\t\t\treturn bOP\r\n\t\t\tif isinstance(surfs,str):\r\n\t\t\t\tif \".sat\" in surfs.lower():\r\n\t\t\t\t\tfinalsurfaces = quickSATcheck(surfs,scaleup,importinstance,True,False,bypasscheck)\r\n\t\t\t\t\tif finalsurfaces[0] == False:\r\n\t\t\t\t\t\tsurfs = dg.Geometry.ImportFromSAT(surfs)\r\n\t\t\t\t\t\tx_pure = []\r\n\t\t\t\t\t\tfor xs in surfs:\r\n\t\t\t\t\t\t\tif isinstance(xs,dg.Solid) or isinstance(xs,dg.Surface) or isinstance(xs,dg.PolySurface) or isinstance(xs,dg.Cuboid):\r\n\t\t\t\t\t\t\t\tx_pure.append(xs)\r\n\t\t\t\t\t\tsurfs = x_pure\r\n\t\t\t\t\t\tis_sat = True\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tchoppedfinal = []\r\n\t\t\t\t\t\tfor f in finalsurfaces:\r\n\t\t\t\t\t\t\tchoppedfinal.append([f])\r\n\t\t\t\t\t\treturn choppedfinal,sendmessage,True\r\n\t\t\t\telse:\r\n\t\t\t\t\treturn [],sendmessage\r\n\t\t\t\tscaledown = 1\r\n\t\t\telse:\r\n\t\t\t\tscaledown = round(unitconverter(0.3048,doc,False),8)\r\n\t\t\tsurfs = flatten(tolist(surfs))\r\n\t\t\tfinalsurfaces = []\r\n\t\t\tprecheck = []\r\n\t\t\tfor s in surfs:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tif isinstance(s,dg.Surface):\r\n\t\t\t\t\t\texploded = dg.Geometry.Explode(s)\r\n\t\t\t\t\t\tif disposeinit:\r\n\t\t\t\t\t\t\ts.Dispose()\r\n\t\t\t\t\t\tif len(exploded) > 1:\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tprecheck.append(dg.PolySurface.ByJoinedSurfaces(exploded))\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\t\tprecheck.append(exp)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\tprecheck.append(exp)\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tprecheck.append(s)\r\n\t\t\t\texcept:\r\n\t\t\t\t\tprecheck.append(s)\r\n\t\t\tsurfs = precheck\r\n\t\t\tbOP = batchattempt(temp_path,surfs,importinstance,bypasscheck,scaleup,sendmessage)\r\n\t\t\tif bOP[0] == False:\r\n\t\t\t\tpass\r\n\t\t\telse:\r\n\t\t\t\treturn bOP\r\n\t\t\tfor s in surfs:\r\n\t\t\t\tsurface = s\r\n\t\t\t\tsafe = True\r\n\t\t\t\tif safemode:\r\n\t\t\t\t\tif isinstance(surface,dg.Solid) or isinstance(surface,dg.PolySurface):\r\n\t\t\t\t\t\tnicesurfaces = []\r\n\t\t\t\t\t\texplodedcheck = dg.Geometry.Explode(surface)\r\n\t\t\t\t\t\tfor explocheck in explodedcheck:\r\n\t\t\t\t\t\t\tif isbellowarea(explocheck):\r\n\t\t\t\t\t\t\t\tsafe = False\r\n\t\t\t\t\t\t\t\texplocheck.Dispose()\r\n\t\t\t\t\t\t\t\tsendmessage = True\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\tnicesurfaces.append(explocheck)\r\n\t\t\t\t\t\tif safe:\r\n\t\t\t\t\t\t\tfor n in nicesurfaces:\r\n\t\t\t\t\t\t\t\tn.Dispose()\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tif isbellowarea(surface):\r\n\t\t\t\t\t\t\ts.Dispose()\r\n\t\t\t\t\t\t\tif scaledown != 1 and geometrymode == False:\r\n\t\t\t\t\t\t\t\tsurface.Dispose()\r\n\t\t\t\t\t\t\tsendmessage = True\r\n\t\t\t\t\t\t\tcontinue\r\n\t\t\t\tif safe == False:\r\n\t\t\t\t\ttmp = []\r\n\t\t\t\t\tfor mini_s in nicesurfaces:\r\n\t\t\t\t\t\ttestit = checkcompatible(mini_s,scaleup,False,geometrymode)\r\n\t\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\t\tcleanedup = cleanupSurface(mini_s)\r\n\t\t\t\t\t\t\tif cleanedup != None:\r\n\t\t\t\t\t\t\t\ttmp.append(cleanedup)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\ttmp.append(testit)\r\n\t\t\t\t\t\tif geometrymode == False and testit[0] != False:\r\n\t\t\t\t\t\t\tmini_s.Dispose()\r\n\t\t\t\t\tif len(tmp) != 0:\r\n\t\t\t\t\t\tfinalsurfaces.append(flatten(tmp))\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tfinalsurfaces.append([\"FAILED\"])\r\n\t\t\t\t\tif (disposeinit or is_sat) and geometrymode == False:\r\n\t\t\t\t\t\ts.Dispose()\r\n\t\t\t\t\tif scaledown != 1 and geometrymode == False:\r\n\t\t\t\t\t\tif isinstance(surface,list):\r\n\t\t\t\t\t\t\tfor surf in surface:\r\n\t\t\t\t\t\t\t\tsurf.Dispose()\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tsurface.Dispose()\r\n\t\t\t\t\tcontinue\r\n\t\t\t\ttestit = checkcompatible(surface,scaleup,True,geometrymode)\r\n\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\tisexploded = False\r\n\t\t\t\t\tif isinstance(surface,dg.Solid) or isinstance(surface,dg.PolySurface):\r\n\t\t\t\t\t\tsurface = list(dg.Geometry.Explode(surface))\r\n\t\t\t\t\t\tisexploded = True\r\n\t\t\t\t\tif isexploded:\r\n\t\t\t\t\t\ttmp = []\r\n\t\t\t\t\t\tfor mini_s in surface:\r\n\t\t\t\t\t\t\ttestit = checkcompatible(mini_s,scaleup,False,geometrymode)\r\n\t\t\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\t\t\tcleanedup = cleanupSurface(mini_s)\r\n\t\t\t\t\t\t\t\tif cleanedup != None:\r\n\t\t\t\t\t\t\t\t\ttmp.append(cleanedup)\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\ttmp.append(testit)\r\n\t\t\t\t\t\t\tif geometrymode == False and testit[0] != False:\r\n\t\t\t\t\t\t\t\tmini_s.Dispose()\r\n\t\t\t\t\t\tif len(tmp) != 0:\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tsoljoin = polysurfaceOP(flatten(tmp))\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\tsol = dg.Solid.ByJoinedSurfaces([soljoin])\r\n\t\t\t\t\t\t\t\t\tsoljoin.Dispose()\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\tsol = soljoin\r\n\t\t\t\t\t\t\t\ttestit = checkcompatible(sol,scaleup,True,geometrymode)\r\n\t\t\t\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\t\t\t\tsol.Dispose()\r\n\t\t\t\t\t\t\t\t\tfinalsurfaces.append(flatten(tmp))\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tfinalsurfaces.append([sol])\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tfinalsurfaces.append(flatten(tmp))\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfinalsurfaces.append([\"FAILED\"])\r\n\t\t\t\t\t\tsendmessage = True\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tcleanedup = cleanupSurface(surface)\r\n\t\t\t\t\t\tif cleanedup != None:\r\n\t\t\t\t\t\t\tfinalsurfaces.append(cleanedup)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfinalsurfaces.append([\"FAILED\"])\r\n\t\t\t\telse:\r\n\t\t\t\t\tfinalsurfaces.append(testit)\r\n\t\t\t\tif (disposeinit or is_sat) and geometrymode == False:\r\n\t\t\t\t\ts.Dispose()\r\n\t\t\t\tif scaledown != 1 and geometrymode == False:\r\n\t\t\t\t\tif isinstance(surface,list):\r\n\t\t\t\t\t\tfor surf in surface:\r\n\t\t\t\t\t\t\tsurf.Dispose()\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tsurface.Dispose()\r\n\t\t\treturn finalsurfaces,sendmessage\r\n\t\tforms = []\r\n\t\tlaundryMain = SurfacesLaundry(surfs,doc,importinstance,geometrymode,temp_path)\r\n\t\tresult = laundryMain[0]\r\n\t\tsendmessage = laundryMain[1]\r\n\t\tfor rlist in result:\r\n\t\t\ttmp = []\r\n\t\t\tfor r in rlist:\r\n\t\t\t\ttmp.append(r)\r\n\t\t\tif len(tmp) != 0:\r\n\t\t\t\tforms.append(tmp)\r\n\t\tif len(laundryMain) == 3:\r\n\t\t\treturn forms,sendmessage,True\r\n\t\telse:\r\n\t\t\treturn forms,sendmessage\r\n\tif geoms == [] or geoms == None:\r\n\t\treturn [],None,False\r\n\tgeometrymode = True\r\n\tdisposeinit = False\r\n\tTransactionManager.Instance.ForceCloseTransaction()\r\n\tif importinstance:\r\n\t\ttrans = Transaction(doc, 'Create ImportInstance')\r\n\telse:\r\n\t\tif doc.IsFamilyDocument:\r\n\t\t\ttrans = Transaction(doc, 'Create FreeForm')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Create DirectShape')\r\n\ttrans.Start()\r\n\twarnhandle = WarnSwallowImport()\r\n\tfoptions = trans.GetFailureHandlingOptions()\r\n\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\tfoptions.SetClearAfterRollback(True)\r\n\ttrans.SetFailureHandlingOptions(foptions)\r\n\ttry:\r\n\t\tsmartrevitsolidMain = smartrevitsolid(geoms,doc,importinstance,safemode,geometrymode,disposeinit,temp_path)\r\n\texcept:\r\n\t\ttrans.RollBack()\r\n\t\treturn [],None,False\r\n\tif len(smartrevitsolidMain) == 3:\r\n\t\ttrans.Commit()\r\n\telse:\r\n\t\ttrans.RollBack()\r\n\tfreeformslists = smartrevitsolidMain[0]\r\n\tsendmessage = smartrevitsolidMain[1]\r\n\tresult = [] \r\n\tsinglelist = []\r\n\tTransactionManager.Instance.ForceCloseTransaction()\r\n\tif importinstance:\r\n\t\tif singlefinalprocess:\r\n\t\t\ttrans = Transaction(doc, 'Create ImportInstance')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Create ImportInstances')\r\n\telse:\r\n\t\tif doc.IsFamilyDocument:\r\n\t\t\ttrans = Transaction(doc, 'Create FreeForms')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Create DirectShape')\r\n\tif len(smartrevitsolidMain) == 3:\r\n\t\tif singlefinalprocess:\r\n\t\t\ttrans = Transaction(doc, 'Move ImportInstance')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Move ImportInstances')\r\n\ttrans.Start()\r\n\tsatopt = SATImportOptions()\r\n\tfor slist in freeformslists:\r\n\t\ttmp = []\r\n\t\ttmpexport = []\r\n\t\tfor s in slist:\r\n\t\t\tif s == \"FAILED\":\r\n\t\t\t\tif returnfailures:\r\n\t\t\t\t\ttmp.append(None)\r\n\t\t\t\tcontinue\r\n\t\t\tcompare = s.ToString()\r\n\t\t\tif compare == \"Autodesk.Revit.DB.FreeFormElement\" or compare == \"Autodesk.Revit.DB.Solid\" or compare == \"Autodesk.Revit.DB.ImportInstance\" or compare == \"Autodesk.Revit.DB.DirectShape\":\r\n\t\t\t\ttmp.append(s)\r\n\t\t\telse:\r\n\t\t\t\tif singlefinalprocess:\r\n\t\t\t\t\tsinglelist.append(s)\r\n\t\t\t\telse:\r\n\t\t\t\t\ttmpexport.append(s)\r\n\t\tif len(tmp) != 0:\r\n\t\t\tresult.append(tmp)\r\n\t\tif len(tmpexport) != 0:\r\n\t\t\tresult.append(finalimport(importinstance,tmpexport,satopt,singlefinalprocess))\r\n\tif len(singlelist) != 0:\r\n\t\tresult.append(finalimport(importinstance,singlelist,satopt,singlefinalprocess))\r\n\tsatopt.Dispose()\r\n\tmainvec = None\r\n\tif len(result) != 0 and centermode:\r\n\t\tdoc.Regenerate()\r\n\t\tmainvec = movecenter(doc,result)\r\n\ttrans.Commit()\r\n\tif importinstance or (singlefinalprocess and doc.IsFamilyDocument == False):\r\n\t\tcleanresult = []\r\n\t\tfor r in result:\r\n\t\t\tcleanresult.append(r[0])\r\n\t\tresult  = cleanresult\r\n\t\tif (singlefinalprocess and importinstance) or (singlefinalprocess and doc.IsFamilyDocument == False):\r\n\t\t\tresult = result[0]\r\n\treturn result,mainvec,sendmessage\r\n\r\ndef toRvtId(_id):\r\n\tif isinstance(_id, int) or isinstance(_id, str):\r\n\t\tid = ElementId(int(_id))\r\n\t\treturn id\r\n\telif isinstance(_id, ElementId):\r\n\t\treturn _id\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\n#unwrap incoming information for use with API\r\nelems = UnwrapElement(IN[0])\r\nids = []\r\n\r\nfor each in elems:\r\n\tids.append(each.Id)\r\n\r\nstreetwidth = UnwrapElement(IN[1])\r\n\r\n#use element ids to select elements\r\nelements = []\r\nmessage = None\r\ntry:\r\n\tfor i in ids:\r\n\t\telements.append(doc.GetElement(toRvtId(i)).ToDSType(True))\r\nexcept:\r\n\tmessage = \"Invalid Id\"\r\n\tpass\r\n\r\ngeom = []\r\nfor each in elements:\r\n\ttry:\r\n\t\tgeom.append(Revit.Elements.Element.Geometry(each))\r\n\texcept:\r\n\t\tgeom.append(each)\r\n\r\nflattengeom = flatten(geom)\r\nthick = []\r\n\r\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\tunittype = UnitType.UT_Length\r\n\tformatoptions = doc.GetUnits().GetFormatOptions(unittype)\r\n\tdispunits = formatoptions.DisplayUnits\r\n\tthickenval = UnitUtils.ConvertFromInternalUnits(300,dispunits)\r\nelse:\r\n\tthickenval = UnitUtils.ConvertFromInternalUnits(300,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\r\nfor each in flattengeom:\r\n\ttry:\r\n\t\tif each.IsClosed == True:\r\n\t\t\toffsets = []\r\n\t\t\toffsets.append(dg.Curve.Offset(each,(streetwidth/2)))\r\n\t\t\toffsets.append(dg.Curve.Offset(each,(streetwidth/-2)))\r\n\t\t\tsurf = dg.Surface.ByLoft(offsets)\r\n\t\telse:\r\n\t\t\tsurf = dg.Surface.ByPatch(dg.PolyCurve.ByThickeningCurve(each,streetwidth,dg.Vector.ZAxis()))\r\n\t\tthick.append(dg.Surface.Thicken(surf,thickenval,True))\r\n\texcept:\r\n\t\ttry:\r\n\t\t\textru = dg.Curve.Extrude(each,dg.Vector.ZAxis(),1)\r\n\t\t\tthis = dg.Surface.Thicken(extru,streetwidth,True)\r\n\t\t\ttmpexp = dg.Geometry.Explode(this)\r\n\t\t\tfor e in tmpexp:\r\n\t\t\t\ttmpvec = dg.Surface.NormalAtParameter(e,0.5,0.5)\r\n\t\t\t\tif dg.Vector.IsAlmostEqualTo(tmpvec,dg.Vector.ZAxis().Reverse()):\r\n\t\t\t\t\tsurf = e\r\n\t\t\tthick.append(dg.Surface.Thicken(surf,thickenval,True))\r\n\t\texcept:\r\n\t\t\tpass\r\n\r\nunionsolid = []\r\nunionsolid.append(dg.Solid.ByUnion(thick))\r\n\r\nfor each in flattengeom:\r\n\teach.Dispose()\r\n\r\nbbox = dg.BoundingBox.ByGeometry(unionsolid[0])\r\nminp = bbox.MinPoint\r\nmaxp = bbox.MaxPoint\r\nline = dg.Line.ByStartPointEndPoint(minp,maxp)\r\nmidp = dg.Curve.PointAtParameter(line,0.5)\r\nmidplane = dg.Plane.ByOriginNormal(midp,dg.Vector.ZAxis())\r\nintersects = dg.Geometry.Intersect(unionsolid[0],midplane)\r\nunionsolid[0].Dispose()\r\nstreets = []\r\n\r\nimport itertools\r\ntmpc = []\r\nfor each in intersects:\r\n\ttmpc.append(each.PerimeterCurves())\r\ncrvs = flatten(tmpc)\r\n\r\n# Determine whether two points are equal\r\ndef PointsEqual(pt1, pt2):\r\n\ttolerance = 0.001\r\n\t\r\n\tif (math.fabs(pt1.X - pt2.X) < tolerance and\r\n\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\r\n\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n# List the group to which each curve belongs\r\ncrvGroup = [-1 for x in range(len(crvs))]\r\ncrvGroup[0] = 0\r\nmaxGroupNum = 1\r\n\r\n# Find start and end points for each curve\r\nstarts = []\r\nends = []\r\nfor crv in crvs:\r\n\tstarts.append(dg.Curve.PointAtParameter(crv,0))\r\n\tends.append(crv.PointAtParameter(1))\r\n\r\n# Find connected groups of curves\r\nfor i in range(len(crvs)):\r\n\t# Add i to its own group it not already part of a group\r\n\tif (crvGroup[i] == -1):\r\n\t\tcrvGroup[i] = i\r\n\r\n# Find connections\r\n\tfor j in range(len(crvs)):\r\n\t\tif (i != j and\r\n\t\t\t(PointsEqual(starts[i], starts[j]) or\r\n\t\t\tPointsEqual(starts[i], ends[j]) or\r\n\t\t\tPointsEqual(ends[i], starts[j]) or\r\n\t\t\tPointsEqual(ends[i], ends[j]))):\r\n\t\t\t\r\n\t\t\t# Add j to i group\r\n\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t# Add j group to i group\r\n\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\r\n# Get input\r\ndata = crvs\t\t# Data (list of same length as criteria) to be binned\r\ncriteria = crvGroup\t# List of criteria related to the data\r\ntoSort = False\t# Whether to sort keys\r\n\r\n# Find a unique set of values for the criteria, a list of all the bins\r\n# to sort data into\r\nbins = []\r\nbins.append(criteria[0])\r\nsortedlis = []\r\nsortedlis.append([])\r\n\r\nfor i in range(1,len(criteria)):\r\n\tif criteria[i] in bins:\r\n\t\tcontinue\r\n\telse:\r\n\t\tbins.append(criteria[i])\r\n\t\tsortedlis.append([]) # initialize an empty list\r\n\r\n# Sort bins if requested\r\nif toSort:\r\n\tbins.sort()\r\n\r\n#\t Sort data into bins\r\nfor i in range(len(criteria)):\r\n\tfor j in range(len(bins)):\r\n\t\tif criteria[i] == bins[j]:\r\n\t\t\ttemp = sortedlis[j]\r\n\t\t\ttemp.append(data[i])\r\n\t\t\tsortedlis[j] = temp\r\n\t\t\tcontinue\r\nstreets = sortedlis\r\n\r\n'''\r\nfor each in intersects:\r\n\teach.Dispose()\r\n'''\r\n\r\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\tunittype = UnitType.UT_Length\r\n\tformatoptions = doc.GetUnits().GetFormatOptions(unittype)\r\n\tdispunits = formatoptions.DisplayUnits\r\n\tminlength = UnitUtils.ConvertFromInternalUnits(doc.Application.ShortCurveTolerance,dispunits)\r\nelse:\r\n\tminlength = UnitUtils.ConvertFromInternalUnits(doc.Application.ShortCurveTolerance,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\r\nnewstreets = []\r\nfor each in streets:\r\n\ttmplist = []\r\n\tfor c in each:\r\n\t\tif c.Length < minlength:\r\n\t\t\tpass\r\n\t\telse:\r\n\t\t\ttmplist.append(c)\r\n\tnewstreets.append(tmplist)\r\n\r\nfrom itertools import compress\r\n\r\ncurveLoops = []\r\nproblems = []\r\nrcurves = []\r\nboolmerge = []\r\nnewstreets = streets\r\nareas = []\r\nfor each in newstreets:\r\n\tjoined = dg.PolyCurve.ByJoinedCurves(each)\r\n\tpatched = dg.Surface.ByPatch(joined)\r\n\tareas.append(patched.Area)\r\n\tpatched.Dispose()\r\n\r\nsortedstreets = (x for _,x in sorted(zip(areas,newstreets)))\r\nnewstreets = sortedstreets\r\n\r\nfor eachlist in newstreets:\r\n\ttry:\r\n\t\tlooplist = CurveLoop()\r\n\t\trt = []\r\n\t\tfor each in eachlist:\r\n\t\t\tif hasattr(each, 'NumberOfCurves'):\r\n\t\t\t\tif each.NumberOfCurves > 1:\r\n\t\t\t\t\traise Exception(\"Skip it\")\r\n\t\t\tlooplist.Append(each.ToRevitType())\r\n\t\t\trt.append(each)\r\n\t\tcurveLoops.append(looplist)\r\n\t\trcurves.append(rt)\r\n\t\tboolmerge.append(True)\r\n\texcept:\r\n\t\tproblems.append(eachlist)\r\n\t\tboolmerge.append(False)\r\nfrom System import Array\r\n\r\njoinedarr = []\r\nimported = []\r\n\r\nif len(problems) > 0:\r\n\r\n\tfor each in problems:\r\n\t\tpc = dg.PolyCurve.ByJoinedCurves(each)\r\n\t\tjoinedarr.append(dg.Surface.ByPatch(pc))\r\n\t\t\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\tfor each in joinedarr:\r\n\t\t\ttry:\r\n\t\t\t\timported.append(Revit.Elements.ImportInstance.ByGeometry(each))\r\n\t\t\texcept: imported.append(None)\r\n\telse:\r\n\t\timported = smartFreeForm(joinedarr,[1,1,1],doc,False,\"Generic Models\",True,False,False,temp_path,False,True)[0]\r\n\r\n\tids = []\r\n\tfor each in imported:\r\n\t\tids.append(each.Id)\r\n\r\n\tTransactionManager.Instance.EnsureInTransaction(doc)\r\n\t#use element ids to select elements\r\n\telements = []\r\n\tmessage = None\r\n\ttry:\r\n\t\tfor i in ids:\r\n\t\t\telements.append(doc.GetElement(toRvtId(i)).ToDSType(True))\r\n\texcept:\r\n\t\tmessage = \"Invalid Id\"\r\n\t\tpass\r\n\t\r\n\tgeom = []\r\n\tfor each in elements:\r\n\t\tgeom.append(Revit.Elements.Element.Geometry(each))\r\n\r\n\tfor each in geom:\r\n\t\tArray.Clear(each,0,1)\r\n\r\n\tfinalgeom = []\r\n\tfor each in geom:\r\n\t\ttmplist = []\r\n\t\tfor s in each:\r\n\t\t\tif s == None:\r\n\t\t\t\tpass\r\n\t\t\telse:\r\n\t\t\t\ttmplist.append(s)\r\n\t\tfinalgeom.append(tmplist)\r\n\r\n\tcurveLoops2 = []\r\n\tproblems2 = []\r\n\trcurves2 = []\r\n\t\r\n\tfor eachlist in finalgeom:\r\n\t\tjoined = dg.PolyCurve.ByJoinedCurves(eachlist)\r\n\t\teachlist = dg.PolyCurve.Curves(joined)\r\n\t\ttry:\r\n\t\t\tlooplist = CurveLoop()\r\n\t\t\trt2 = []\r\n\t\t\tfor each in eachlist:\r\n\t\t\t\tlooplist.Append(each.ToRevitType())\r\n\t\t\t\trt2.append(each)\r\n\t\t\tcurveLoops2.append(looplist)\r\n\t\t\trcurves2.append(rt2)\r\n\t\texcept:\r\n\t\t\tproblems2.append(eachlist)\r\n\t\t\tcurveLoops2.append([])\r\n\t\t\trcurves2.append([])\r\n\t\t\r\n\telt = []\r\n\tfor i in imported:\r\n\t\telt.append(UnwrapElement(i).Id)\r\n\tcantdelete=[]\r\n\tfor item in elt:\r\n\t\ttry:\r\n\t\t\tdoc.Delete(item)\r\n\t\texcept:\r\n\t\t\tcantdelete.append(item)\r\n\r\n\tfor each in joinedarr:\r\n\t\teach.Dispose()\r\n\t\r\n\ttrue_list = curveLoops\r\n\ttrue_list_r = rcurves\r\n\tfalse_list = curveLoops2\r\n\tfalse_list_r = rcurves2\r\n\tbool_list = boolmerge\r\n\tresult = []\r\n\tresult_r = []\r\n\r\n\tfor bool in bool_list:\r\n\t\tif bool == True:\r\n\t\t\tresult.append(true_list.pop(0))\r\n\t\t\tresult_r.append(true_list_r.pop(0))\r\n\t\telse: \r\n\t\t\tresult.append(false_list.pop(0))\r\n\t\t\tresult_r.append(false_list_r.pop(0))\r\n\t\t\t\r\n\tcleanresult = [x for x in result if x != []]\r\n\tcleanresult_r = [x for x in result_r if x != []]\r\n\tTransactionManager.Instance.TransactionTaskDone()\r\nelse:\r\n\tcleanresult = [x for x in curveLoops if x != []]\r\n\tcleanresult_r = [x for x in rcurves if x != []]\r\n\r\nnpatches = []\r\nnareas = []\r\nfor each in cleanresult_r:\r\n\tjoined = dg.PolyCurve.ByJoinedCurves(each)\r\n\tpat = dg.Surface.ByPatch(joined)\r\n\tnpatches.append(pat)\r\n\tnareas.append(pat.Area)\r\n\r\nnmax = max(nareas)\r\nnpop = nareas.IndexOf(nmax)\r\nnpatches.pop(npop)\r\n\r\nareas = []\r\nfor each in intersects:\r\n\tareas.append(each.Area)\r\n\r\nmaxarea = max(areas)\r\ninde = areas.IndexOf(maxarea)\r\nbigstreet = intersects[inde]\r\n\r\nallsurfs = [bigstreet] + npatches\r\n\r\n# Assign your output to the OUT variable.\r\nOUT = cleanresult, cleanresult_r, allsurfs",
+      "VariableInputPorts": true,
+      "Id": "fc5195f37eab4ff8b174e60e58d70be2",
+      "Inputs": [
+        {
+          "Id": "d5c003b97ce949e285349d9b71f4370f",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "818bc9d6f0d04709a515017787649c2b",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "a80729a62e7745769272b0619d36e4c6",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCADImport",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "32e06078d95b491da1aaf6086ebe32c0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b8719fe524964bb29348a5875d2c8bb6",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARStreetWidth",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "fdc9d81b8daf4aa4b52dcc8360a50347",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c70e4d779b4a4915bd9dc8678112f045",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARCurvesAndSurfaces",
+      "Id": "c0e1f0f8bf3d4911b72130b8d6baca31",
+      "Inputs": [
+        {
+          "Id": "0a40d9a9e5cc40778d0807085e087465",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "a1370551-a1d1-4a47-a1a3-8afdfd8f78aa",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "1a8718a12d7c43dbbe437da46a44dd4e",
+      "Inputs": [
+        {
+          "Id": "564ae49ebce94dadaf27e0a7cbd32244",
+          "Name": "VARunknownItem",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "221674089a144182a28922bc06fe7ae9",
+          "Name": "VARseq",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Turns an element (or a nested list) into a flat list"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARCADImport",
+      "Id": "0bff03c6151049b29403a8477c50e3c7",
+      "Inputs": [
+        {
+          "Id": "a17ea96628fe491596a7369e11a0c10d",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "a80729a62e7745769272b0619d36e4c6",
+      "End": "0a40d9a9e5cc40778d0807085e087465",
+      "Id": "4309c5d38abc436ab6cb08eda90ecf98"
+    },
+    {
+      "Start": "b8719fe524964bb29348a5875d2c8bb6",
+      "End": "564ae49ebce94dadaf27e0a7cbd32244",
+      "Id": "fb476d22a155411aa5a63fa78cf36921"
+    },
+    {
+      "Start": "b8719fe524964bb29348a5875d2c8bb6",
+      "End": "a17ea96628fe491596a7369e11a0c10d",
+      "Id": "d7e54bc85f91446a933004373f0fbb79"
+    },
+    {
+      "Start": "c70e4d779b4a4915bd9dc8678112f045",
+      "End": "818bc9d6f0d04709a515017787649c2b",
+      "Id": "aef7404271ce47b9aa5137b9c0dc2a58"
+    },
+    {
+      "Start": "221674089a144182a28922bc06fe7ae9",
+      "End": "d5c003b97ce949e285349d9b71f4370f",
+      "Id": "3e7231d48f88404fb15fde343d919562"
+    }
+  ],
+  "Dependencies": [
+    "a1370551-a1d1-4a47-a1a3-8afdfd8f78aa"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "fc5195f37eab4ff8b174e60e58d70be2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 253.2,
+        "Y": 3.20000000000005
+      },
+      {
+        "Id": "32e06078d95b491da1aaf6086ebe32c0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -290.4,
+        "Y": -6.39999999999998
+      },
+      {
+        "Id": "fdc9d81b8daf4aa4b52dcc8360a50347",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -292.8,
+        "Y": 190.8
+      },
+      {
+        "Id": "c0e1f0f8bf3d4911b72130b8d6baca31",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "1a8718a12d7c43dbbe437da46a44dd4e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "CW.TurnIntoList",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -111.2,
+        "Y": -47.2
+      },
+      {
+        "Id": "0bff03c6151049b29403a8477c50e3c7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 481.505594281272,
+        "Y": 112.316553370593
+      }
+    ],
+    "Annotations": [],
+    "X": 238.6451118325,
+    "Y": 209.943750328723,
+    "Zoom": 0.658674852158215
+  }
+}

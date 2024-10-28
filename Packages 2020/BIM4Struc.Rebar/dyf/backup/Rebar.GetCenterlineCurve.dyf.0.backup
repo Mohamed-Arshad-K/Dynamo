@@ -1,0 +1,110 @@
+<Workspace Version="1.2.0.2831" X="-46.0045943270797" Y="-28.1929492508539" zoom="1.02102947146753" Name="Rebar.GetCenterlineCurve" Description="Get the centerline curves from a selected set of rebars" ID="1ef3fc26-c445-4b78-b0a6-42da44b6112f" Category="BIM4Struc.Rebar.QueryTools">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Revit.Rebar" resolvedName="Revit.Elements.Rebar" assemblyName="DynamoRebar.dll" />
+    <ClassMap partialName="Element" resolvedName="Revit.Elements.Element" assemblyName="RevitNodes.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <PythonNodeModels.PythonNode guid="707d62b2-7368-4611-889f-ac640f752cbd" type="PythonNodeModels.PythonNode" nickname="Python Script" x="1063.47555985145" y="323.185478439195" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="6">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <PortInfo index="3" default="False" />
+      <PortInfo index="4" default="False" />
+      <PortInfo index="5" default="False" />
+      <Script>#Return the sketch geometry of a selected set of rebar objects.
+#Authored by Dieter Vermeulen, Autodesk, 2016
+#http://revitbeyondbim.wordpress.com
+
+import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.Structure import *
+
+clr.AddReference('RevitNodes')
+import Revit
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference('RevitServices')
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+
+#inputs
+IN[0]
+bool1=IN[1]
+bool2=IN[2]
+bool3=IN[3]
+mpo_option=IN[4]
+barpos=IN[5]
+
+crv=[]
+RebarCurves=[]
+
+#define multiplanarOption
+if mpo_option == True:
+	mpo = MultiplanarOption.IncludeAllMultiplanarCurves
+else:
+	mpo=MultiplanarOption.IncludeOnlyPlanarCurves
+
+#get centerline curves from the selected rebar objects
+for rebar in IN[0]:
+	i=UnwrapElement(rebar)
+	sketch=i.GetCenterlineCurves (bool1,bool2,bool3,mpo,barpos)
+	#convert revit geometry to DS Geometry (lines, arc etc)
+	for s in sketch:
+		c=Revit.GeometryConversion.RevitToProtoCurve.ToProtoType(s, True)
+		crv.append(c)
+	RebarCurves.append(crv)
+	crv=[]
+OUT = RebarCurves
+</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="137a4787-67f7-43f0-b234-0f5979fe6024" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="294" y="325" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//The structural rebar objects which you want to detect&#xD;&#xA;//the sketched centerlines from&#xD;&#xA;Rebars:Element[]" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="f6780fce-4df7-4e0a-94a4-6153fd40998d" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="1445.21512435766" y="321.768596676887" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="PolyCurves" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="421eb84e-913e-49c7-a585-17625018b8b1" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="88.1286656018075" y="411.620198205035" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//If the curves overlap, as in a planar stirrup, this parameter controls whether&#xD;&#xA;//they should be adjusted to avoid intersection (as in fine views), &#xD;&#xA;//or kept in a single plane for simplicity (as in coarse views).&#xD;&#xA;AdjustForSelfIntersection:bool=false" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="e3638fcb-c3a3-466a-be1e-3de2b049d696" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="317.805942621143" y="517.750258125435" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Identifies if the chain will include hooks curves.&#xD;&#xA;SuppressHooks:bool=true" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="cc2df429-c647-4425-bea3-561c4831d354" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="192.539936637928" y="588.697335792511" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Identifies if the connected chain will include unfilleted curves.&#xD;&#xA;SuppressBendRadius:bool=true" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="d11001d5-88d8-44bb-a4d3-2d4bd2ea80ef" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="805.129578196904" y="325.821582551923" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="Flatten({item});" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="2fbe0322-63c4-4a2d-af30-b1a6a7bb57aa" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="PolyCurve.ByJoinedCurves" x="1203.2321037949" y="321.944501358232" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="ProtoGeometry.dll" function="Autodesk.DesignScript.Geometry.PolyCurve.ByJoinedCurves@Autodesk.DesignScript.Geometry.Curve[]">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="218ddaf9-751f-45f1-addd-6761a5584d52" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="111.766612278821" y="661.087487873827" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//If the Rebar is a multi-planar shape, this parameter controls whether to &#xD;&#xA;//generate only the curves in the primary plane (false), or to generate &#xD;&#xA;//all curves (true) including the out-of-plane connector segments as well as &#xD;&#xA;//multi-planar copies of the primary plane curves. &#xD;&#xA;MultiPlanarOption:bool=true" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="0943b87c-ba4a-4d24-883f-29a03c029307" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="74.439177762262" y="785.512269595692" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Use this value to obtain all the curves at a specific index in the distribution.&#xD;&#xA;BarPositionIndex:int=0" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="707d62b2-7368-4611-889f-ac640f752cbd" start_index="0" end="2fbe0322-63c4-4a2d-af30-b1a6a7bb57aa" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="137a4787-67f7-43f0-b234-0f5979fe6024" start_index="0" end="d11001d5-88d8-44bb-a4d3-2d4bd2ea80ef" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="421eb84e-913e-49c7-a585-17625018b8b1" start_index="0" end="707d62b2-7368-4611-889f-ac640f752cbd" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="e3638fcb-c3a3-466a-be1e-3de2b049d696" start_index="0" end="707d62b2-7368-4611-889f-ac640f752cbd" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="cc2df429-c647-4425-bea3-561c4831d354" start_index="0" end="707d62b2-7368-4611-889f-ac640f752cbd" end_index="3" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d11001d5-88d8-44bb-a4d3-2d4bd2ea80ef" start_index="0" end="707d62b2-7368-4611-889f-ac640f752cbd" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="2fbe0322-63c4-4a2d-af30-b1a6a7bb57aa" start_index="0" end="f6780fce-4df7-4e0a-94a4-6153fd40998d" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="218ddaf9-751f-45f1-addd-6761a5584d52" start_index="0" end="707d62b2-7368-4611-889f-ac640f752cbd" end_index="4" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="0943b87c-ba4a-4d24-883f-29a03c029307" start_index="0" end="707d62b2-7368-4611-889f-ac640f752cbd" end_index="5" portType="0" />
+  </Connectors>
+  <Notes>
+    <Dynamo.Graph.Notes.NoteModel guid="09cf7602-a4fc-40e6-8e9c-7797a597780d" text="*****************************************************&#xD;&#xA;Get the centerline curves from a selected set of rebars.&#xD;&#xA;&#xD;&#xA;Authored by Dieter Vermeulen, Autodesk, 2016&#xD;&#xA;http://revitbeyondbim.wordpress.com&#xD;&#xA;*****************************************************" x="299.354070279287" y="187.74521025696" />
+  </Notes>
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-24598.9375" eyeY="32225.466796875" eyeZ="26204.94921875" lookX="24598.9375" lookY="-32225.466796875" lookZ="-26204.94921875" upX="0.337020516395569" upY="0.870355665683746" upZ="-0.359023869037628" />
+  </Cameras>
+</Workspace>

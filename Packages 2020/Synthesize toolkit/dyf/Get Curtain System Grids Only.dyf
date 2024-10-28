@@ -1,0 +1,303 @@
+{
+  "Uuid": "89a30baf-7e89-4f11-b238-1f1c00d0af66",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Solid",
+  "Description": "Get Curtain System Grids Only",
+  "Name": "Get Curtain System Grids Only",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n    \ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\t\ndef cellgrids(x):\n\tx = doc.GetElement(x)\n\texistedonly = x.SkippedSegmentCurves\n\tfullc = [x.FullCurve.ToProtoType()]\n\tlistat = []\n\tfor ex in existedonly:\n\t\tex = ex.ToProtoType()\n\t\tstp = ex.StartPoint\n\t\tend = ex.EndPoint\n\t\ttmplist = []\n\t\tfor fu in fullc:\n\t\t\tpt = dg.Curve.PointAtParameter(ex,0.5)\n\t\t\tif dg.Geometry.DoesIntersect(pt,fu):\n\t\t\t\tsparm = dg.Curve.ParameterAtPoint(fu,stp)\n\t\t\t\teparm = dg.Curve.ParameterAtPoint(fu,end)\n\t\t\t\ttrimmed = dg.Curve.TrimInteriorByParameter(fu,sparm,eparm)\n\t\t\t\tfixtrim = []\n\t\t\t\tfor tr in trimmed:\n\t\t\t\t\tif tr.Length > 0:\n\t\t\t\t\t\tfixtrim.append(tr)\n\t\t\t\ttmplist.append(flatten(fixtrim))\n\t\t\t\tbreak\n\t\t\telse:\n\t\t\t\ttmplist.append(fu)\n\t\tfullc = flatten(tmplist)\n\treturn fullc\n\ndef getsoul(csystem):\n\tgrids = csystem.CurtainGrids\n\tgridlist = []\n\tgridlistv = []\n\tfuck = []\n\tfor e in grids:\n\t\tcells = e.GetUGridLineIds()\n\t\tcellsv = e.GetVGridLineIds()\n\t\ttmp = []\n\t\ttmpv = []\n\t\tfor x in cells:\n\t\t\ttmp.append(cellgrids(x))\n\t\tfor x in cellsv:\n\t\t\ttmpv.append(cellgrids(x))\n\t\tgridlist.append(flatten(tmp))\n\t\tgridlistv.append(flatten(tmpv))\n\treturn gridlist,gridlistv\n\t\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurtains=UnwrapElement(tolist(IN[0]))\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\t\nresult = []\nfor e in curtains:\n\tif e.ToString() == \"Autodesk.Revit.DB.CurtainSystem\":\n\t\ttry:\n\t\t\tresult.append(getsoul(e))\n\t\texcept:\n\t\t\tpass\n# Assign your output to the OUT variable.\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "dae88cf097044d10a10fc458c5212420",
+      "Inputs": [
+        {
+          "Id": "3a4dba9f59b347b3af4e0ec6c2d9bd12",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "6efdaa233d574a57bdf5c1aa2a09112f",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCurtainSystems",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "f92e4b9b7b9c436ea924e3a2ceaa1d5d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "57f99f77c9564ec4a9c8dfa2af42f9ef",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARGrids",
+      "Id": "5cad8cbbb1374d12897aaa06aa6487ac",
+      "Inputs": [
+        {
+          "Id": "7e6639c363604597abee1fab31ec5ddf",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\n#The inputs to this node will be stored as a list in the IN variables.\ndataEnteringNode = IN\n\ninput = IN[0]\n\nresult = []\nfor i in input:\n\tfor s in i:\n\t\tresult.append(s)\n#Assign your output to the OUT variable.\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "4f816af0682f48c186d0d53a9eb5ef98",
+      "Inputs": [
+        {
+          "Id": "d5b4c9d362014b9cbdd951e84f1a288d",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "ad5c5f3953bf449f934a41513709f378",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Transpose@var[]..[]",
+      "Id": "d36518e599594042af23df76eed8e56e",
+      "Inputs": [
+        {
+          "Id": "944315061256485585c6ba1c6645cf96",
+          "Name": "lists",
+          "Description": "A list of lists to be transposed.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 4,
+          "UseLevels": true,
+          "KeepListStructure": true
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "73c43c1d22854e13969e7bd93bdd8a19",
+          "Name": "lists",
+          "Description": "A list of transposed lists.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Swaps rows and columns in a list of lists. If there are some rows that are shorter than others, null values are inserted as place holders in the resultant array such that it is always rectangular.\n\nList.Transpose (lists: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "a1370551-a1d1-4a47-a1a3-8afdfd8f78aa",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "5655408100da446a9d8b510d1a68a939",
+      "Inputs": [
+        {
+          "Id": "843c04507d2b4550af25f74af195a42a",
+          "Name": "VARunknownItem",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1d47b82e36894a55a713beb6a180082a",
+          "Name": "VARseq",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Turns an element (or a nested list) into a flat list"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "6efdaa233d574a57bdf5c1aa2a09112f",
+      "End": "944315061256485585c6ba1c6645cf96",
+      "Id": "ea12af9485d8438fb14e89b4cbcf7f34"
+    },
+    {
+      "Start": "57f99f77c9564ec4a9c8dfa2af42f9ef",
+      "End": "843c04507d2b4550af25f74af195a42a",
+      "Id": "4ae694818e98487fbb87cb06e1a1fe08"
+    },
+    {
+      "Start": "ad5c5f3953bf449f934a41513709f378",
+      "End": "7e6639c363604597abee1fab31ec5ddf",
+      "Id": "3adad8612b754ac68cea3923732cc877"
+    },
+    {
+      "Start": "73c43c1d22854e13969e7bd93bdd8a19",
+      "End": "d5b4c9d362014b9cbdd951e84f1a288d",
+      "Id": "1f6e04b0551a44f6bfab9839f26d7af9"
+    },
+    {
+      "Start": "1d47b82e36894a55a713beb6a180082a",
+      "End": "3a4dba9f59b347b3af4e0ec6c2d9bd12",
+      "Id": "67b9f52a678643f9be7788c692babb41"
+    }
+  ],
+  "Dependencies": [
+    "a1370551-a1d1-4a47-a1a3-8afdfd8f78aa"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "dae88cf097044d10a10fc458c5212420",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 337.884173488548,
+        "Y": 49.9624030178897
+      },
+      {
+        "Id": "f92e4b9b7b9c436ea924e3a2ceaa1d5d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -174.781718746866,
+        "Y": 49.406266163685
+      },
+      {
+        "Id": "5cad8cbbb1374d12897aaa06aa6487ac",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1186.37696528147,
+        "Y": -35.9348513303048
+      },
+      {
+        "Id": "4f816af0682f48c186d0d53a9eb5ef98",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 757.092882559155,
+        "Y": 34.795584965217
+      },
+      {
+        "Id": "d36518e599594042af23df76eed8e56e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "List.Transpose",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 533.734348820714,
+        "Y": 30.703316048231
+      },
+      {
+        "Id": "5655408100da446a9d8b510d1a68a939",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "CW.TurnIntoList",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 31.6216920264843,
+        "Y": -36.2275376278359
+      }
+    ],
+    "Annotations": [],
+    "X": 252.321167447965,
+    "Y": 174.040237465439,
+    "Zoom": 0.868382298777102
+  }
+}

@@ -1,0 +1,264 @@
+{
+  "Uuid": "19705741-c76a-4d43-9f82-f93e3f5ab330",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.Modelical.Elements",
+  "Description": "Place wall finishes with the info contained in room parameters",
+  "Name": "MOD.Wall Finishes by Room",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARRooms",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "4ad266b1519640ef950f2a268301be3c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4538c40b7c094cb58a5a7d8eed4ccef4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARWallFinishparam",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "17deddfdb6f445d19baf2b30428c666c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5d6adc22c4604ca78b42084a762d9ad8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCeilingHeightparam",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "ebf13336143e4988a95dccd93ce29dc6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e2d69178346043c085d0d8bfa522d153",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARfinishes",
+      "Id": "056f7f35910847b2a0060d1a39f093c7",
+      "Inputs": [
+        {
+          "Id": "75bca003656c4cf88e81875e3b96870c",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# This node has been made by Modelical\r\n# www.modelical.com\r\n\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n#Load Dynamo wrappers\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nfrom Revit.Elements import *\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n#Load Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\nimport Autodesk\r\n\r\n#Load document reference\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\nuiapp = DocumentManager.Instance.CurrentUIApplication\r\napp = uiapp.Application\r\n\r\ndef toList(input):\r\n\tif isinstance(input,list) == False:\r\n\t\treturn [input]\r\n\telse:\r\n\t\treturn input\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\ndef vecSimilarity(v1,v2):\r\n\ttolerance = 0.000001\r\n\tif abs(v1.X - v2.X) <= tolerance and abs(v1.Y - v2.Y) <= tolerance and abs(v1.Z - v2.Z) <= tolerance:\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\t\r\nrooms = flatten(toList(IN[0]))\r\nwfParam = IN[1]\r\nwhParam = IN[2]\r\n\r\n#Get room boundaries, elements and disjoined curves\r\nroomElems = []\r\ndisjoinedCurves = []\r\noptions = Autodesk.Revit.DB.SpatialElementBoundaryOptions()\r\nroomBounds = []\r\nfor r in rooms:\r\n\troomBounds.append(UnwrapElement(r).GetBoundarySegments(options))\r\n\r\nfor rb in roomBounds:\r\n\ttempCrvList = []\r\n\tfor closedCrv in rb:\r\n\t\ttempCCCrvList = []\r\n\t\tfor elem in closedCrv:\r\n\t\t\tif doc.GetElement(elem.ElementId) is None:\r\n\t\t\t\troomElems.append(None)\r\n\t\t\t\ttempCCCrvList.append(elem.GetCurve().ToProtoType())\r\n\t\t\telse:\r\n\t\t\t\troomElems.append(doc.GetElement(elem.ElementId))\r\n\t\t\t\ttempCCCrvList.append(elem.GetCurve().ToProtoType())\r\n\t\ttempCrvList.append(tempCCCrvList)\r\n\tdisjoinedCurves.append(tempCrvList)\r\n\r\n#Join curves in polycurves\r\njoinedCurves = []\r\nfor d in disjoinedCurves:\r\n\ttempList = []\r\n\tfor item in d:\r\n\t\ttempList.append(PolyCurve.ByJoinedCurves(item))\r\n\tjoinedCurves.append(tempList)\r\n\r\n#Check the sense of the polycurve\r\nfor j in joinedCurves:\r\n\tfor crv in j:\r\n\t\tif crv.BasePlane().Normal.Z > 0:\r\n\t\t\tcrv = crv\r\n\t\telse:\r\n\t\t\tcrv = crv.Reverse()\r\n\r\nrepeatedRooms = []\r\ncount = 0\r\nfor j in joinedCurves:\r\n\ttempList = []\r\n\tfor crv in j:\r\n\t\ttempList.append(rooms[count])\r\n\trepeatedRooms.append(tempList)\r\n\tcount += 1\r\n\r\njoinedCurves = flatten(joinedCurves)\r\nrepeatedRooms = flatten(repeatedRooms)\r\n\r\n\r\n#Retrieve wallTypes and heights\r\nwTypes = []\r\nwHeights = []\r\n\r\nallWallTypes = FilteredElementCollector(doc).OfClass(WallType)\r\nfor r in repeatedRooms:\r\n\twHeights.append(r.GetParameterValueByName(whParam))\r\n\tfor wt in allWallTypes:\r\n\t\tif Element.Name.__get__(wt) == r.GetParameterValueByName(wfParam):\r\n\t\t\twTypes.append(wt.ToDSType(True))\r\n\r\n#Retrieve the level of each room\r\nlevels = []\r\nfor r in repeatedRooms:\r\n\tlevels.append(UnwrapElement(r).Level)\r\n\r\n#Create an offseted curve to place finishes. Wall by curve are modeled by Wall Centerline\r\noffsetedCurves = []\r\ncount = 0\r\nfor j in joinedCurves:\r\n\tif UnwrapElement(repeatedRooms[count]).IsPointInRoom(j.Offset(wTypes[count].GetParameterValueByName(\"Width\")*0.5,False).StartPoint.ToXyz()) == True:\r\n\t\toffsetedCurves.append(j.Offset(wTypes[count].GetParameterValueByName(\"Width\")*0.5,False))\r\n\telse:\r\n\t\toffsetedCurves.append(j.Offset(wTypes[count].GetParameterValueByName(\"Width\")*-0.5,False))\r\n\tcount +=1\r\n\r\nexplodedCurves = []\r\nfor oc in offsetedCurves:\r\n\texplodedCurves.append(oc.Explode())\r\n\r\n#Create walls on top of the curves with fixed height\r\nwHeightsList = [] #List of height for each wall\r\ndistances = [] #distance to move a probe point to check the paralel wall\r\nwalls = []\r\nTransactionManager.Instance.EnsureInTransaction(doc)\r\ncount = 0\r\nfor group in explodedCurves:\r\n\tfor crv in group:\r\n\t\tif vecSimilarity(crv.TangentAtParameter(0),crv.TangentAtParameter(1)):\r\n\t\t\trbldCrv = Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint(crv.StartPoint, crv.EndPoint)\r\n\t\telse:\r\n\t\t\trbldCrv = Autodesk.DesignScript.Geometry.Arc.ByThreePoints(crv.PointAtParameter(0), crv.PointAtParameter(0.5), crv.PointAtParameter(1))\r\n\t\tw = Wall.Create(doc, rbldCrv.ToRevitType(), UnwrapElement(wTypes[count]).Id, UnwrapElement(levels[count]).Id, 5, 0, True, False);\r\n\t\twHeightsList.append(wHeights[count])\r\n\t\twalls.append(w.ToDSType(False))\r\n\tcount +=1\r\nTransactionManager.Instance.TransactionTaskDone()\r\n\r\n#Change the height of the walls to meet requirements, change Location line to Finish Face Exterior and turn off Room Bounding\r\ncount = 0\r\nfor w in walls:\r\n\tw.SetParameterByName(\"Unconnected Height\", wHeightsList[count])\r\n\tw.SetParameterByName(\"Location Line\", 2)\r\n\tw.SetParameterByName(\"Room Bounding\", 0)\r\n\t#Here is the best location to add any room parameter to the walls p.e. Room Number\r\n\t#w.SetParameterByName(\"RoomNumber\", UnwrapElement(repeatedRooms[count]).GetParameterValueByName(Number))\r\n\tcount +=1\r\n\r\n#If the suport wall has inserts, this will join it to the finish wall.\r\n#If the suport wall is a curtain wall, this will delete the finish associated to it.\r\nTransactionManager.Instance.EnsureInTransaction(doc)\r\ncount = 0\r\nfor r in roomElems:\r\n\tif r is not None and UnwrapElement(r).Category.Name.ToString() == \"Walls\" and len(UnwrapElement(r).FindInserts(True, True, True, True)) != 0:\r\n\t\tJoinGeometryUtils.JoinGeometry(doc, UnwrapElement(walls[count]), UnwrapElement(r))\r\n\tif r is not None and UnwrapElement(r).Category.Name.ToString() == \"Walls\" and UnwrapElement(r).WallType.Kind == WallKind.Curtain:\r\n\t\tdoc.Delete(UnwrapElement(walls[count]).Id)\r\n\tcount += 1\r\nTransactionManager.Instance.TransactionTaskDone()\r\n\r\nOUT = walls",
+      "VariableInputPorts": true,
+      "Id": "7f72cd938aae41e0a790e4a040d0110f",
+      "Inputs": [
+        {
+          "Id": "6e9b296a3a504a54992b69df5f132b0a",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "598bfb4a22544a85a3195e916983c8de",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4d94d1975dfb4b83a98c9c4425d8c07d",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "9b1b471c9b8d42b19e588e7f2026e17d",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "4538c40b7c094cb58a5a7d8eed4ccef4",
+      "End": "6e9b296a3a504a54992b69df5f132b0a",
+      "Id": "29fd5ee7aa8240aa8c89bc6c4754e5ca"
+    },
+    {
+      "Start": "5d6adc22c4604ca78b42084a762d9ad8",
+      "End": "598bfb4a22544a85a3195e916983c8de",
+      "Id": "cf4aba50d6dc419d99b542c437452d00"
+    },
+    {
+      "Start": "e2d69178346043c085d0d8bfa522d153",
+      "End": "4d94d1975dfb4b83a98c9c4425d8c07d",
+      "Id": "ce84bebe2e954b10ae75de0da683fc34"
+    },
+    {
+      "Start": "9b1b471c9b8d42b19e588e7f2026e17d",
+      "End": "75bca003656c4cf88e81875e3b96870c",
+      "Id": "f7306b0b89c4437e91917308cfed8a0d"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "4ad266b1519640ef950f2a268301be3c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 897.233299170098,
+        "Y": -2407.08822484632
+      },
+      {
+        "Id": "17deddfdb6f445d19baf2b30428c666c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 895.674921683033,
+        "Y": -2344.30975628055
+      },
+      {
+        "Id": "ebf13336143e4988a95dccd93ce29dc6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 895.962921140578,
+        "Y": -2285.55721659531
+      },
+      {
+        "Id": "056f7f35910847b2a0060d1a39f093c7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1329.65881011703,
+        "Y": -2404.98859898114
+      },
+      {
+        "Id": "7f72cd938aae41e0a790e4a040d0110f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1153.25665745775,
+        "Y": -2405.16366682224
+      }
+    ],
+    "Annotations": [],
+    "X": -1030.28795401991,
+    "Y": 3202.2272713007,
+    "Zoom": 1.23551708798244
+  }
+}

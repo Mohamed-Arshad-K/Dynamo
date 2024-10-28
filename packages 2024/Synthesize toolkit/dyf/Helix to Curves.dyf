@@ -1,0 +1,173 @@
+{
+  "Uuid": "43c6c539-5483-4996-92d1-1279973cd6c1",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Lines",
+  "Description": "Helix to Curves",
+  "Name": "Helix to Curves",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Intersection": {
+        "Key": "Geometry.Intersection",
+        "Value": "LunchBox.dll"
+      },
+      "Intersection.GeometrySplit": {
+        "Key": "Geometry.Intersection",
+        "Value": "LunchBox.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARHelixElements",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "7c383a42b654460489147146d40994e2",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0dbb302bfb5046f88654357e06a53f10",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARCurves",
+      "Id": "0d4d9a1764b448a2adcbf3181c4ebc5f",
+      "Inputs": [
+        {
+          "Id": "5cf6778c175e42ef9a2dfb43d6c9dfca",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurvesbypoints=UnwrapElement(tolist(IN[0]))\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\n# Create Empty List\nresult = []\nfor e in curvesbypoints:\n\ttry:\n\t\ttry:\n\t\t\tconv = e.GeometryCurve\n\t\texcept:\n\t\t\tconv = e\n\t\tif conv.ToString() != \"Autodesk.Revit.DB.CylindricalHelix\":\n\t\t\tresult.append(conv.ToProtoType())\n\t\telse:\n\t\t\ttess = conv.Tessellate()\n\t\t\ttmp = []\n\t\t\tfor s in tess:\n\t\t\t\ttmp.append(s.ToPoint())\n\t\t\tresult.append(dg.NurbsCurve.ByPoints(tmp))\n\texcept:\n\t\tresult.append(None)\n\nOUT =  result",
+      "VariableInputPorts": true,
+      "Id": "02cd0bdb1602403eb42ffa48778510f3",
+      "Inputs": [
+        {
+          "Id": "a543e01f32d342c480a0fc045f36a292",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "28399400838542628ddb88e96c752abe",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "0dbb302bfb5046f88654357e06a53f10",
+      "End": "a543e01f32d342c480a0fc045f36a292",
+      "Id": "c657d2e3dfce458690f461186fcac4ad"
+    },
+    {
+      "Start": "28399400838542628ddb88e96c752abe",
+      "End": "5cf6778c175e42ef9a2dfb43d6c9dfca",
+      "Id": "e8f4affe925a48dab4c91d2998bfcfc7"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 27.554653167724609,
+      "EyeY": 99.548423767089844,
+      "EyeZ": 86.461708068847656,
+      "LookX": -21.891538619995117,
+      "LookY": -86.898933410644531,
+      "LookZ": -81.0738296508789,
+      "UpX": -0.14426012337207794,
+      "UpY": 0.83292120695114136,
+      "UpZ": -0.53425765037536621
+    },
+    "NodeViews": [
+      {
+        "Id": "7c383a42b654460489147146d40994e2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "0d4d9a1764b448a2adcbf3181c4ebc5f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "02cd0bdb1602403eb42ffa48778510f3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 254.4,
+        "Y": -3.19999999999996
+      }
+    ],
+    "Annotations": [],
+    "X": 181.6,
+    "Y": 165.6,
+    "Zoom": 1.0
+  }
+}

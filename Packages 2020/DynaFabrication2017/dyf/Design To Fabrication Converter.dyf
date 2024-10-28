@@ -1,0 +1,82 @@
+<Workspace Version="1.0.0.1180" X="0" Y="0" zoom="1" Name="Design To Fabrication Converter" Description="Convert design elements to fabrication parts" ID="6294ccda-0e68-4d54-8076-3af9a3b07f15" Category="DynaFabrication2017.Util">
+  <NamespaceResolutionMap />
+  <Elements>
+    <PythonNodeModels.PythonNode guid="7851adb5-0033-4ebb-a90e-396e801fbd81" type="PythonNodeModels.PythonNode" nickname="Design to Fabrication" x="620.86755277907" y="323.2" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="3">
+      <Script>#Copyright(c) 2016, Nathan Chapman
+# nchapman@generalheating.com
+
+import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB import Fabrication
+
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+clr.ImportExtensions(Revit.GeometryConversion)
+
+import clr
+import System
+clr.AddReference("System.Core")
+from System.Collections.Generic import HashSet
+
+ServId = UnwrapElement(IN[0])
+ElemId = UnwrapElement(IN[1])
+Cnt = IN[2]
+
+MyHashSet = HashSet[ElementId]()
+ItmList = list()
+
+Doc = DocumentManager.Instance.CurrentDBDocument
+TransactionManager.Instance.EnsureInTransaction(Doc)
+Converter = Fabrication.DesignToFabricationConverter(Doc)
+	
+if Cnt &gt; 1:
+	for Item in ElemId:
+		MyHashSet.Add(Item.Id)
+
+	for Item1 in ServId:
+		Converter.Convert(MyHashSet, Item1)
+		ItmList.append(Converter.GetConvertedFabricationParts())
+else:
+	MyHashSet.Add(ElemId.Id)
+
+	for Item1 in ServId:
+		Converter.Convert(MyHashSet, Item1)
+		ItmList.append(Converter.GetConvertedFabricationParts())
+		
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = ItmList
+</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="90cad77a-46d4-4f2b-8506-802b3b409eb6" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Count" x="408.8" y="423.828202188119" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="BuiltIn" function="Count@var[]..[]" />
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="44852136-5586-4b87-9a37-542afb2bf8aa" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="354" y="244.4" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Service ID " />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="2c478b56-3ca8-44c3-92e3-17487a090f09" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="326.8" y="338.8" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Element(s)" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="ff76c2a5-bef1-45c8-afd3-677eb618b4f9" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="846" y="324.4" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <Symbol value="Fab ID(s)" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="7851adb5-0033-4ebb-a90e-396e801fbd81" start_index="0" end="ff76c2a5-bef1-45c8-afd3-677eb618b4f9" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="90cad77a-46d4-4f2b-8506-802b3b409eb6" start_index="0" end="7851adb5-0033-4ebb-a90e-396e801fbd81" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="44852136-5586-4b87-9a37-542afb2bf8aa" start_index="0" end="7851adb5-0033-4ebb-a90e-396e801fbd81" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="2c478b56-3ca8-44c3-92e3-17487a090f09" start_index="0" end="7851adb5-0033-4ebb-a90e-396e801fbd81" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="2c478b56-3ca8-44c3-92e3-17487a090f09" start_index="0" end="90cad77a-46d4-4f2b-8506-802b3b409eb6" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

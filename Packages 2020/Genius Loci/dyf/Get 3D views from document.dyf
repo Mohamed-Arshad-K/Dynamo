@@ -1,0 +1,73 @@
+<Workspace Version="1.3.3.4651" X="0" Y="0" zoom="1" ScaleFactor="1" Name="Get 3D views from document" Description="Get 3D views in a given document" ID="e693ae2d-85bf-4f45-a281-6e5764ce1491" Category="GeniusLoci.View">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="e1e081bf-8e63-42b4-a9d8-4c4549a5ccfe" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="132.8" y="252" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="document" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="f5c2bb73-e7f4-4ec3-8eb7-ee8f552365f0" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="428" y="252.8" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="3D views" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="20b6c240-d9c9-47ac-9946-b151ccb0ec86" type="PythonNodeModels.PythonNode" nickname="Python Script" x="258.4" y="252.8" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="1">
+      <PortInfo index="0" default="False" />
+      <Script>#Copyright(c) 2015, Konrad Sobon
+# @arch_laboratory, http://archi-lab.net
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+from System.Collections.Generic import *
+
+# Import ToDSType(bool) extension method
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+#The inputs to this node will be stored as a list in the IN variable.
+
+def tolist(x):
+	if hasattr(x,'__iter__'): return x
+	else : return [x]
+docs = tolist(IN[0])
+
+#collect all views in the model
+for doc in docs:
+	collector = FilteredElementCollector(doc)
+	views = collector.OfClass(View).ToElements()
+
+#sort views into separate lists based on view type
+threeD = []
+for i in views:
+	if not i.IsTemplate:
+		if i.ViewType == ViewType.ThreeD:
+			threeD.append(i.ToDSType(True))
+		else:
+			continue
+
+#Assign your output to the OUT variable
+OUT = threeD</Script>
+    </PythonNodeModels.PythonNode>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="e1e081bf-8e63-42b4-a9d8-4c4549a5ccfe" start_index="0" end="20b6c240-d9c9-47ac-9946-b151ccb0ec86" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="20b6c240-d9c9-47ac-9946-b151ccb0ec86" start_index="0" end="f5c2bb73-e7f4-4ec3-8eb7-ee8f552365f0" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Aperçu en arrière-plan" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

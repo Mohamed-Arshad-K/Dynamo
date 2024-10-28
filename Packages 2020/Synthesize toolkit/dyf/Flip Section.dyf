@@ -1,0 +1,181 @@
+{
+  "Uuid": "2e54f38f-9371-4e70-9b50-8f69905c38ca",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Views",
+  "Description": "Flip Section",
+  "Name": "Flip Section",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Autodesk.BoundingBox.ByGeometry": {
+        "Key": "Autodesk.DesignScript.Geometry.BoundingBox",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.BoundingBox": {
+        "Key": "Autodesk.DesignScript.Geometry.BoundingBox",
+        "Value": "ProtoGeometry.dll"
+      },
+      "Autodesk.DesignScript.Geometry.BoundingBox.ByGeometry": {
+        "Key": "Autodesk.DesignScript.Geometry.BoundingBox",
+        "Value": "ProtoGeometry.dll"
+      },
+      "WombatDynamo.BoundingBox": {
+        "Key": "WombatDynamo.BoundingBox",
+        "Value": "WombatDynamo.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\r\nclr.AddReference('RevitAPI')\r\nimport Autodesk\r\nfrom Autodesk.Revit.DB import *\r\n\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\nfrom System.Collections.Generic import *\r\n\r\nsections = IN[0]\r\nif not isinstance(sections,list):\r\n\tsections = [sections]\r\n\r\n\r\n#get View Plane to use as the Mirror Plane\r\ndef getPlane(s):\r\n\ts = UnwrapElement(s)\r\n\torigin = s.Origin\r\n\tnormal = s.ViewDirection\r\n\tplane = Autodesk.Revit.DB.Plane.CreateByNormalAndOrigin(normal,origin)\r\n\treturn plane\r\n\r\n\r\n#get the Element ID for the Section View's Annotative Viewer\r\ndef getViewer(s):\r\n\tviewerId = ElementId(s.Id - 1)\r\n\treturn viewerId\r\n\r\ndef flipSection(s):\r\n\tids = []\r\n\tids.append(getViewer(s))\r\n\tIcoll = List[ElementId](ids)\r\n\trp = getPlane(s)\r\n\tElementTransformUtils.MirrorElements(doc, Icoll, rp, False)\r\n\treturn s\r\n\t\r\ncount = 0\r\n\r\nTransactionManager.Instance.EnsureInTransaction(doc)\r\n\r\nfor s in sections:\r\n\ttry:\r\n\t\tflipSection(s)\r\n\t\tcount = count + 1\r\n\texcept:\r\n\t\tpass\r\n\r\nTransactionManager.Instance.TransactionTaskDone()\r\n\r\nOUT = \"%s elements mirrored\" %count, sections\r\n",
+      "VariableInputPorts": true,
+      "Id": "ee3985a26b87428684ef589b95783ef6",
+      "Inputs": [
+        {
+          "Id": "d4a746c4d1da4ff0b5327ad1297d3193",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "6e4ffd92b5504173a027f494ec4818a1",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSectionView",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "296b2a7f92074d6d97a0fbdd2df0e226",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4dd5ceabea2e4f099b2dad417e1502f6",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARSectionView",
+      "Id": "31721102471a456986439bb09ff5c5f5",
+      "Inputs": [
+        {
+          "Id": "4bd004f647f24addb60d7bd1feb6c85a",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "6e4ffd92b5504173a027f494ec4818a1",
+      "End": "4bd004f647f24addb60d7bd1feb6c85a",
+      "Id": "1b8d447dd1d847b5a07f2abdeea50eac"
+    },
+    {
+      "Start": "4dd5ceabea2e4f099b2dad417e1502f6",
+      "End": "d4a746c4d1da4ff0b5327ad1297d3193",
+      "Id": "e037aed8740b4d11be07bbec783bab44"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 7.1000452041625977,
+      "EyeY": 48.785564422607422,
+      "EyeZ": 43.461471557617188,
+      "LookX": -30.641258239746094,
+      "LookY": -26.758026123046875,
+      "LookZ": -28.067085266113281,
+      "UpX": -0.25703796744346619,
+      "UpY": 0.93728196620941162,
+      "UpZ": -0.23544417321681976
+    },
+    "NodeViews": [
+      {
+        "Id": "ee3985a26b87428684ef589b95783ef6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "296b2a7f92074d6d97a0fbdd2df0e226",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "31721102471a456986439bb09ff5c5f5",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 111.2,
+    "Y": 84.8,
+    "Zoom": 1.0
+  }
+}

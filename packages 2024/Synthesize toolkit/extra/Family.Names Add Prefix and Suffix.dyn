@@ -1,0 +1,582 @@
+{
+  "Uuid": "3c9d0464-8643-5ffe-96e5-ab1769818209",
+  "IsCustomNode": false,
+  "Description": "",
+  "Name": "Family.Names Add Prefix and Suffix",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [
+    {
+      "Id": "be949d6dff6942cc8c4273b3eeb4a22f",
+      "Name": "01.Prefix",
+      "Type": "string",
+      "Value": "MYPRE-",
+      "Description": "Creates a string.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "e6f3b7762bc14c46b92ec65201c0229b",
+      "Name": "02.Suffix",
+      "Type": "string",
+      "Value": "-MYSUFF",
+      "Description": "Creates a string.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "fa6b4077cce948e38d950da23d469116",
+      "Name": "03.Category",
+      "Type": "dropdownSelection",
+      "Value": "OST_Doors",
+      "Description": "All built-in categories.",
+      "SelectedIndex": 192
+    },
+    {
+      "Id": "43605144dab6466580f3f89a4541cb63",
+      "Name": "04.Include All Categories ? (False Affects Only The Category above)",
+      "Type": "boolean",
+      "Value": "false",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "817e23d3bf8749a3b81254d343fbf2aa",
+      "Name": "05.Include Materials ?",
+      "Type": "boolean",
+      "Value": "false",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "08a3e4220d2c49a08feb27a7bf2d0164",
+      "Name": "06.Include Fill Patterns ?",
+      "Type": "boolean",
+      "Value": "false",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "ce5eef0ede004dd8a043fdba4e6f0e10",
+      "Name": "07.Include Linestyles ?",
+      "Type": "boolean",
+      "Value": "false",
+      "Description": "Selection between a true and false.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "abc9290473fa43b18e2dcb217e32eb1e",
+      "Name": "08.Existed Prefix to Remove",
+      "Type": "string",
+      "Value": "",
+      "Description": "Creates a string.",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "12650429aad240f3bf0003a4611922d6",
+      "Name": "09.Existed Suffix to Remove",
+      "Type": "string",
+      "Value": "",
+      "Description": "Creates a string.",
+      "SelectedIndex": 0
+    }
+  ],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created by Karam Baki: karam@aecedx.com\nimport clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\ndef nameHandle(each,pre,suf,preRem,sufRem):\n\ttry:\n\t\ttoSet = each.Name\n\texcept:\n\t\ttry:\n\t\t\ttoSet = each.LookupParameter(\"Type Name\").AsString()\n\t\texcept:\n\t\t\treturn None\n\tif preRem != \"\":\n\t\tif toSet.startswith(preRem):\n\t\t\ttoSet = toSet[len(preRem):]\n\tif toSet.startswith(pre) == False:\n\t\ttoSet = pre + toSet\n\tif sufRem != \"\":\n\t\tif toSet.endswith(sufRem):\n\t\t\ttoSet = toSet[:-len(sufRem)]\n\tif toSet.endswith(suf) == False:\n\t\ttoSet = toSet + suf\n\treturn toSet\n\t\nclass KaramWarningIgnore(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\t\t\ndoc = DocumentManager.Instance.CurrentDBDocument\npre = IN[0]\nsuf = IN[1]\ncat = UnwrapElement(IN[2])\nmega = IN[3]\nmats = IN[4]\nfillpats = IN[5]\nlinestyles = IN[6]\npreRem = IN[7]\nsufRem = IN[8]\n\nif mega:\n\ttypes = list(FilteredElementCollector(doc).WhereElementIsElementType().ToElements())\nelse:\n\ttypes = list(FilteredElementCollector(doc).OfCategoryId(cat.Id).WhereElementIsElementType().ToElements())\nfamIds = []\n\nfor type in types:\n\ttry:\n\t\tfamIds.append(type.Family.Id)\n\texcept:\n\t\tpass\nfamIds = list(set(famIds))\nfams = []\n\nfor famId in famIds:\n\tfams.append(doc.GetElement(famId))\n\t\nall = types + fams\nTransactionManager.Instance.ForceCloseTransaction()\ntrans = Transaction(doc, 'Change Family and Type Names')\ntrans.Start()\nwarnhandle = KaramWarningIgnore()\nfoptions = trans.GetFailureHandlingOptions()\nfoptions.SetFailuresPreprocessor(warnhandle)\nfoptions.SetClearAfterRollback(True)\ntrans.SetFailureHandlingOptions(foptions)\n\ntypes = []\nsuccess = []\nif mats or cat.BuiltInCategory == BuiltInCategory.OST_Materials:\n\tall += list(FilteredElementCollector(doc).OfClass(Material).ToElements())\n\t\nif fillpats:\n\tall += list(FilteredElementCollector(doc).OfClass(FillPatternElement).ToElements())\n\t\nif linestyles:\n\tlinestyleCat = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Lines)\n\tlinestyleSubs = linestyleCat.SubCategories\n\tfor linestyle in linestyleSubs:\n\t\tlineStyleElement = doc.GetElement(linestyle.Id)\n\t\tif lineStyleElement != None:\n\t\t\tall.append(lineStyleElement)\n\t\t\t\nfor each in all:\n\ttoSet = nameHandle(each,pre,suf,preRem,sufRem)\n\tif toSet == None:\n\t\tcontinue\n\ttry:\n\t\teach.Name = toSet\n\t\tsuccess.append(each)\n\texcept:\n\t\tpass\n\t\t\ntrans.Commit()\n\nOUT = success",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "403ef3984fdb494083d285482622b29b",
+      "Inputs": [
+        {
+          "Id": "2de7f2b553304640a920b4314c1db5e9",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e8029a86933e43078c64f70944c18ee3",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "32fadc936f634f0485b26f7fd439c6db",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d13140fdcacb4a80be986896753b1f14",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f8e16affb50a43b88a6afe2cfa13df5c",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f15e34f880284f6994b7c2fe97b32899",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "093f0cee65d94d089948f83379d95ca3",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9057a684bc234b539da2eada00bfde57",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2e69195d2cad413aa0932f2e688acafd",
+          "Name": "IN[8]",
+          "Description": "Input #8",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "f839b81442f3498999997031b0505f92",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "MYPRE-",
+      "Id": "be949d6dff6942cc8c4273b3eeb4a22f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3c16991ec8514516889c6b8fc48c2ea8",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "-MYSUFF",
+      "Id": "e6f3b7762bc14c46b92ec65201c0229b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "baca035a6b1944b9b91497d0b1981304",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    },
+    {
+      "ConcreteType": "DSRevitNodesUI.Categories, DSRevitNodesUI",
+      "SelectedIndex": 192,
+      "SelectedString": "OST_Doors",
+      "NodeType": "ExtensionNode",
+      "Id": "fa6b4077cce948e38d950da23d469116",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "9aa24099ee6b4e189fc646b39a59c1f6",
+          "Name": "Category",
+          "Description": "The selected Category.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "All built-in categories."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": false,
+      "Id": "43605144dab6466580f3f89a4541cb63",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "56b85a387a0748049d3618ac31e44823",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": false,
+      "Id": "817e23d3bf8749a3b81254d343fbf2aa",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "41381be4054d48948f221edb1fc2ac47",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": false,
+      "Id": "08a3e4220d2c49a08feb27a7bf2d0164",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ff5492cecea94b08a126d9182375bc4a",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": false,
+      "Id": "ce5eef0ede004dd8a043fdba4e6f0e10",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b8bef6d9de3e4f94b510a4d378c4677b",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Selection between a true and false."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "",
+      "Id": "abc9290473fa43b18e2dcb217e32eb1e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "9c9faf60ed474ac592868cb2651bf23e",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "",
+      "Id": "12650429aad240f3bf0003a4611922d6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b4142b0ba92c47c1acbeafcc8a75c777",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "3c16991ec8514516889c6b8fc48c2ea8",
+      "End": "2de7f2b553304640a920b4314c1db5e9",
+      "Id": "e2bd9f23dbca47839d33ab7bc5137c1a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "baca035a6b1944b9b91497d0b1981304",
+      "End": "e8029a86933e43078c64f70944c18ee3",
+      "Id": "cd89335d160a4fe0a7305b2d3d2ea122",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "9aa24099ee6b4e189fc646b39a59c1f6",
+      "End": "32fadc936f634f0485b26f7fd439c6db",
+      "Id": "a4e7393ca3d54810b3824fcaeeca9147",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "56b85a387a0748049d3618ac31e44823",
+      "End": "d13140fdcacb4a80be986896753b1f14",
+      "Id": "d4c9a1de546e414fac2b246b000d6479",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "41381be4054d48948f221edb1fc2ac47",
+      "End": "f8e16affb50a43b88a6afe2cfa13df5c",
+      "Id": "171f855b6d2641e6bfe2f5ee006960e2",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ff5492cecea94b08a126d9182375bc4a",
+      "End": "f15e34f880284f6994b7c2fe97b32899",
+      "Id": "2dc9b9e7ce304b819b40076acb951b12",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b8bef6d9de3e4f94b510a4d378c4677b",
+      "End": "093f0cee65d94d089948f83379d95ca3",
+      "Id": "418008f0b11a409bb2a87a5971152e7b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "9c9faf60ed474ac592868cb2651bf23e",
+      "End": "9057a684bc234b539da2eada00bfde57",
+      "Id": "29759419da394e769f8a17e062b972af",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b4142b0ba92c47c1acbeafcc8a75c777",
+      "End": "2e69195d2cad413aa0932f2e688acafd",
+      "Id": "15486cc8f9a64461920928ba11ef0b02",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Thumbnail": "iVBORw0KGgoAAAANSUhEUgAAAJ4AAACeCAIAAABM5yQsAAAACXBIWXMAABCbAAAQmwF0iZxLAAAYEUlEQVR4nO2dD1RTV57Hn0SSAMmj/BFCAlQRgWhbYArpdDlMi8MOazvFCoM7Whkc3XEHUI/Hdj1dXJ1pncM67qnbIyLbOnXIQK2VgxTWqnQp6DCUJcSFnKmGPxFFCARIQF4ShCCwh/yY1zR/X/7x5/k+h8N5f+679/fu993f/d37/mTV3NwcQkFGPChVyQolLWmhpCUtlLQuZmJiYplYsnoZ2EAq6uvrf/rTnzp8Rte6HtV8OzJLILadnZvDJmdjgrze/8laswkoaZcFg+rpq1Ll5W8fPX4ytx4ZZiGTVqzSIMx7SBCCIDRkdmb4saVklLRLTNuAtuaO8n/ua1mrpqLmhvjIAB15YskkBeIrQcKHEF9PZGYdc9LHY0bnHWApMSXtknGt69Gn/zfUi80EI+NJyPD6uSFLluiQ1X1IQDsSrkUY3que/NDn0avoKIIgf1H76SxbT0m7NOz8XPZwfEGXIcR3CPFtQjZYscQDmXuGNr3NbyCUbs1XG2JRWoVCodFoIiMjbW6kcABfJi3V3+fvI3yIHPrR7THdhHpX4IBd5ViUViKRCIXC06dPczgcw40ymYyS1nloHkiwD+2FIAaRnHzoHk/sH1JZG9eyWKzi4mK3nR2FC9BOWxwmWetrY2NjEQQRCoU5OTkEjZDJZCwWC2/caWlpCoWitrZWo9GkpaXZbO61tbUymYzD4WRmZlLC2yScPvkXlcVw2sZsVE5OjkSP6a7a2tqdO3emp6fv27cPT1BbW1tcXAy6tre3C4XC4uJiFovF4XCOHz+uUCgg2e9///t0PYcPH8Y3VlZWtre3R0ZGKhQKyls4jw1pWSxWXl6eUCjUaDSG22UyWWVl5enTp2tqajIzM42UyM/PT0tLy8nJqays/NnPfpapJy0trampCdzA0NDQxYsXa2pqkpKS8GPb29shWX5+PnE/QfFfp39ntg5szyFHRkYaCoBv/PjjjyHCAq+L74qLi4MFjp7g4GB8FZLV1ta+//77LBYLQZDMzMyhoSG4buLi4oRCYVNTk0ajgb0khkWnDWlnnDy/J5MTEfX/Otz25X/82wHTvYTGtZmZmceOHautrTXcCP0iKGG43boqMHzauXOn4UbQMjMzk8Ph3LhxQygU5ufnQ09PVqICvVr7MGdOTj1451Hnt7yITTQFNt4j/lPJB7/IfdswAdEpi/z8/OPHj6elpcGqRCKpra1NSkq6ePEigiDp6ekE84Gm/PHHH5vdm6SnqampuLjYUhoKBEHG7zcGPW72C5y7vzpM9vgF7qrW//36CyNpid7Ug6i1srISVmUyWXBwMMSx9oY8sbGxx44dg+XKysrDhw/jy7CA+3AKs/S3VcXTG1OiZ1P5cyjWFPd89H3PTb84eNworR0TjWlpaTKZDF9uamqCxmrvQCU/Px8iZOizjxw5gu86fPjw+vXr7927h7sHCiN6my/sfGGIzVxok69tenK26fqJf/+Tn5+fUUprj72ZDWesxzhGe62vmiKRSBQKRWxsrOEU2Mri6tWrRO7XXrg90tqHnfpxEJGTO/L18Pij8X9k3VW2CTNemGAzV8H2wUdzFffWHX6/3OxR1lqtWRmsa2O01/qqKbF6rKd5OvEbva17+FmOQIcgC7p2KWb7n8k4/P47luqDuvOzAljTW/XD6as/if1u4unPMk80/p9/svnnVoynpF0y/jo8teWzPpulxz/4KPfZ1qi13wW8X3YFxvx4f/QPUq0fSEm7NGx/3j8+xNtm0QP3u74d8oriLOiqnpy7JuOk5xaz/W3HIpS0SwOLTovn2r5ZO/zX4cwd/1RyWZe7STT4aO7Pw9FvHb1A0GDqYdVlzfT0tI+Pzw9eyTwn2SjzznjrX4jqSrXa5Q6Dwejt7aXRaEn/sPtFwd/ZZS31OpeL6evrCwsLWw6WUNKSFqqvJS2UtKSFkpa0UNKSFkpa0kJJS1ooaUkLJS1pce9EI4Zhd+7ceaor2AKbNm1CUdStRbhX2mk9mzZtcmspK447d+5MT0+722q33x7w1LMIbffll192dxGuwtPTcxFKWYw7P9PT0wEBAVFRUe4rorm52X2Zr1CoMIq0UNKSFkpa0kJJ+x1SqXS5mOIKSCttdnZ2gh6RSEQkvVwuf/fddy3tSkhIwLOVy+UutdRdkFZaDMOqq6vFYrFAILCZODs722YaoVAI2brIQLezjB57E4vFdXV1KpXK+rBPp9Op1eq5uTmCb2liGJadna1Wq0+ePMnj8bZu3crj8dRqtUAgkEqlPB7v6NGjhukTEhLEYrFcLs/Ly6uuroaNKIoWFRXh7+oXFha2tLSo1eri4mIURSFPmF2Sy+UnT56MiYnJz8+H6+DcuXM8Hs+JinGQpZdWpVJ9/fXXt2/fptFoXC7X39/fUkqdTieXy7VabWBg4L1792zmvHXrVvgeZnV1tUgkKi0tPXr0KJ/PLysrE4lERUVF1dXVCQkJmB78KD6fLxKJWlpaMjIy8I1sNjsnJ6eoqAhWCwoKEASpq6srKirC88zOzs7JyUFRtLS0NDQ0NDU1NScnB9KcPHnS6Xqym6WUViwW37p1q7e3F0VRPz8/Dw+PCT2mKWdnZ0dHRycmJtasWfP6668jCEJE2urqah6PJxKJoBNls9m4R+XxePiC0Vzutm3b6urqrly5IhaLDbfn5ORs3rwZMsnLy5PrgeYIWWEYxufzoeECV65cQRDE8BJZTJZS2tbW1uf12EwpkUgCAgJ+9KMfOVBKaWlpWVmZVCrF25x1MjIyEhISzPbQ+/fvLywsRBCko6Ojvr4eWqTZzFJT51/IOXDAzCcmFo2llJbBYBCc+O3q6lq71vxXfy2Bt8XU1NTs7Gw2mw1b8O2Gq0a7BAKBUVODXRkZGWfPngUHAN7e7OEoih44cCAvLw/SHDhwAJReZNz7HLJKperq6oqKilKpVKZzyBcuXMjKyiKSj1AoNJK2vLz80qVL+Gpzc7MLbw9AJOWq3Expbm6OiooKCLD4vVuXQE1ZGHPlypWl6h1dy8p458fDw0Or1fr4EPoOqZOQQ9cV02ojIyMHBuz7ZCxBYCKClDzVDlkulxMMm1ciT7u0RKYhVyhPtbRSqfSll16y96iVMo38VEuLzx/hq2aT4fNKcDVYukG03Hga34rHMAymF6RSqWE8/OabbxYXFxuKDcjl8sLCwtDQUIFAoFarTROY5bYewz0v6nHXWZmwIqW9efOmTmflZ1AWgMnFjIwMo8mgd999NzU1NSMjQ61WG92TKSwsLCsrM8qHzWbz+fzS0lKBQNDf30/w+eGQkBDDe1MsFmvHjh1EDnQVK8whd3R0/OEPfwgNDSUyaCkqKoJ7A4WFhUVFRXALHf6fPXsWwzCY6wfkcvkXX3yBYZhpzjwer6ysTC6Xi0Qi4q2Wy+Xu27cPX923b59hcYvAimm1Go1GKBSuW7fu3LlzXC6XyCFyuby+vr6qqgpGOKmpqUVFRXV1dTBrj3eZdXV1QqFQKpWKxeKjR4/m5eUhCNLS0oLqkUqlcHsOburZNRu8Y8eOixcvajSakJAQo09ALwJLKa2Xl1dFRQWRlCqVqru7+5133rEroC0rK0NRNCcnB9ypUCjEMEwgEKTq2bp167lz56Bx83g80EwgEMD99o6OjpiYGKlUit+5y8jIqKqqgjQEDWCz2W+//fZ7773329/+lrjZLmPOnSiVym+++UapVHZ2drq1oG+++cbeQ/r7+y3tGh8fN1zGUxpuJ85HH31kaq1SqXQgK7t4er8bZeWhFsNACdyy6XbiGPa4iwl154e0UNKSFkpa0kJJS1oWKYyamJhQqVTuy38R3kRecSyGtF5eXt7e3m6VduX+DIX7cLu009PTjx8/dvcjXjCt4e4iXMXi+Bj3SgtfO+jq6nJrKSsOqBZ3W019NJe0UBEyaaGkJS2UtKSF+lmJ5UVfX99XX31lxaTnnnuO4J1NStrlxfDw8K9+9SsrJp0/f56SdkUSFBR0/vx53PIbN25UVlYWFxfT6XTY8txzzxE8L0ra5UVYWNjevXtxk9rb2+G5DgcehaTCKNJCqNVSP9u+VMDsaXNzs+EjzQSfZybUailplw9isdjoyXVLEO1r39jxy+tdj8hZW8uZlrb59hf6/OqwjfM3uNh2zDwTlVah1l24PUKyelv+sCfnf2m6pV97b3i+8uNCvF8gbDMVRpEWSlrSQklLWhZvyuJgot+WSNb8N4Uk4xV3V8xHLF3OBn96QVJA96iubWhqT6wviz7fugqbVI0PzXzmzhnslnaDP/1MWjAsV9zFLkjGCR61JZKVVSnX6GbjOUzn7a7I5J1pHcOrY4M/vTBlTVblkn3OlkX3KEgKiOcwFZonl6Xq6zKNpZQFSQHX7mkr7mKGp+CSOjHCbocMV9mWz/oO1g7FcZh7Yn2JH6XRzSII0qaYdNJoyPBgoh9kC6v48pJQkDT/8FdWpfyCZNx6nXBYq2WjOrAZKsRVdWKE4w65e1RXIVUfTPSbd7CZvMaHE8nh3pel6oq72J5YX/C9sIqf+fUdYSBwVqU8ayMaH8woaJiP6QtT1rQNTTngpQ8m+hU2fe9pN5A8Odx7vjiZ5oJkXKObhTZ9XabJ2oi2KSbPtI4dTPSL5zDbFJOFTSqo3y2RrO18Noe1Gj/KLkviOcyChhGNbrbx4QQ0RCNHUpHJK2gYyeKz4XxhI75gqU5u3LK3Sr7DqStdo5uFtsKie0T60wsaRkDXOA7zl/89WNAwkhzmlbURhb4E2npBwwgccl2m2eBPTw73Tg733uBPN+vBNvjTKzItvnR1QTIOhxtuZNE9usemwalE+tMPJvrhbZpF99jyWZ9GN/vHN0IUmiewDAmSw733xPoWNqmyKuXgWs2WaMWeNsXklvXf+2KZkSOBVaiHgoaRLZ/14Qt21QlxnJJ2y3ofvLe7fk/bPapj0T2yNqIVUrVGNwvN+rX15j/RptHNXpaq98T67on1vaxPb5rGuptVaJ6A9zNMo9A8gdbfPar7o157fNeZ1jGwEy4LWIYEWXz2dZmme1Sn0c2eaR2L5zA5LDP+zIo9hU0qFt2jIpMHl7JjEKkT4jjokMG1do/qwHtAncJ1veB+LVz4hlTcxUB4hwPmirtYcpjXdj67bWgKtrDoHtAdaHSzg3qTzGJUaxv86Rv86YaqhLBWKywfbopGNzvvpfStP8SHBpeRY2fkZJ3gOCgt+BPH9uLgjcAwoDAKwo16aNNMilrHzqQFq6cXAvWCpABIqdHN7on1hUuNCAUNI5ZiGeL2ND6cmPcWb4SAb3AAS3XiAC4e17YpJjW62eRwbyKjtD2xvpBsT6yv4WXePaqDiyOewyxMWWP9Qpl3+3ex7fyFL4Dg4QyCIIPaGYJmNz6ciA9mWJLWLntwPUyFISKVpTpxANcPGC7rw2ZoLqZhDk48hwkR9WWpOjnc25mBnWG31D2qSw7zgqZGcGAGnW7WRhSieiPPTJCKTF5yuDfE592jOvhTaJ5AmHYw0U+hedI9auODSC6sE0ek1ehmzV6P+EaYxyhICri+IyyLz4YeC0+AL2Tx2ZelaoXmCYzxs/hmPrxjtizTXRD7wGqRPgi6viOsICkAl9woselym2LyYO3QlvU+cCCRQo2AgK4ikzcfYP8t/ihsUs2PpnaEcVir8UGaaVXYVSfEIfRiSEJCwvmaWweu9jpTEoUDsG/9Z+1nn2SfuXqPvnbhpt7gVwS/j0HdHiAtlLSkhWiEHM/1+cu+jU97bS06B/7KrEWQgy8Hv/jiQuUTf0yNqLT47wVSLCbwyvkHH3xg+I4y0Q9RufubYxTOsH///lWrVonFYuprbyueR48emf6m3OjoKP6AalBQUFhYGJHTpN6KX17cvn07MTHRiknnz583fHPEClSrXV4Yvc5lCvHXuahWS1qocS1poaQlLZS0pIWSlrRQ0pIWSlrSQo1rFxuFQtHR0eHyQmNiYow+L0tJu9h0dHTcuuXEk+OWoaRdFjz77LNGv37vMA8ePOjtNfMADCXt0rB27dpXX33VJUXfvHnTrLRUGEVaKGlJCyXt8kWhx2HzFq+v/bRdKVdP89ie6Xw/9dQMFyX6ysYi06mcrJbOP7a/le8XHchcQstLS0sNf7HTXixKq56aKRENG27ZHIEm8My/dmeTY3X9YrmWzaANsD1b5VqxXPvh68/aldun7cr6Hkytm+WyPXNfCoZKt0KNdKy+BxtQT7PpHpsj0LfiAomUIpZrj9X1sxk0BEESeT7RgUznLXeYqakpZw63Jm2NdAy/QmE1VxBEsI4MEcu1DT0YfizUHVQfQT5tV5aIhlMiUC5KF/drDn3Z+8m2dVZaD6TnovQEnk/nyOMS0XCHcvJEaqjN0srblWwG7fLPI2HVecuXEBsOeVdsQDp//q2VAUx36NrDcokqne9n77kNYPPvuuBHnUgNVU/N2JVJfQ8WHcgEbToj0L1XesRybboFadVTM+USVQLP58PXn4UtJaLhGumYWK612doG1N/7mRbnLV9CiIZRXJS+NeYZ9dRMQw8G1aeemoHrWiz/7oXDTuUkVCK+BU+pnpqBmjLdYprYFOIVCpkkGqiYKwj6ZNs60HUA0xkVgdtguACZuMTypcKOMMqwcvdW3UcQJDqQ2dCDsRk0cI+nGgdrpAvvDUIj46L0vVX3oRZKRMMlouEjySEdevkv/zyyUzl5rK4fd3cDmG5v1f10vl+uIMio6M0RaLlE1amcf0mypGWIi9JTIiy+TAc+s1WuNew7wHsPYLrtl2TpfL8jySGwvUY6dqpxEFZPNQ7Cxu2XZHh6Jy1fGdLCVWnY+yIIciQ5hM2gcVF6iWgYuqWUCFQs15ZLVMfq+j/JiMgVBHUoJz9tV74VF8hjeybwfDqUC6+xpkSgKXrNoBM91TjIZtB2xZp5nT6d71cuUR36slc9NTPvaV8Lh+tsANOZ9rhsBi0lAq2Rju290rNZXwSRmDaB53MkOaRcooJuCPJ33nKCKBSKyUnzb/c+ePDAaMszemxmbENa3PM09GDQgSV839FBrUGQtSs2AK7idJQOAXancjIlAoWLAAYPRvnnCoL2Vt0vl6hiApliufZEaqhZx4u3Jy5KP5IcYtgEjySHmGYLF1yNdKxENAwC4M3UElyUno7SQVo8Q+ctJ0JHR8fnn39uKaFQKDTawmAwdu/ebfNnBG1IC74IluG6xndBY4Xlhh5MPTXTKtfK/xaGwAXROfLY+iiFi9J3xQaUS1RiuRaagmmaU42DUHdctuehaw8PXXv44WvhXJSu1r+TaqlCcwVBu2IDxHJttXSsRjqmnpohEiETh4jlBFm7dm1wcPDQ0JALzbMtbQLPh4vSYwKZMJCwnnhAPW0YYXJROpELGZztAKYzW/UQuKXz/aD0D18L31t1H9QV92vYDJoVq8Azp0SgEAR0KifZLv1smHXLicNkMn/961+bJn/vvfcQBPnNb37jWLY2pN0cgZr6IkvgIyW7gCbFZtCqpWOmbhMiT97fPvHMReknUkOP1fUfuvZQPTWTEoESuXpiApk1ehfi2qkG65YvOa65iqPXeOE9EzCA6fBo2QoDmA7GyrtiA4xGTYbg8QveL4DDNxu51EjHtl+SGQ5OwLDoNV5clM7VxwH4LsOc7YKg5UuIa+aQowOZEDFC9NipnIQe2margtgyVxDEZtDqe7CSlqFPMiIME8A4B4ZYiTwfNoMm7teUS1SQbYlo2NQZzk8K6idYtsY8w2bQ8BkM6PWj9VFPjXQsgefT0IPBMN0BbFq+5Lis7zmRGprA8ykRDW+/JJufkKN72Awa4WLHRxq74gI79YMNo2S5gqAEns+n7cpDX/buvdJTIhqODmR+sm3didRQmPI1Sg/xMITopxoH52cc2Z64wwQxTjUObr8kg+DZgZMlaPnSYu2dH7OjRgB8mqlyncrJzpHHpjGXYVbQfYJjNLqRMoDpLE3SDmA6cHoQ2RllZdbCTuUklGtkjHpqRizX4l21kW1G5+W85UbcvHnz1q1br7zyis2nLAiGUZYytOaQrYz0LZ1DdCDT7GjHMCu8CkzrwkqJMO40NcOSJQvBs7m4CSJnS7a53HKHYTAYzhxOPRu1fNm9e7cztlHSLl9szjdZh3qAhrRQ0pIWyiEvDQ8ePLh586ZLija9NQRQ0i4NvXrcWjQl7WITExPjjhJNs6U+U0JaqDCKtFDSkhZKWtJCSUtaKGlJCyUtaaGkJScIgvw/ApnIIfemBYwAAAAASUVORK5CYII=",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [
+    {
+      "ExtensionGuid": "28992e1d-abb9-417f-8b1b-05e053bee670",
+      "Name": "Properties",
+      "Version": "2.13",
+      "Data": {}
+    },
+    {
+      "ExtensionGuid": "DFBD9CC0-DB40-457A-939E-8C8555555A9D",
+      "Name": "Generative Design",
+      "Version": "2.0",
+      "Data": {}
+    }
+  ],
+  "Author": "karam@aecedx.com",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": true,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "403ef3984fdb494083d285482622b29b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 997.027886951031,
+        "Y": 383.73512472220523
+      },
+      {
+        "Name": "01.Prefix",
+        "ShowGeometry": true,
+        "Id": "be949d6dff6942cc8c4273b3eeb4a22f",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 327.770358181899,
+        "Y": 132.628767433019
+      },
+      {
+        "Name": "02.Suffix",
+        "ShowGeometry": true,
+        "Id": "e6f3b7762bc14c46b92ec65201c0229b",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 326.211247348118,
+        "Y": 261.832727368112
+      },
+      {
+        "Name": "03.Category",
+        "ShowGeometry": true,
+        "Id": "fa6b4077cce948e38d950da23d469116",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 285.017773423052,
+        "Y": 391.741456880458
+      },
+      {
+        "Name": "04.Include All Categories ? (False Affects Only The Category above)",
+        "ShowGeometry": true,
+        "Id": "43605144dab6466580f3f89a4541cb63",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 193.66758422797102,
+        "Y": 526.439088688692
+      },
+      {
+        "Name": "05.Include Materials ?",
+        "ShowGeometry": true,
+        "Id": "817e23d3bf8749a3b81254d343fbf2aa",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 287.836427441153,
+        "Y": 660.63516224155
+      },
+      {
+        "Name": "06.Include Fill Patterns ?",
+        "ShowGeometry": true,
+        "Id": "08a3e4220d2c49a08feb27a7bf2d0164",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 283.009765220007,
+        "Y": 795.046715870713
+      },
+      {
+        "Name": "07.Include Linestyles ?",
+        "ShowGeometry": true,
+        "Id": "ce5eef0ede004dd8a043fdba4e6f0e10",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 289.603448990707,
+        "Y": 938.480392973131
+      },
+      {
+        "Name": "08.Existed Prefix to Remove",
+        "ShowGeometry": true,
+        "Id": "abc9290473fa43b18e2dcb217e32eb1e",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 253.829552132063,
+        "Y": 1105.35697774046
+      },
+      {
+        "Name": "09.Existed Suffix to Remove",
+        "ShowGeometry": true,
+        "Id": "12650429aad240f3bf0003a4611922d6",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 252.270441298282,
+        "Y": 1234.56093767556
+      }
+    ],
+    "Annotations": [],
+    "X": -45.790627155857237,
+    "Y": -18.836416298835502,
+    "Zoom": 0.41341502936704655
+  }
+}

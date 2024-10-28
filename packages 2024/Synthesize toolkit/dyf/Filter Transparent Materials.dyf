@@ -1,0 +1,164 @@
+{
+  "Uuid": "36c3fe10-8081-49c4-980e-a58c65491fe8",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Material",
+  "Description": "Filter Transparent Materials",
+  "Name": "Filter Transparent Materials",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\nmats = UnwrapElement(IN[0])\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nincludedmats = []\nfor m in mats:\n\ttry:\n\t\trenasset = doc.GetElement(m.AppearanceAssetId).GetRenderingAsset()\n\t\ttry:\n\t\t\trenassetname = renasset.FindByName(\"BaseSchema\").Value\n\t\t\tif renassetname == \"GenericSchema\":\n\t\t\t\tif renasset.FindByName(\"generic_transparency\").Value > 0:\n\t\t\t\t\tincludedmats.append(m)\n\t\t\t\t\tcontinue\n\t\t\tif renassetname == \"PrismTransparentSchema\" or renassetname == \"GlazingSchema\" or renassetname == \"SolidGlassSchema\" or renassetname == \"WaterSchema\":\n\t\t\t\tincludedmats.append(m)\n\t\t\t\tcontinue\n\t\texcept:\n\t\t\ttry:\n\t\t\t\trenassetname = renasset.FindByName(\"category\").Value.lower()\n\t\t\t\tif \"glass\" in renassetname:\n\t\t\t\t\tincludedmats.append(m)\n\t\t\t\t\tcontinue\n\t\t\texcept:\n\t\t\t\tpass\n\texcept: pass\n\tif m.Transparency > 0:\n\t\tincludedmats.append(m)\n\nOUT = includedmats",
+      "VariableInputPorts": true,
+      "Id": "5734d31d511140e28cdf3180c5ae3142",
+      "Inputs": [
+        {
+          "Id": "c09aee1c42c14718a5dd3d9e59b3eff8",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "8843cd95f011482dbefe7502628890ac",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARMaterials",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "ab6a9219d4674da8ae71bb86be8ef980",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bfc88c55bcc743f9a580a5e434fb5926",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARMaterials",
+      "Id": "b5713800f3774af5ad3f0a255022a2f9",
+      "Inputs": [
+        {
+          "Id": "ddc42a51d28b48d29c69237f29aabce3",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "8843cd95f011482dbefe7502628890ac",
+      "End": "ddc42a51d28b48d29c69237f29aabce3",
+      "Id": "8725cd99fdc54a5691779bff626f2c16"
+    },
+    {
+      "Start": "bfc88c55bcc743f9a580a5e434fb5926",
+      "End": "c09aee1c42c14718a5dd3d9e59b3eff8",
+      "Id": "0d5ea46fc5964e26aef5ac64b8dae7e3"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "5734d31d511140e28cdf3180c5ae3142",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "ab6a9219d4674da8ae71bb86be8ef980",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "b5713800f3774af5ad3f0a255022a2f9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 96.8,
+    "Y": 170.4,
+    "Zoom": 1.0
+  }
+}

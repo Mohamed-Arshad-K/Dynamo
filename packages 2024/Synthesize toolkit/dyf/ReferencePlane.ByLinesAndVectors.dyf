@@ -1,0 +1,214 @@
+{
+  "Uuid": "6e6b688e-c5ff-4e8f-87d3-aada91f71bdc",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Reference Plane",
+  "Description": "New Reference Plane By Lines and Vectors",
+  "Name": "ReferencePlane.ByLinesAndVectors",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurves=UnwrapElement(IN[0])\nvectors=UnwrapElement(IN[1])\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nif doc.IsFamilyDocument: \n\tdoc_create = doc.FamilyCreate\nelse: \n\tdoc_create = doc.Create\n\n# Create Empty List\nresult = []\n\n# Start a Transaction with Current Document (doc)\nTransactionManager.Instance.EnsureInTransaction(doc)\ncount = 0\nfor curve in curves:\n\ttry:\n\t\tstp = curve.StartPoint.ToXyz()\n\t\tend = curve.EndPoint.ToXyz()\n\t\tvector = vectors[count].ToXyz()\n\t\tcount += 1\n\t\tresult.append(doc_create.NewReferencePlane(stp,end,vector,doc.ActiveView))\n\texcept:\n\t\tresult.append(None)\n# End the Transaction with Current Document ()\nTransactionManager.Instance.TransactionTaskDone()\n\n# Assign your output to the OUT variable.\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "1cef5a266dc64cf3ab357bd842f97c4e",
+      "Inputs": [
+        {
+          "Id": "5ced7134c6d54325aa5bd5a733aec21f",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4d2b53ebeb8745fab31503a08b3d6186",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b22e9e83a9a04139bfde32e66e6b46df",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARLines",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "7309274b00d14190ae934c72e74f7140",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4e0b1f96331a473d8f7e0d913087d186",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARVectors",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "cd7b1a530d2b4d68967fc36435a71834",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d1c37c97d4f3495ba0d0279d49617b30",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARReferencePlanes",
+      "Id": "13e27b6f015647df851fb79a7b00fa9d",
+      "Inputs": [
+        {
+          "Id": "7e73fd50a3a0490a82750595fa59a342",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "b22e9e83a9a04139bfde32e66e6b46df",
+      "End": "7e73fd50a3a0490a82750595fa59a342",
+      "Id": "e41d9a2aa57849d99632531b5da04408"
+    },
+    {
+      "Start": "4e0b1f96331a473d8f7e0d913087d186",
+      "End": "5ced7134c6d54325aa5bd5a733aec21f",
+      "Id": "483a63b5083e4770ba498e333f1a0191"
+    },
+    {
+      "Start": "d1c37c97d4f3495ba0d0279d49617b30",
+      "End": "4d2b53ebeb8745fab31503a08b3d6186",
+      "Id": "91bdc7f029a74e398c1a6fd5c9d16eb0"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -266.70199584960938,
+      "EyeY": 80.576728820800781,
+      "EyeZ": 158.23513793945313,
+      "LookX": 62.164787292480469,
+      "LookY": -80.576728820800781,
+      "LookZ": -110.82452392578125,
+      "UpX": 0.16732330620288849,
+      "UpY": 0.93969261646270752,
+      "UpZ": -0.29829630255699158
+    },
+    "NodeViews": [
+      {
+        "Id": "1cef5a266dc64cf3ab357bd842f97c4e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "7309274b00d14190ae934c72e74f7140",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "cd7b1a530d2b4d68967fc36435a71834",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 150.0
+      },
+      {
+        "Id": "13e27b6f015647df851fb79a7b00fa9d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 80.0,
+    "Y": 111.2,
+    "Zoom": 1.0
+  }
+}

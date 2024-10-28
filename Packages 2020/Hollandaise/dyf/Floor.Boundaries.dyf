@@ -1,0 +1,87 @@
+<Workspace Version="0.8.2.2392" X="9.60000000000002" Y="3.19999999999999" zoom="1" Name="Floor.Boundaries" Description="returns the boundaries of a floor" ID="863c1954-4a1b-4edc-a4cb-47ac07b29f9a" Category="Hollandaise.Revit.Elements">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="List.Join" resolvedName="DSCore.List" assemblyName="DSCoreNodes.dll" />
+    <ClassMap partialName="List.map" resolvedName="DSCore.List" assemblyName="DSCoreNodes.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <DSIronPythonNode.PythonNode guid="dcd4a7e4-c9d3-4146-ad2d-cd25dc8e3d11" type="DSIronPythonNode.PythonNode" nickname="floor boundaries" x="362.85919841264" y="0" isVisible="false" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" inputcount="2">
+      <Script># code borrowed and modified from The Proving Ground, http://theprovingground.org by Nate Holland
+import clr
+
+# Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+# Import DocumentManager and TransactionManager
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+# Import ToDSType(bool) extension method
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+#The input to this node will be stored in the IN[0] variable.
+
+doc =  DocumentManager.Instance.CurrentDBDocument
+app =  DocumentManager.Instance.CurrentUIApplication.Application
+
+output = []
+boundaries = []
+
+
+
+floors=UnwrapElement(IN[0])
+
+for floor in floors:    	
+	boptions = app.Create.NewGeometryOptions()
+	floorgeo = floor.get_Geometry(boptions)
+	faces = []
+	
+	#cycles through all the geometry in the floor
+	for geo in floorgeo:
+   		instance = geo		
+    	solidface = instance.Faces
+    	
+    	#cycles through all the faces in the geometry
+    	for face in solidface:
+    		faces.append(face)
+    #gets tge edgeloop of the face
+	edgeloops = faces[1].EdgeLoops
+	edges = []
+	for loop in edgeloops:
+		edgs = []
+		#cycles through the curves that make up the boundary and converts to dynamo geo
+		for edge in loop:
+			edgs.append(Revit.GeometryConversion.RevitToProtoCurve.ToProtoType( edge.AsCurve(), True ))
+		edges.append(edgs)
+    	
+
+	boundaries.append(edges)
+
+
+        
+#Assign your output to the OUT variable
+OUT = boundaries</Script>
+    </DSIronPythonNode.PythonNode>
+    <Dynamo.Nodes.Symbol guid="9559dbff-0d76-4309-9584-cbb5b8e18eb7" type="Dynamo.Nodes.Symbol" nickname="Input" x="0" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True">
+      <Symbol value="a" />
+    </Dynamo.Nodes.Symbol>
+    <Dynamo.Nodes.Output guid="3d67ae0e-05da-41cc-a6a5-a16f91203b04" type="Dynamo.Nodes.Output" nickname="Output" x="562.65919841264" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="OUT" />
+    </Dynamo.Nodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Models.ConnectorModel start="dcd4a7e4-c9d3-4146-ad2d-cd25dc8e3d11" start_index="0" end="3d67ae0e-05da-41cc-a6a5-a16f91203b04" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="9559dbff-0d76-4309-9584-cbb5b8e18eb7" start_index="0" end="dcd4a7e4-c9d3-4146-ad2d-cd25dc8e3d11" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="background_preview" eyeX="10" eyeY="15" eyeZ="10" lookX="-10" lookY="-10" lookZ="-10" />
+  </Cameras>
+</Workspace>

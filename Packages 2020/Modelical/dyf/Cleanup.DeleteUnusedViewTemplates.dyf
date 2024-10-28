@@ -1,0 +1,167 @@
+{
+  "Uuid": "43870fd9-39c1-4a86-9042-e3edc738d02d",
+  "IsCustomNode": true,
+  "Category": "Modelical.Actions",
+  "Description": "This node deletes all unused view templates in the project file.",
+  "Name": "Cleanup.DeleteUnusedViewTemplates",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "_bool",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": "Set Toggle to TRUE to delete unused View Templates"
+      },
+      "Id": "c81d73c7d1274d1da10b72f7cb302fc6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a321f6c1744b44f799a633e86ecc3262",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "/*Number of deleted View Templates*/\r\n_info",
+      "Id": "ce5ce98dff1c435db29015c814073e4a",
+      "Inputs": [
+        {
+          "Id": "196091bfb9ec441eb627cc6b281e085a",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# This node has been made by Modelical\n# www.modelical.com\n\nimport clr\r\nclr.AddReference(\"ProtoGeometry\")\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n\r\nclr.AddReference(\"DSCoreNodes\")\r\nfrom DSCore import *\r\n\r\n\r\nclr.AddReference(\"RevitAPI\")\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB.Structure import *\r\n\r\nclr.AddReference(\"RevitAPIUI\")\r\nfrom Autodesk.Revit.UI import *\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nuidoc = DocumentManager.Instance.CurrentUIApplication\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\napp = uidoc.Application\r\n\r\n\r\nimport sys\r\nsys.path.append(r\"C:\\Program Files (x86)\\IronPython 2.7\\Lib\")\r\n# Function Helpers\r\ndef Feet2m(value):\r\n\treturn value * 0.3048\r\n\r\ndef toList(input):\r\n    \"\"\"Return iterable if available, a list of 1 otherwise\"\"\"\r\n    if hasattr(input, \"__iter__\") and not isinstance(input, basestring):\r\n        return input\r\n    else:\r\n        return [input]\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\n# Logic starts here\r\nbool = IN[0]\r\n\r\nif bool:\r\n\tviews=FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Views)\r\n\tnames=[]\r\n\tallVTemp=[]\r\n\tusedVTemp=[]\r\n\t\r\n\tcount=0\t\r\n\tfor v in views:\r\n\t\tif v.IsTemplate:\r\n\t\t\tallVTemp.append(v.Id)\r\n\t\telse:\r\n\t\t\tif v.ViewTemplateId.IntegerValue != -1:\r\n\t\t\t\tusedVTemp.append(v.ViewTemplateId)\r\n\t\t\t\t\r\n\t\t\t\t\r\n\tTransactionManager.Instance.EnsureInTransaction(doc)\r\n\tfor vTemp in allVTemp:\r\n\t\tif vTemp not in usedVTemp:\r\n\t\t\tdoc.Delete(vTemp)\r\n\t\t\tcount+=1\r\n\t\t\r\n\tTransactionManager.Instance.TransactionTaskDone()\r\n\t\r\n\t\r\n\t# Output\r\n\t\r\n\tOUT=str(count)+\" template/s have been deleted from Revit\"\r\nelse:\r\n\tOUT=\"Set Toggle to TRUE to delete unused View Templates\"\r\n",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "02157ffc65af444596db5b7d3c4ffd3f",
+      "Inputs": [
+        {
+          "Id": "d2eeb03e7eda4c68a5189bad134537c1",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3f3b8410fec040c3a3c99c468854f1f0",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "a321f6c1744b44f799a633e86ecc3262",
+      "End": "d2eeb03e7eda4c68a5189bad134537c1",
+      "Id": "681c09123e0949c4a2726e1687fc68c8"
+    },
+    {
+      "Start": "3f3b8410fec040c3a3c99c468854f1f0",
+      "End": "196091bfb9ec441eb627cc6b281e085a",
+      "Id": "9dfe8c417fb644969509ad24b0c34850"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.12.0.5650",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "c81d73c7d1274d1da10b72f7cb302fc6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 161.75741300317088,
+        "Y": 344.98902002176391
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "ce5ce98dff1c435db29015c814073e4a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 848.95608008705517,
+        "Y": 341.49451001088187
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "02157ffc65af444596db5b7d3c4ffd3f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 691.29167195926141,
+        "Y": 341.92119663586868
+      }
+    ],
+    "Annotations": [],
+    "X": -76.613834705723548,
+    "Y": 61.324362500000007,
+    "Zoom": 1.33823125
+  }
+}

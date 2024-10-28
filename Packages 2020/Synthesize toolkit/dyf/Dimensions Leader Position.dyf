@@ -1,0 +1,164 @@
+{
+  "Uuid": "165af92a-1538-4a8d-93c3-bfc6f41b0615",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Dimensions",
+  "Description": "Dimensions Leader Position",
+  "Name": "Dimensions Leader Position",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\t\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ndim = tolist(UnwrapElement(IN[0]))\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\ndef GetDimensionLeaderPosition(dim):\n\ttry:\n\t\tcurrent = dim.TextPosition\n\t\tdim.ResetTextPosition()\n\t\tp = [dim.LeaderEndPosition.ToPoint()]\n\t\tdim.TextPosition = current\n\texcept:\n\t\tp = []\n\t\tsegs = []\n\t\tfor seg in dim.Segments:\n\t\t\tcurrent = seg.TextPosition\n\t\t\tseg.ResetTextPosition()\n\t\t\tp.append(seg.LeaderEndPosition.ToPoint())\n\t\t\tseg.TextPosition = current\n\treturn p\n\t\n# Create Empty List\nresult = []\n# Start a Transaction with Current Document (doc)\nTransactionManager.Instance.EnsureInTransaction(doc)\n\nfor e in dim:\n\tresult.append(GetDimensionLeaderPosition(e))\n\n# End the Transaction with Current Document ()\nTransactionManager.Instance.TransactionTaskDone()\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "badf4cf0871344cc81cb638314c3c6d4",
+      "Inputs": [
+        {
+          "Id": "f9a9f8e76f454c489ba257f5aec690ea",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "9b8a52f784cc412fbb192eafb738dbd9",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDimensions",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "cd6311c1b76e4afb99443d13a1955db1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1cce81cad52a47a0b3f7801d4ac28234",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPoints",
+      "Id": "5e53a8896a764633947357b6b5176d2a",
+      "Inputs": [
+        {
+          "Id": "4928f607ddd44709bf5bdb0edf7bc076",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "9b8a52f784cc412fbb192eafb738dbd9",
+      "End": "4928f607ddd44709bf5bdb0edf7bc076",
+      "Id": "24336b443df144a6b988b09490d76f00"
+    },
+    {
+      "Start": "1cce81cad52a47a0b3f7801d4ac28234",
+      "End": "f9a9f8e76f454c489ba257f5aec690ea",
+      "Id": "13a7214cae61421cad5d3ee4a90d2ad4"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 11.061495780944824,
+      "EyeY": 24.330606460571289,
+      "EyeZ": 7.0857253074646,
+      "LookX": 0.10297022759914398,
+      "LookY": -7.7608709335327148,
+      "LookZ": -1.311471700668335,
+      "UpX": 0.072574503719806671,
+      "UpY": 0.37460657954216003,
+      "UpZ": -0.92433911561965942
+    },
+    "NodeViews": [
+      {
+        "Id": "badf4cf0871344cc81cb638314c3c6d4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "cd6311c1b76e4afb99443d13a1955db1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "5e53a8896a764633947357b6b5176d2a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 145.654461130423,
+    "Y": 148.452392453754,
+    "Zoom": 0.642869557405948
+  }
+}

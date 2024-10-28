@@ -1,0 +1,546 @@
+{
+  "Uuid": "cc8cb749-6c7c-4b20-96f6-c766f7cc0d42",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.Ampersand.Geometry.Surface",
+  "Description": "Split a single polysurface with multiple tools.",
+  "Name": "AS.[&] PolySurface.SplitByTools",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "PolySurface": {
+        "Key": "Autodesk.DesignScript.Geometry.PolySurface",
+        "Value": "ProtoGeometry.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Colin McCrone\r\n# https://twitter.com/ColinMcCrone\r\n# 2016-05-15\r\n\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n\r\n# Flatten a 2-dimensional list to a 1-dimensional list\r\ndef Flatten2D(ls):\r\n\tflat = []\t\r\n\tfor x in ls:\r\n\t\tif type(x) is list:\r\n\t\t\tfor y in x:\r\n\t\t\t\tflat.append(y)\r\n\t\telse:\r\n\t\t\tflat.append(x)\t\r\n\treturn flat\r\n\r\n\r\n# Return the list of interections between a piece of geometry and multiple tools.  Note that this algorithm may return duplicates in the reults.\r\ndef IntersectMultiple(geom, tools):\r\n\tresults = []\r\n\t\r\n\tfor tool in tools:\r\n\t\tintersections = Geometry.Intersect(geom, tool)\r\n\t\t\r\n\t\tif intersections:\r\n\t\t\tif \"Array\" in str(type(intersections)):\r\n\t\t\t\tfor intersection in intersections:\r\n\t\t\t\t\tresults.append(intersection)\r\n\t\t\telse:\r\n\t\t\t\tresults.append(intersections)\r\n\t\r\n\treturn results\r\n\r\n\r\n# Determine whether an object is a curve of any sort\r\ndef IsCurve(obj):\r\n\tif (\"Line\" in str(type(obj))):\r\n\t\treturn True\r\n\telif (\"Curve\" in str(type(obj))):\r\n\t\treturn True\r\n\telif (\"Arc\" in str(type(obj))):\r\n\t\treturn True\r\n\telif (\"Ellipse\" in str(type(obj))):\r\n\t\treturn True\r\n\telif (\"Circle\" in str(type(obj))):\r\n\t\treturn True\r\n\telif (\"Polygon\" in str(type(obj))):\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n\r\n# Determine whether an object is a point\r\ndef IsPoint(obj):\r\n\tif (\"Point\" in str(type(obj))):\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n\r\n# Determine whether the geometry touches any of the pieces of geometry in the set of tools\r\ndef DoesTouchTool(geom, tools):\r\n\tfor tool in tools:\r\n\t\tif (Geometry.DoesIntersect(geom, tool)):\r\n\t\t\treturn True\r\n\treturn False\r\n\r\n\r\n# Find whether two surfaces touch each other in places other than coincident any tool and therefore belong in the same group after they have been split by the tools\r\ndef BelongsWith(s1, s2, tools):\r\n\tiSrfSrf = Geometry.Intersect(s1, s2)\r\n\t\r\n\t# Assume surfaces do not belong together\r\n\tanswer = False\r\n\t\r\n\tfor i in range(len(iSrfSrf)):\r\n\t\t# If the surfaces share only a point, they belong together if that point does not also touch a tool\r\n\t\tif IsPoint(iSrfSrf[i]):\r\n\t\t\tif (DoesTouchTool(iSrfSrf[i], tools)):\r\n\t\t\t\tcontinue\r\n\t\t\telse:\r\n\t\t\t\tanswer = True\r\n\t\t\t\tbreak\r\n\t\t\r\n\t\t# If the surfaces share a curve, they belong together if that curve does not touch a tool by more than a point\r\n\t\tif IsCurve(iSrfSrf[i]):\r\n\t\t\tiIntTool = IntersectMultiple(iSrfSrf[i], tools)\r\n\t\t\t\r\n\t\t\t# Change default answer to true\r\n\t\t\tif not iIntTool:\r\n\t\t\t\tanswer = True\r\n\t\t\t\tbreak\r\n\t\t\telse:\r\n\t\t\t\tanswer = True\r\n\t\t\t\r\n\t\t\tfor j in range(len(iIntTool)):\r\n\t\t\t\tif IsCurve(iIntTool[j]):\r\n\t\t\t\t\tanswer = False\r\n\t\t\t\t\treturn answer\r\n\t\t\t\telse:\r\n\t\t\t\t\tcontinue\r\n\t\r\n\treturn answer\r\n\r\n\r\n# Sort a series of surfaces into groups divided by a list of splitting tools\r\nsrfs = IN[0]\t\t# surfaces after split operation\r\ntools = IN[1]\t\t# the splitting tools\r\nsrfGroups = []\r\n\r\n# Build an adjacency matrix\r\nadj = [[False]*len(srfs) for srf in srfs]\r\nfor i in range(len(srfs)):\r\n\tfor j in range(i+1, len(srfs)):\r\n\t\tif (BelongsWith(srfs[i], srfs[j], tools)):\r\n\t\t\tadj[i][j] = True\r\n\t\t\tadj[j][i] = True\t\t\r\n\r\n# Depth-first search: find all surfaces connected to the first available unconnected surface until no paths remain unexplored. Mark \r\nconnected = [False]*len(srfs)\r\nexhausted = [False]*len(srfs)\r\nnumFound = 0\r\ncounter = 0\r\n\r\n# Loop finds one full connected set of surfaces per iteration\r\nwhile(numFound < len(srfs)):\r\n\tnumConnected = 0\t\t\t\t# in this group\r\n\tnumExhausted = 0\t\t\t\t# in this group\r\n\tfoundOrder = []\t\t\t\t\t# trail of breadcrumbs (not incl loc)\r\n\tgroup = []\t\t\t\t\t\t# group of connected surfaces\r\n\tloc = 0\t\t\t\t\t\t\t# location of current search\r\n\t\r\n\t# Find first available root node\r\n\tfor i in range(len(srfs)):\r\n\t\tif (not connected[i]):\r\n\t\t\tconnected[i] = True\r\n\t\t\tloc = i\r\n\t\t\tnumFound += 1\t\t\t# found ever\r\n\t\t\tnumConnected = 1\t\t# part of this group\r\n\t\t\tgroup.append(srfs[i])\r\n\t\t\tbreak\r\n\t\r\n\t# Find all nodes connected to root node in the network\r\n\twhile (numExhausted < numConnected and numFound < len(srfs)):\r\n\t\tfor k in range(len(srfs)):\r\n\t\t\t# If found a new connection, make the jump to new loc\r\n\t\t\tif (adj[loc][k]) and (not connected[k]):\r\n\t\t\t\tfoundOrder.append(loc)\r\n\t\t\t\tnumFound += 1\r\n\t\t\t\tconnected[k] = True\r\n\t\t\t\tnumConnected += 1\r\n\t\t\t\tloc = k\r\n\t\t\t\tgroup.append(srfs[k])\r\n\t\t\t\tbreak\r\n\t\t\t\r\n\t\t\t# If no new connections, mark location as exhausted and jump backward\r\n\t\t\tif (k == (len(srfs)-1)):\r\n\t\t\t\texhausted[loc] = True\r\n\t\t\t\tnumExhausted += 1\r\n\t\t\t\tif (foundOrder):\r\n\t\t\t\t\tloc = foundOrder.pop()\r\n\t\t\t\tbreak\r\n\r\n\tsrfGroups.append(group)\r\n\r\n# Output\r\nOUT = srfGroups\r\n",
+      "VariableInputPorts": true,
+      "Id": "5dc6b3fbe8404f598d5098c0daafd4a6",
+      "Inputs": [
+        {
+          "Id": "6d51142f7c3f4c0181a55deefa8b2dd2",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "cad2375bdbfa4fc69c7e83e35261d45a",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4a8f85417e18479787ddffb38dd9e5dc",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.PolySurface.ByJoinedSurfaces@Autodesk.DesignScript.Geometry.Surface[]",
+      "Id": "ed26b634bd5a4545a8ac01d934b2e8b3",
+      "Inputs": [
+        {
+          "Id": "ea943b9cfc2c437b87f3e0ea1ff17fe4",
+          "Name": "surfaces",
+          "Description": "Surfaces to join into polysurface\n\nSurface[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "391b71b7b2134b04a468c04e64b4c0be",
+          "Name": "PolySurface",
+          "Description": "PolySurface",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Make Polysurface by joining surfaces.\n\nPolySurface.ByJoinedSurfaces (surfaces: Surface[]): PolySurface"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "surfaces;\ntools;",
+      "Id": "92dcdf4440ab4ea5904c4bbb544f8bfd",
+      "Inputs": [
+        {
+          "Id": "08c7008601f34aebac483d573bb85495",
+          "Name": "surfaces",
+          "Description": "surfaces",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9f04e1a02d944b028aef96ac5c7bceb0",
+          "Name": "tools",
+          "Description": "tools",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b000942292744559b81a954b07c7dae9",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "848bb37ce30a48f5b23768c763acaebf",
+          "Name": "",
+          "Description": "Value of expression at line 2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Flatten@var[]..[],int",
+      "Id": "0aaacf3d09cc4e35a44447cbf9c9afb6",
+      "Inputs": [
+        {
+          "Id": "f51b555e6e484357aa266a85506345d6",
+          "Name": "list",
+          "Description": "List to flatten.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9257072c23354793a602785182b31780",
+          "Name": "amt",
+          "Description": "Layers of nesting to remove.\n\nint\nDefault value : -1",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "44870193073e4f94a51e719919b82498",
+          "Name": "var[]..[]",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Flattens a nested list of lists by a certain amount.\n\nList.Flatten (list: var[]..[], amt: int = -1): var[]..[]"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.HigherOrder.Map, CoreNodeModels",
+      "NodeType": "ExtensionNode",
+      "Id": "3ad722842bdf452ba1f7e0b8132ff5da",
+      "Inputs": [
+        {
+          "Id": "f2166f94670e4cfe8aee79f88631284b",
+          "Name": "list",
+          "Description": "The list to map over.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fc692d55ca404095b4c3e4f39ef6267d",
+          "Name": "f(x)",
+          "Description": "The procedure used to map element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0944380e33df49ebb019a7cc62fce4ca",
+          "Name": "mapped",
+          "Description": "Mapped list",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Applies a function over all elements of a list, generating a new list from the results."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.PolySurface.Surfaces",
+      "Id": "2051119beb824ac49ef2c0e1fe494f9d",
+      "Inputs": [
+        {
+          "Id": "9970d09ec87548a185ab59d21f289c8e",
+          "Name": "polySurface",
+          "Description": "Autodesk.DesignScript.Geometry.PolySurface",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4ca1d9bae8f7447c8d1da2a081147b0f",
+          "Name": "Surface[]",
+          "Description": "Surface[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Return new Surfaces representing the underlying Surfaces.\n\nPolySurface.Surfaces ( ): Surface[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARpolySurface",
+        "TypeName": "Autodesk.DesignScript.Geometry.PolySurface",
+        "TypeRank": 0,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "efc980ee0f9644f0a20b081f6cd275d0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "27fc65c3e87141e8922cbce55e1f0a5e",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARpolySurface",
+      "Id": "a21a9ce23a3d451fa58bffbadd29f917",
+      "Inputs": [
+        {
+          "Id": "3f55dfa36345438e8f62cd75854f18ca",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARtools",
+        "TypeName": "var",
+        "TypeRank": 1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "3195f49bc9c34aedada1715f1ef70474",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a78ee6a41eeb4a3fa3c789d2d3969f94",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "58cf8aeb-5494-494d-ba07-47dfc357f03c",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "2d785fdaf2f34987ae95a3991a0936eb",
+      "Inputs": [
+        {
+          "Id": "3560f662f8804e6682e00ff322d9fe43",
+          "Name": "VARgeometry",
+          "Description": "var",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a6de5f61d84d427e9979bbb6bca6c842",
+          "Name": "VARtools",
+          "Description": "var[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "e0f82b3f25934078837931afb47c448c",
+          "Name": "VARgeometry",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Split one piece of geometry (other than a polysurface) by multiple tools"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "4a8f85417e18479787ddffb38dd9e5dc",
+      "End": "ea943b9cfc2c437b87f3e0ea1ff17fe4",
+      "Id": "aaefeb69a0514c0bb1a882cd80c6c3a0"
+    },
+    {
+      "Start": "391b71b7b2134b04a468c04e64b4c0be",
+      "End": "3f55dfa36345438e8f62cd75854f18ca",
+      "Id": "f9f659bde103455d8db387bc2b23271c"
+    },
+    {
+      "Start": "b000942292744559b81a954b07c7dae9",
+      "End": "6d51142f7c3f4c0181a55deefa8b2dd2",
+      "Id": "4b149455175b4eb6af7510712bc6c881"
+    },
+    {
+      "Start": "848bb37ce30a48f5b23768c763acaebf",
+      "End": "cad2375bdbfa4fc69c7e83e35261d45a",
+      "Id": "8735916f640a4af7bfaedd7dcc2795ef"
+    },
+    {
+      "Start": "44870193073e4f94a51e719919b82498",
+      "End": "08c7008601f34aebac483d573bb85495",
+      "Id": "6fa3bf29cc574daa9221668813a09948"
+    },
+    {
+      "Start": "0944380e33df49ebb019a7cc62fce4ca",
+      "End": "f51b555e6e484357aa266a85506345d6",
+      "Id": "c607d30b8d5042e68b315671d909c2b4"
+    },
+    {
+      "Start": "4ca1d9bae8f7447c8d1da2a081147b0f",
+      "End": "f2166f94670e4cfe8aee79f88631284b",
+      "Id": "0b60e045dee34b8ab1fe4b55e9e8ea61"
+    },
+    {
+      "Start": "27fc65c3e87141e8922cbce55e1f0a5e",
+      "End": "9970d09ec87548a185ab59d21f289c8e",
+      "Id": "5124667283ff4758b695f669a666d03b"
+    },
+    {
+      "Start": "a78ee6a41eeb4a3fa3c789d2d3969f94",
+      "End": "9f04e1a02d944b028aef96ac5c7bceb0",
+      "Id": "4334d6b763124a469d1d8949dcc63248"
+    },
+    {
+      "Start": "a78ee6a41eeb4a3fa3c789d2d3969f94",
+      "End": "a6de5f61d84d427e9979bbb6bca6c842",
+      "Id": "ecd9693f78154a6e8a8d954866b4ace7"
+    },
+    {
+      "Start": "e0f82b3f25934078837931afb47c448c",
+      "End": "fc692d55ca404095b4c3e4f39ef6267d",
+      "Id": "8d29f5931a4847c4a1cee81292e7d609"
+    }
+  ],
+  "Dependencies": [
+    "58cf8aeb-5494-494d-ba07-47dfc357f03c"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": false,
+        "Name": "Python Script",
+        "Id": "5dc6b3fbe8404f598d5098c0daafd4a6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1173.1167367774,
+        "Y": 217.196237156655
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "PolySurface.ByJoinedSurfaces",
+        "Id": "ed26b634bd5a4545a8ac01d934b2e8b3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1341.38820491736,
+        "Y": 218.17324275104
+      },
+      {
+        "ShowGeometry": false,
+        "Name": "Code Block",
+        "Id": "92dcdf4440ab4ea5904c4bbb544f8bfd",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 942.418994140124,
+        "Y": 221.801406152283
+      },
+      {
+        "ShowGeometry": false,
+        "Name": "List.Flatten",
+        "Id": "0aaacf3d09cc4e35a44447cbf9c9afb6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 771.058843480898,
+        "Y": 69.7278411904909
+      },
+      {
+        "ShowGeometry": false,
+        "Name": "List.Map",
+        "Id": "3ad722842bdf452ba1f7e0b8132ff5da",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 590.349270195107,
+        "Y": 69.405377725146
+      },
+      {
+        "ShowGeometry": false,
+        "Name": "PolySurface.Surfaces",
+        "Id": "2051119beb824ac49ef2c0e1fe494f9d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "efc980ee0f9644f0a20b081f6cd275d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -47.4945081177313,
+        "Y": 10.1423341064506
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "a21a9ce23a3d451fa58bffbadd29f917",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1660.96948092293,
+        "Y": 219.332454333252
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "3195f49bc9c34aedada1715f1ef70474",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -40.9277173225083,
+        "Y": 238.637196352972
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "AS.[&] Geometry.SplitByTools",
+        "Id": "2d785fdaf2f34987ae95a3991a0936eb",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 265.961650161924,
+        "Y": 169.883985526599
+      }
+    ],
+    "Annotations": [],
+    "X": 113.249174759047,
+    "Y": 173.090303743583,
+    "Zoom": 0.55178821158156
+  }
+}

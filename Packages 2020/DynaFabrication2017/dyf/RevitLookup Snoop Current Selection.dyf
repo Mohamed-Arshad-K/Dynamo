@@ -1,0 +1,117 @@
+<Workspace Version="1.0.0.1180" X="-421.6" Y="-43.2" zoom="1" Name="RevitLookup Snoop Current Selection" Description="Using RevitLookup, snoop Revit's current selection.  RevitLookup must be installed for this to work. If node doesnt work execute the button manualy and look in the journal file.  You will see something like this J    Jrn.RibbonEvent &quot;Execute external command:CustomCtrl_%CustomCtrl_%CustomCtrl_%Add-Ins%Revit Lookup%Options%Snoop Current Selection...:RevitLookup.CmdSnoopModScope&quot;. Take inbetween the first : and next : and put in string in node." ID="a025dda3-2483-45bf-a813-69986b21374a" Category="DynaFabrication2017.Util">
+  <NamespaceResolutionMap />
+  <Elements>
+    <CoreNodeModels.Input.StringInput guid="9560437a-3525-439a-9206-67baec6c0f3f" type="CoreNodeModels.Input.StringInput" nickname="String" x="815.687207457875" y="551.749668006839" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <System.String>CustomCtrl_%CustomCtrl_%CustomCtrl_%Add-Ins%Revit Lookup%Options%Snoop Current Selection...</System.String>
+      <System.String value="CustomCtrl_%CustomCtrl_%CustomCtrl_%Add-Ins%Revit Lookup%Options%Snoop Current Selection..." />
+    </CoreNodeModels.Input.StringInput>
+    <PythonNodeModels.PythonNode guid="56a9c2ec-c028-49c9-8eb1-7127cd6c9b1a" type="PythonNodeModels.PythonNode" nickname="External Command" x="1100.945100913" y="535.839757619886" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <Script>#Copyright(c) 2016, Nathan Chapman
+# nchapman@generalheating.com
+
+import clr
+clr.AddReference("RevitAPI")
+clr.AddReference('RevitAPIUI')
+import Autodesk
+from Autodesk.Revit.UI import RevitCommandId
+from Autodesk.Revit.UI import UIApplication
+from Autodesk.Revit.UI import ExternalCommandData
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+Doc = DocumentManager.Instance.CurrentDBDocument
+App =  DocumentManager.Instance.CurrentUIApplication
+
+ItmList = list()
+ItmList1 = list()
+Inpt = IN[0]
+Cnt = IN[1]
+
+if Cnt &gt; 0:
+	CmmdID= RevitCommandId.LookupCommandId(Inpt)
+	CmId = CmmdID.Id
+	App.PostCommand(CmmdID)
+	
+	ItmList.append(CmmdID)
+	ItmList1.append(CmId)
+else:
+	ItmList.append("No Item(s) selected")
+	ItmList1.append("No Item(s) selected")
+
+OUT = ItmList, ItmList1</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="775c21c0-7407-4498-8fdb-0d0fb0dbcfa9" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Count" x="992.69814380667" y="431.316673764377" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="BuiltIn" function="Count@var[]..[]" />
+    <PythonNodeModels.PythonNode guid="839cd521-e191-4a49-a1e6-542f8341416b" type="PythonNodeModels.PythonNode" nickname="Python Script" x="842.389428255895" y="423.498125253278" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="2">
+      <Script>#Copyright(c) 2016, Dimitar Venkov
+# @5devene, dimitar.ven@gmail.com
+#inspired by Julien Benoit @jbenoit44 
+#http://aecuandme.wordpress.com/
+
+import clr
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+doc = DocumentManager.Instance.CurrentDBDocument
+app = DocumentManager.Instance.CurrentUIApplication.Application
+uidoc=DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument
+
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import ElementId
+clr.AddReference("RevitAPIUI")
+from Autodesk.Revit.UI.Selection import *
+
+clr.AddReference("System")
+from System.Collections.Generic import List as cList
+
+def tolist(obj1):
+	if hasattr(obj1,"__iter__"): return obj1
+	else: return [obj1]
+
+elements = UnwrapElement(tolist(IN[0]))
+
+if "2014" in app.VersionName :
+	TransactionManager.Instance.EnsureInTransaction(doc)
+	sel1  = uidoc.Selection.Elements
+	for i in xrange(len(elements)): 
+		try:(sel1.Add(elements[i]))
+		except: pass
+	OUT = "%s elements selected in Revit." %sel1.Size
+	TransactionManager.Instance.TransactionTaskDone()
+else:
+	ids1 = []
+	for i in xrange(len(elements)):
+		try:(ids1.append(elements[i].Id))
+		except: pass
+	ids2 = cList[ElementId](ids1)
+	uidoc.Selection.SetElementIds(ids2)
+	OUT = "%s elements selected in Revit." %ids2.Count</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="d9a422dd-78e1-4ef8-94ce-fc3dd2ca5059" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="615.2" y="444.09617809081" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="reset:bool = true;" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="d45c6cef-89a3-46a0-b502-0eee0d88b533" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="681.16854959573" y="377.6" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="element" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="9560437a-3525-439a-9206-67baec6c0f3f" start_index="0" end="56a9c2ec-c028-49c9-8eb1-7127cd6c9b1a" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="775c21c0-7407-4498-8fdb-0d0fb0dbcfa9" start_index="0" end="56a9c2ec-c028-49c9-8eb1-7127cd6c9b1a" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="839cd521-e191-4a49-a1e6-542f8341416b" start_index="0" end="775c21c0-7407-4498-8fdb-0d0fb0dbcfa9" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d9a422dd-78e1-4ef8-94ce-fc3dd2ca5059" start_index="0" end="839cd521-e191-4a49-a1e6-542f8341416b" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="d45c6cef-89a3-46a0-b502-0eee0d88b533" start_index="0" end="839cd521-e191-4a49-a1e6-542f8341416b" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

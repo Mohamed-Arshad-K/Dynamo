@@ -1,0 +1,164 @@
+{
+  "Uuid": "eceb0728-0550-4ecd-b40b-6b2c966c78cf",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Plane",
+  "Description": "RemoveCoincidentPlanes",
+  "Name": "RemoveCoincidentPlanes",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\nfrom itertools import groupby\n\nfrom collections import defaultdict\n\nplanes=UnwrapElement(IN[0])\n\nplanes = list(set(planes))\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nnorms = []\nwantedplanes = []\nfor p in planes:\n\tnorms.append(p.Normal)\n\t\nclosest = []\nbigcount = 0\nfor n in norms:\n\tbigplane = planes[bigcount]\n\tbigcount += 1\n\ttmp = []\n\ttmp_plane = []\n\ttmp_close = []\n\tsmallcount = 0\n\tfor n2 in norms:\n\t\tsmallplane = planes[smallcount]\n\t\tangle = round(dg.Vector.AngleWithVector(n,n2),2)\n\t\tif angle == 0 or angle == 180:\n\t\t\ttmp.append(True)\n\t\t\tsmallorigin = smallplane.Origin\n\t\t\ttmp_close.append(smallorigin)\n\t\t\ttmp_plane.append(smallplane)\n\t\tsmallcount += 1\n\tif tmp.count(True) != 0 and len(tmp) != 0:\n\t\twantedplanes.append(tmp_plane)\n\t\tclosest.append(tmp_close)\n\nwantedplanesclean = []\nfor x in wantedplanes:\n    if x not in wantedplanesclean:\n        wantedplanesclean.append(x)\nwantedplanesclean = (wantedplanesclean)\n\nclosestclean = []\nfor x in closest:\n    if x not in closestclean:\n        closestclean.append(x)\nclosestclean = (closestclean)\n\ngoodstuff = []\nproblems = []\ncount = 0\nfor plist in wantedplanesclean:\n\tptmp = []\n\tgtmp = []\n\tfor pl in plist:\n\t\tclist = closestclean[count]\n\t\tyesorno = []\n\t\tfor c in clist:\n\t\t\tbestpoint = dg.Geometry.ClosestPointTo(pl,c)\n\t\t\tyesorno.append(dg.Geometry.IsAlmostEqualTo(c,bestpoint))\n\t\tif yesorno.count(True) != 1:\n\t\t\tptmp.append(pl)\n\t\telse:\n\t\t\tgtmp.append(pl)\n\tif len(ptmp) != 0:\n\t\tproblems.append(ptmp)\n\tif len(gtmp) != 0:\n\t\tgoodstuff.append(gtmp)\n\tcount += 1\n\n#Take X sort\ndef takeX(plane):\n    return plane.Origin.X\n\nintersects = []\nfor plist in problems:\n\ttmpall = []\n\tfor p in plist:\n\t\ttmp = []\n\t\texcluded = []\n\t\tfor p2 in plist:\n\t\t\tif dg.Geometry.DoesIntersect(p,p2) and p != p2:\n\t\t\t\ttmp.append([p,p2])\n\t\tflattened = list(set(flatten(tmp)))\n\t\tsortme = sorted(flattened, key=takeX)\n\t\tif len(sortme) != 0:\n\t\t\ttmpall.append(sortme)\n\tgrouped_things = defaultdict(list)\n\tif len(tmpall) != 0:\n\t\tfor thing in tmpall:\n\t\t    grouped_things[thing[0]].append(thing)\n\t\tfixedthings = []\n\t\tfor gthings in grouped_things:\n\t\t\tfixedthings.append(gthings)\n\t\tintersects.append(list(set(fixedthings)))\npureplanes = flatten([intersects + goodstuff])\nOUT = pureplanes",
+      "VariableInputPorts": true,
+      "Id": "e71c07f4bfaf4d52b629300c9d8bfa6b",
+      "Inputs": [
+        {
+          "Id": "868175b1cad14890a04201b64ccf4fb6",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0f800880656a472687a44e5b71ca1b4a",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPlanes",
+      "Id": "22fc0542156a485582ab4def0730e032",
+      "Inputs": [
+        {
+          "Id": "4a7e1c81509f4ab6b4153307887e1a10",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPlanes",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "54f60cc8ebfd47968867336583edac1b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "db385676c4f04bebab9029e16d1a3cee",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "0f800880656a472687a44e5b71ca1b4a",
+      "End": "4a7e1c81509f4ab6b4153307887e1a10",
+      "Id": "c3007e4fda584c658c9fc9947b2d45c8"
+    },
+    {
+      "Start": "db385676c4f04bebab9029e16d1a3cee",
+      "End": "868175b1cad14890a04201b64ccf4fb6",
+      "Id": "9cf3cfe332284c69920fb5321c11dc96"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "e71c07f4bfaf4d52b629300c9d8bfa6b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "22fc0542156a485582ab4def0730e032",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      },
+      {
+        "Id": "54f60cc8ebfd47968867336583edac1b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 36.4,
+        "Y": 19.2
+      }
+    ],
+    "Annotations": [],
+    "X": 75.1999999999999,
+    "Y": 132.0,
+    "Zoom": 1.0
+  }
+}

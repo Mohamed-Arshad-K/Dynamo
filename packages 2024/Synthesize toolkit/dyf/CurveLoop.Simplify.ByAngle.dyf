@@ -1,0 +1,264 @@
+{
+  "Uuid": "843ae87c-aa0d-4843-b806-2302b99cbade",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Lines",
+  "Description": "CurveLoop.Simplify.ByAngle",
+  "Name": "CurveLoop.Simplify.ByAngle",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\npolycurve=UnwrapElement(flatten(tolist(IN[0])))\nsafeangle = IN[1]\npolyonly = IN[2]\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\n# Create Empty List\nresult = []\n\ndef simplifypolycurve(polycurve,safeangle):\n\ttry:\n\t\texploded = dg.Geometry.Explode(polycurve)\n\t\tcount = 0\n\t\ttotalpts = []\n\t\tcurves = []\n\t\ttriggerlast = False\n\t\tfor exp in exploded:\n\t\t\tvec1 = dg.Curve.TangentAtParameter(exploded[count],0)\n\t\t\tvec2 = dg.Curve.TangentAtParameter(exploded[count - 1],1)\n\t\t\tangle = dg.Vector.AngleWithVector(vec1,vec2)\n\t\t\tnurbspts = exp.ToNurbsCurve().ControlPoints()\n\t\t\tif angle >= safeangle:\n\t\t\t\ttotalpts.append(nurbspts)\n\t\t\telse:\n\t\t\t\tif len(totalpts) == 0:\n\t\t\t\t\ttriggerlast = True\n\t\t\t\t\tstorelast = nurbspts\n\t\t\t\telse:\n\t\t\t\t\tlast_list = list(totalpts[-1])\n\t\t\t\t\tnurbspts = nurbspts[1:]\n\t\t\t\t\tfor n in nurbspts:\n\t\t\t\t\t\tlast_list.append(n)\n\t\t\t\t\ttotalpts[-1] = last_list\n\t\t\tcount += 1\n\t\tif triggerlast:\n\t\t\tlast_list = list(totalpts[-1])\n\t\t\tnurbspts = storelast[1:]\n\t\t\tfor n in nurbspts:\n\t\t\t\tlast_list.append(n)\n\t\t\ttotalpts[-1] = last_list\n\t\t\n\t\tfor total in totalpts:\n\t\t\tcurves.append(dg.NurbsCurve.ByControlPoints(total))\n\t\tjoinedcurve = dg.PolyCurve.ByJoinedCurves(curves)\n\texcept:\n\t\tif polyonly:\n\t\t\tif hasattr(polycurve, 'Curves'):\n\t\t\t\tjoinedcurve = [polycurve]\n\t\t\telse:\n\t\t\t\tjoinedcurve = [None]\n\t   \telse:\n\t   \t\tjoinedcurve = [None]\n\treturn joinedcurve\n\n\nresult = []\nfor poly in polycurve:\n\tpoly = simplifypolycurve(poly,safeangle)\n\tif polyonly:\n\t\tif poly != None:\n\t\t\tresult.append(poly)\n\telse:\n\t\tresult.append(poly)\n\n# Assign your output to the OUT variable.\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "c0a042fa4c0d438e936bf832209dc1e4",
+      "Inputs": [
+        {
+          "Id": "47a8b792138e4863b6ac98bcb4bb65ec",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fdc687122e31465aa4895195ef0fd9cb",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4ea9b5b773ab4debae0ab5bc5b59545b",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1992fa4b31ad4c44a9552943f3c4ca44",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARPolycurves",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "dc35d949d10c4be4a094ba4929922f36",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e4531b966ac94c6a8a785c79b5ebeb34",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSafeAngle",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "15",
+        "Description": ""
+      },
+      "Id": "e6d2d2072ef74e0b94ea58ff333a4715",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7d3390a3114b462a9d7b3039c0fc1fd4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPolycurves",
+      "Id": "33a714f5bae548f3ab68693acdc13b5b",
+      "Inputs": [
+        {
+          "Id": "c1d127d483464b3a91412386a662f6e1",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFilterPolyCurvesOnly",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "b86eb9996d404c7c93401bd4c269024f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e1df38618cf34fd8bdab7202b47b0364",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "1992fa4b31ad4c44a9552943f3c4ca44",
+      "End": "c1d127d483464b3a91412386a662f6e1",
+      "Id": "fc2c9463f93f49b2af80564b764ea118"
+    },
+    {
+      "Start": "e4531b966ac94c6a8a785c79b5ebeb34",
+      "End": "47a8b792138e4863b6ac98bcb4bb65ec",
+      "Id": "0ac34a837ad44bb0bf523067a28badea"
+    },
+    {
+      "Start": "7d3390a3114b462a9d7b3039c0fc1fd4",
+      "End": "fdc687122e31465aa4895195ef0fd9cb",
+      "Id": "d4cf6b89078f42a5b933657ac7f59241"
+    },
+    {
+      "Start": "e1df38618cf34fd8bdab7202b47b0364",
+      "End": "4ea9b5b773ab4debae0ab5bc5b59545b",
+      "Id": "7710f05a3f7f4df18a5082a2971409bf"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "c0a042fa4c0d438e936bf832209dc1e4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 303.6,
+        "Y": -0.800000000000011
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "dc35d949d10c4be4a094ba4929922f36",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "e6d2d2072ef74e0b94ea58ff333a4715",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -64.8,
+        "Y": 126.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "33a714f5bae548f3ab68693acdc13b5b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 503.4,
+        "Y": -0.800000000000011
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "b86eb9996d404c7c93401bd4c269024f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -90.4,
+        "Y": 222.0
+      }
+    ],
+    "Annotations": [],
+    "X": 189.542915724193,
+    "Y": 197.758447337714,
+    "Zoom": 0.803321593462598
+  }
+}

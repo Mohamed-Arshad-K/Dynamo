@@ -1,0 +1,209 @@
+{
+  "Uuid": "4903f75b-492f-4dc5-9c30-36dc1e178f96",
+  "IsCustomNode": true,
+  "Category": "PracticalBIM.GN",
+  "Description": "Gets the connected elements of an Element",
+  "Name": "GetConnectedElements",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "ConnectedElements",
+      "Id": "8012c02adaad481fafb379f0c5fac4d0",
+      "Inputs": [
+        {
+          "Id": "63dc05214abe4c259cc33c1d84862d4f",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "x[2];",
+      "Id": "f1a6083587a34edea31691fe32d3ae13",
+      "Inputs": [
+        {
+          "Id": "0656cd16544443999da4d61c3bd4de17",
+          "Name": "x",
+          "Description": "x",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "de9cf42093964fce8016a1fc84a98484",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "\nimport clr\nimport math\n\nclr.AddReference(\"RevitServices\")\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\ndoc = DocumentManager.Instance.CurrentDBDocument\n\nclr.AddReference(\"RevitAPI\")\nimport Autodesk\nfrom Autodesk.Revit.DB import *\n\nclr.AddReference(\"RevitNodes\")\nimport Revit\nclr.ImportExtensions(Revit.Elements)\nclr.ImportExtensions(Revit.GeometryConversion)\n#The inputs to this node will be stored as a list in the IN variables.\nif isinstance(IN[0], list):\n\tfittings = UnwrapElement(IN[0])\n\ttoggle = 0\nelse:\n\ttoggle = 1\n\tfittings = [UnwrapElement(IN[0])]\n\t\n\t\ndef getConnSysType(connector):\n\tdomain = connector.Domain\n\tif domain == Domain.DomainHvac:\n\t\treturn connector.DuctSystemType.ToString()\n\telif domain == Domain.DomainPiping:\n\t\treturn connector.PipeSystemType.ToString()\n\telif domain == Domain.DomainElectrical:\n\t\treturn connector.ElectricalSystemType.ToString()\n\telse:\n\t\treturn None\n\t\n\np = []\ndir = []\nfd = []\nref = []\nconns = []\ndescript = []\nH = []\nW = []\nR = []\nMEP = []\nSys = []\nShap = []\nsysClass = []\n\nfor fitting in fittings:\n\t\n\t\n\tpoints = []\n\tdirection = []\n\tflowdir = []\n\trefs = []\n\tconnlist = []\n\tdescription = []\n\theight = []\n\twidth = []\n\tradius = []\n\tMEPSystem = []\n\tsystemType = []\n\tshape = []\n\tsystemclass = []\n\t\n\ttry:\n\t\tconnectors = fitting.MEPModel.ConnectorManager.Connectors\n\texcept:\n\t\ttry:\n\t\t\tconnectors = fitting.ConnectorManager.Connectors\n\t\texcept:\t\t\t\n\t\t\tp.append(None)\n\t\t\tdir.append(None)\n\t\t\tfd.append(None)\n\t\t\tref.append(None)\n\t\t\tconns.append(None)\n\t\t\tdescript.append(None)\n\t\t\tH.append(None)\n\t\t\tW.append(None)\n\t\t\tR.append(None)\n\t\t\tShap.append(None)\n\t\t\tMEP.append(None)\n\t\t\tSys.append(None)\n\t\t\tsysClass.append(None)\n\t\t\tcontinue\n\tfor conn in connectors:\n\t\tconnlist.append(conn)\n\t\tdescription.append(conn.Description)\n\t\ttry:\n\t\t\theight.append(conn.Height)\n\t\t\twidth.append(conn.Width)\n\t\t\tradius.append(None)\n\t\texcept:\n\t\t\ttry:\n\t\t\t\tradius.append(conn.Radius)\n\t\t\t\theight.append(None)\n\t\t\t\twidth.append(None)\n\t\t\texcept:\n\t\t\t\tradius.append(None)\n\t\t\t\theight.append(None)\n\t\t\t\twidth.append(None)\n\t\tshape.append((conn.Shape).ToString())\n\t\t\n\t\ttry:\n\t\t\tMEPSystem.append(conn.MEPSystem.Name)\n\t\t\tsystype = doc.GetElement(conn.MEPSystem.GetTypeId())\n\t\t\tsystemType.append(systype)\t\t\t\n\t\texcept:\n\t\t\tMEPSystem.append(None)\n\t\t\tsystemType.append(None)\n\t\t\n\t\ttry:\t\t\n\t\t\tsystemclass.append(getConnSysType(conn))\n\t\texcept:\n\t\t\tsystemclass.append(None)\n\t\t\n\t\tpoints.append(conn.Origin.ToPoint())\n\t\tdirection.append(conn.CoordinateSystem.BasisZ.ToVector())\n\t\t\n\t\ttry:\n\t\t\tflowdir.append(conn.Direction.ToString())\n\t\texcept:\n\t\t\tflowdir.append(None)\n\t\tfor c in conn.AllRefs:\n\t\t\trefs.append(c.Owner)\n\tp.append(points)\n\tdir.append(direction)\n\tfd.append(flowdir)\n\tref.append(refs)\n\tconns.append(connlist)\n\tdescript.append(description)\n\tH.append(height)\n\tW.append(width)\n\tR.append(radius)\n\tMEP.append(MEPSystem)\n\tSys.append(systemType)\n\tShap.append(shape)\n\tsysClass.append(systemclass)\n\n\n#Assign your output to the OUT variable.\nif toggle:\n\tOUT = points, flowdir, refs, direction, connlist, description, height, width, radius, MEPSystem, systemType, shape, systemclass\nelse:\n\tOUT = p,fd,ref, dir, conns, descript, H, W, R, MEP, Sys, Shap, sysClass",
+      "VariableInputPorts": true,
+      "Id": "772258974d5d4866ab37615d0d5f4b32",
+      "Inputs": [
+        {
+          "Id": "aeac26e2e1b045658bb5e5dfe1ae08bc",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "5c0e7cf0a2fc40fdaa9b1b3e1e4a805d",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "Element",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "1bcf1518794449b4addd84904fdc107f",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "815614ef70a5476c93f9693eefab3165",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "de9cf42093964fce8016a1fc84a98484",
+      "End": "63dc05214abe4c259cc33c1d84862d4f",
+      "Id": "e44c7b6376834bfea102d0be47288472"
+    },
+    {
+      "Start": "5c0e7cf0a2fc40fdaa9b1b3e1e4a805d",
+      "End": "0656cd16544443999da4d61c3bd4de17",
+      "Id": "1ee0c1e3be674024bd124b7460517827"
+    },
+    {
+      "Start": "815614ef70a5476c93f9693eefab3165",
+      "End": "aeac26e2e1b045658bb5e5dfe1ae08bc",
+      "Id": "74ae23fa3e0749bc9b1f8f5955f8d8d9"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.2.1.5175",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 22.280407360285778,
+      "EyeY": 194.71678629354025,
+      "EyeZ": 29.897351419427082,
+      "LookX": 49.337842117409792,
+      "LookY": -38.088814815072908,
+      "LookZ": -38.285017585259283,
+      "UpX": 0.25721228089793025,
+      "UpY": 0.94551857559931707,
+      "UpZ": -0.19959074565701523
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "8012c02adaad481fafb379f0c5fac4d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 994.59362513127689,
+        "Y": 190.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Code Block",
+        "Id": "f1a6083587a34edea31691fe32d3ae13",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 737.21616985144453,
+        "Y": 186.51065527019955
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "772258974d5d4866ab37615d0d5f4b32",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 515.61688835106338,
+        "Y": 185.44297638163334
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "1bcf1518794449b4addd84904fdc107f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 337.0,
+        "Y": 219.72051756377505
+      }
+    ],
+    "Annotations": [],
+    "X": -170.5328845421397,
+    "Y": 100.63880919459135,
+    "Zoom": 0.69134779386718748
+  }
+}

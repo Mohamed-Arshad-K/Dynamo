@@ -1,0 +1,514 @@
+{
+  "Uuid": "906c3eb1-f7f0-49e0-be34-ad21bf5f9a02",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "K-Pattern Family",
+  "Name": "K-Pattern Family",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Proudly created by Karam Baki: karam@aecedx.com\n\n# Import crl\nimport clr\n\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\n\n# Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable Revit UI\nclr.AddReference(\"RevitAPIUI\")\nfrom Autodesk.Revit.UI import TaskDialog\n\n# Import os\nclr.AddReference(\"System\")\nimport System\nimport sys\nfrom System.Collections.Generic import *\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nimport os\nimport traceback\nimport random\nimport string\nimport re\n\n# Family Load Options Class\nclass FamOpt1(IFamilyLoadOptions):\n\tdef __init__(self):\n\t\tpass\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\n\t\toverwriteParameterValues.Value = True\n\t\treturn True\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\n\t\toverwriteParameterValues.Value = True\n\t\treturn True\n\n# Family Load Options Class - Without Overwriting Parameters\nclass FamOptWithout(IFamilyLoadOptions):\n\tdef __init__(self):\n\t\tpass\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\n\t\toverwriteParameterValues.Value = False\n\t\treturn True\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\n\t\toverwriteParameterValues.Value = False\n\t\treturn True\n\n# Simple Warning Swallow Class\nclass WarnSwallowSimple(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ndef docunique(doc,myList):\n\ttmplist = []\n\tfor m in myList:\n\t\tif m != \"\":\n\t\t\ttmplist.append(m)\n\tmyList = tmplist\n\tuniqueList = []\n\tfor item in myList :\n\t\titemExist = False\n\t\tfor x in uniqueList :\n\t\t\tif x == item :\n\t\t\t\titemExist = True\n\t\t\t\tbreak\n\t\tif not itemExist :\n\t\t\tuniqueList.append(item)\n\telemunique = []\n\tfor un in uniqueList:\n\t\telemunique.append(doc.GetElement(un))\n\treturn elemunique\n\n# Deactivate Refernce Lines\ndef batchdeactivaterefs(doc):\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttrans1 = Transaction(doc, 'Deactivating Reference Lines')\n\ttrans1.Start()\n\twarnhandle = WarnSwallowSimple()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\ttrans1.SetFailureHandlingOptions(foptions)\n\ttry:\n\t\treflines = [x for x in FilteredElementCollector(doc).OfClass(CurveElement).ToElements() if x.IsReferenceLine]\n\t\tfor r in reflines:\n\t\t\ttry:\n\t\t\t\tparam = r.LookupParameter(\"Reference\")\n\t\t\t\tcurrent = param.AsInteger()\n\t\t\t\tif current != 0:\n\t\t\t\t\tparam.Set(0)\n\t\t\texcept:\n\t\t\t\tpass\n\t\ttrans1.Commit()\n\t\treturn True\n\texcept:\n\t\ttrans1.Commit()\n\t\treturn False\n\ndef hasnested(doc):\n\tresult = [x for x in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements()]\n\tif len(result) != 0:\n\t\treturn True,result\n\telse:\n\t\treturn False,[]\n\ndef refmainOP(doc):\n\thasnest = hasnested(doc)\n\tif hasnest[0]:\n\t\tfamilies = []\n\t\tfor r in hasnest[1]:\n\t\t\tfamilies.append(r.Symbol.Family.Id)\n\t\tfamilies = docunique(doc,families)\n\t\tfor f in families:\n\t\t\tfamdoc = doc.EditFamily(f)\n\t\t\tbatchdeactivaterefs(famdoc)\n\t\t\trefLoopOP(famdoc)\n\t\t\tfamdoc.LoadFamily(doc,FamOptWithout())\n\t\t\tfamdoc.Close(False)\n\treturn True\n\ndef refLoopOP(doc):\n\thasnest = hasnested(doc)\n\tif hasnest[0]:\n\t\tfamilies = []\n\t\tfor r in hasnest[1]:\n\t\t\tfamilies.append(r.Symbol.Family.Id)\n\t\tfamilies = docunique(doc,families)\n\t\tfor f in families:\n\t\t\tfamdoc = doc.EditFamily(f)\n\t\t\tbatchdeactivaterefs(famdoc)\n\t\t\trefmainOP(famdoc)\n\t\t\tfamdoc.LoadFamily(doc,FamOptWithout())\n\t\t\tfamdoc.Close(False)\n\treturn True\n\n# Transfer Document Units\ndef transferunit(doc,famdoc):\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\tunit = famdoc.GetUnits()\n\t\tcurrectformat = doc.GetUnits().GetFormatOptions(UnitType.UT_Length)\n\t\taccuracy = currectformat.Accuracy\n\t\tunit.SetFormatOptions(UnitType.UT_Length,FormatOptions(currectformat.DisplayUnits,accuracy))\n\t\tfamdoc.SetUnits(unit)\n\telse:\n\t\tunit = famdoc.GetUnits()\n\t\tcurrectformat = doc.GetUnits().GetFormatOptions(SpecTypeId.Length)\n\t\tunit.SetFormatOptions(SpecTypeId.Length,currectformat)\n\t\tfamdoc.SetUnits(unit)\n\n# Deactivate Refernce Lines\ndef deactivaterefs(doc):\n\ttry:\n\t\treflines = [x for x in FilteredElementCollector(doc).OfClass(CurveElement).ToElements() if x.IsReferenceLine]\n\t\tfor r in reflines:\n\t\t\ttry:\n\t\t\t\tparam = r.LookupParameter(\"Reference\")\n\t\t\t\tcurrent = param.AsInteger()\n\t\t\t\tif current != 0:\n\t\t\t\t\tparam.Set(0)\n\t\t\texcept:\n\t\t\t\tpass\n\t\treturn True\n\texcept:\n\t\treturn False\n\n# Detect Upper Mid Point\ndef midupperpoint(doc,elem):\n\tdoc.Regenerate()\n\tbbox = elem.get_BoundingBox(None)\n\tminp = bbox.Min.ToPoint()\n\tmaxp = bbox.Max.ToPoint()\n\tfixedminp = dg.Point.ByCoordinates(minp.X,minp.Y,maxp.Z)\n\tmidP = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(maxp,fixedminp),0.5)\n\treturn midP\n\n# Detect Upper Mid Point\ndef middownerpoint(doc,elem):\n\tdoc.Regenerate()\n\tbbox = elem.get_BoundingBox(None)\n\tminp = bbox.Min.ToPoint()\n\tmaxp = bbox.Max.ToPoint()\n\tfixedmaxp = dg.Point.ByCoordinates(maxp.X,maxp.Y,minp.Z)\n\tmidP = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(fixedmaxp,minp),0.5)\n\treturn midP\n\n# Dump External Definition Create\ndef exdef(param_name,param_guid,param_type,uiapp):\n\tapp = uiapp.Application\n\toriginalfile = uiapp.Application.SharedParametersFilename\n\ttemp_path = System.IO.Path.GetTempPath()\n\ttemp_file = temp_path + \"Karam_Temp_Shared.txt\"\n\topen(temp_file, 'a').close()\n\tuiapp.Application.SharedParametersFilename = temp_file\n\tdefinition_file = app.OpenSharedParameterFile()\n\ttry:\n\t\tdefinition_file.Groups.Create(\"Karam Group\")\n\texcept:\n\t\tpass\n\tdefinition_groups = definition_file.Groups\n\tfor group in definition_groups:\n\t\tops = ExternalDefinitionCreationOptions(param_name, param_type)\n\t\tops.GUID = param_guid\n\t\ttry:\n\t\t\tgroup.Definitions.Create(ops)\n\t\texcept:\n\t\t\tpass\n\texdef = list(list(definition_groups)[0].Definitions)[0]\n\treturn exdef,originalfile,temp_file\n\n# Draw Invisible Line If Needed\ndef invline(doc,elem,autoheight,distance):\n\tif autoheight:\n\t\tp1 = midupperpoint(doc,elem)\n\t\tp1 = dg.Point.ByCoordinates(p1.X,p1.Y,p1.Z + distance/2.0)\n\t\tp2 = middownerpoint(doc,elem)\n\t\tp2 = dg.Point.ByCoordinates(p2.X,p2.Y,p2.Z - distance/2.0)\n\telse:\n\t\tp1 = midupperpoint(doc,elem)\n\t\tp2 = dg.Point.ByCoordinates(p1.X,p1.Y,distance/2.0)\n\t\tp1 = dg.Point.ByCoordinates(p1.X,p1.Y,-distance/2.0)\n\trevitline = Line.CreateBound(p1.ToXyz(),p2.ToXyz())\n\ttmp_plane = dg.Plane.ByOriginNormal(p1,dg.Vector.XAxis())\n\tskp = SketchPlane.Create(doc,tmp_plane.ToPlane())\n\tmodline = doc.FamilyCreate.NewModelCurve(revitline,skp)\n\tmodline.LineStyle = [x for x in FilteredElementCollector(doc).OfClass(GraphicsStyle) if x.Name.lower() == \"<invisible lines>\"][0]\n\treturn modline\n\n# Simple Flatten\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\n# Get Maximum Height In Family\ndef maxfamheight(projectdoc,famdoc,autoheight = True,safeheight = 0):\n\tif autoheight or safeheight == 0:\n\t\telements = []\n\t\tcollector = FilteredElementCollector(famdoc).WhereElementIsNotElementType().ToElements()\n\t\topt = Options()\n\t\tfor c in collector:\n\t\t\tif (c.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM) or c.get_Parameter(BuiltInParameter.ELEMENT_IS_CUTTING)) and \"line\" not in c.ToString().lower() and \"region\" not in c.ToString().lower() and \"curve\" not in c.ToString().lower():\n\t\t\t\ttry:\n\t\t\t\t\tif c.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM).AsInteger() == 0:\n\t\t\t\t\t\tcontinue\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\t\t\ttry:\n\t\t\t\t\tstatus = c.get_Parameter(BuiltInParameter.ELEMENT_IS_CUTTING).AsInteger()\n\t\t\t\t\tif status == 0:\n\t\t\t\t\t\telements.append(c)\n\t\t\t\texcept:\n\t\t\t\t\telements.append(c)\n\t\tif famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_HOSTING_BEHAVIOR).AsValueString() == \"Face\":\n\t\t\tcount = 0\n\t\t\tfor e in elements:\n\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Extrusion\":\n\t\t\t\t\telements.pop(count)\n\t\t\t\t\tbreak\n\t\t\t\tcount += 1\n\t\tresult = []\n\t\tminpts = []\n\t\tmaxpts = []\n\t\tpts = []\n\t\tpX = []\n\t\tpY = []\n\t\tpZ = []\n\t\tfor e in elements:\n\t\t\ttry:\n\t\t\t\tbb = e.get_BoundingBox(None)\n\t\t\t\tminp = bb.Min\n\t\t\t\tmaxp = bb.Max\n\t\t\t\ttmpP = []\n\t\t\t\ttmpP.append(minp)\n\t\t\t\ttmpP.append(maxp)\n\t\t\t\tpts.append(tmpP)\n\t\t\t\tfor p in tmpP:\n\t\t\t\t\tpX.append(p.X)\n\t\t\t\t\tpY.append(p.Y)\n\t\t\t\t\tpZ.append(p.Z)\n\t\t\texcept:\n\t\t\t\tpass\n\t\tMAX_X = max(pX)\n\t\tMAX_Y = max(pY)\n\t\tMAX_Z = max(pZ)\n\t\tMIN_Z = min(pZ)\n\t\tp1 = XYZ(MAX_X,MAX_Y,MAX_Z)\n\t\tp2 = XYZ(MAX_X,MAX_Y,MIN_Z)\n\t\tdistance = p2.DistanceTo(p1)\n\t\tif safeheight != 0:\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\t\tsafeheight = UnitUtils.ConvertToInternalUnits(safeheight,projectdoc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\n\t\t\telse:\n\t\t\t\tsafeheight = UnitUtils.ConvertToInternalUnits(safeheight,projectdoc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\t\t\treturn distance + safeheight\n\t\telse:\n\t\t\treturn distance\n\telse:\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\tdistance = UnitUtils.ConvertToInternalUnits(safeheight,projectdoc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\n\t\telse:\n\t\t\tdistance = UnitUtils.ConvertToInternalUnits(safeheight,projectdoc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\t\treturn distance\n\n# Get Family Instance Information\ndef getinstanceinfo(sourceinstance):\n\tfamily = sourceinstance.Symbol.Family\n\tfamilyname = family.Name\n\tfamtype = sourceinstance.Symbol\n\tfamtypename = sourceinstance.Symbol.GetParameters(\"Type Name\")[0].AsString()\n\treturn family,familyname,famtype,famtypename\n\n# Get ElementId or Value String\ndef bestparamvalue(famdoc,famtype,famparam):\n\tif famdoc == None and famtype == None:\n\t\tParamValueString = famparam.AsElementId()\n\t\tif ParamValueString.ToString() == \"-1\":\n\t\t\tstoragetype = str(famparam.StorageType)\n\t\t\ttry:\n\t\t\t\tif storagetype == \"Integer\":\n\t\t\t\t\tParamValueString = famparam.AsInteger()\n\t\t\t\telif storagetype == \"Double\":\n\t\t\t\t\tParamValueString = famparam.AsDouble()\n\t\t\t\telif storagetype == \"String\":\n\t\t\t\t\tParamValueString = famparam.AsString()\n\t\t\texcept:\n\t\t\t\tParamValueString = famparam.AsValueString()\n\t\telse:\n\t\t\ttry:\n\t\t\t\tParamValueString = famparam.AsValueString()\n\t\t\texcept:\n\t\t\t\tParamValueString = None\n\telse:\n\t\tParamValueString = famtype.AsElementId(famparam)\n\t\tif ParamValueString.ToString() == \"-1\":\n\t\t\tstoragetype = str(famparam.StorageType)\n\t\t\ttry:\n\t\t\t\tif storagetype == \"Integer\":\n\t\t\t\t\tParamValueString = famtype.AsInteger(famparam)\n\t\t\t\telif storagetype == \"Double\":\n\t\t\t\t\tParamValueString = famtype.AsDouble(famparam)\n\t\t\t\telif storagetype == \"String\":\n\t\t\t\t\tParamValueString = famtype.AsString(famparam)\n\t\t\texcept:\n\t\t\t\tParamValueString = famtype.AsValueString(famparam)\n\t\telse:\n\t\t\ttry:\n\t\t\t\tif famdoc != None:\n\t\t\t\t\tParamValueString = famdoc.GetElement(ParamValueString).Name\n\t\t\t\telse:\n\t\t\t\t\tParamValueString = famtype.AsValueString(famparam)\n\t\t\texcept:\n\t\t\t\tParamValueString = famtype.AsValueString(famparam)\n\treturn ParamValueString\n\n# Get/Create Wanted Family Type\ndef getfamtype(famdoc,famtypename = None):\n\talltypes = famdoc.FamilyManager.Types\n\tif len(list(alltypes)) == 1 or famtypename == None:\n\t\tfamtype = famdoc.FamilyManager.CurrentType\n\telif len(list(alltypes)) == 0 or famtypename == None:\n\t\tfamtype = famdoc.FamilyManager.NewType(famtypename)\n\t\tfamdoc.FamilyManager.CurrentType = famtype\n\telse:\n\t\tfor t in alltypes:\n\t\t\tif t.Name == famtypename:\n\t\t\t\tfamdoc.FamilyManager.CurrentType = t\n\t\t\t\tfamtype = t\n\t\t\t\tbreak\n\treturn famtype\n\n# Get Batch Family Parameters Information Function\ndef famparaminfo(famparam,famdoc,famtype = None,toconsiderinfo = None):\n\tif famtype == None:\n\t\tfamtype = famdoc.FamilyManager.CurrentType\n\tParamName = famparam.Definition.Name\n\tif toconsiderinfo != None:\n\t\tfor tocon in toconsiderinfo:\n\t\t\tif tocon[0] == ParamName:\n\t\t\t\ttry:\n\t\t\t\t\tfamdoc.FamilyManager.Set(famparam,tocon[1])\n\t\t\t\texcept:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tfamdoc.FamilyManager.SetValueString(famparam,tocon[1])\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\tis_shared = famparam.IsShared\n\t#if ParamName == \"Height\":\n\t#\tParamName = \"Height_Original\"\n\tParamValueString = bestparamvalue(famdoc,famtype,famparam)\n\tif ParamValueString == None:\n\t\ttry:\n\t\t\tParamValueString = famtype.AsString(famparam)\n\t\texcept:\n\t\t\tpass\n\tParamType = famparam.Definition.ParameterType\n\tBuiltinParam = famparam.Definition.BuiltInParameter\n\tBuiltinGroup = famparam.Definition.ParameterGroup\n\tis_instance = famparam.IsInstance\n\tif is_shared:\n\t\tguid = famparam.GUID\n\telse:\n\t\tguid = None\n\tformula = famparam.Formula\n\tif formula == None:\n\t\tis_formuladefined = False\n\telse:\n\t\tis_formuladefined = True\n\tif len(list(famparam.AssociatedParameters)):\n\t\tis_associated = True\n\telse:\n\t\tis_associated = False\n\treturn famparam,ParamValueString,ParamName,ParamType,BuiltinParam,BuiltinGroup,is_instance,is_shared,guid,formula,is_formuladefined,is_associated\n\n# Get Batch Family Parameter Information\ndef getparaminfo(projectdoc,famdoc,famtype = None,toconsiderinfo = None,autoheight = True,safeheight = 0):\n\tif famtype == None:\n\t\tfamtype = famdoc.FamilyManager.CurrentType\n\tallparams = list(famdoc.FamilyManager.GetParameters())\n\tinfo= []\n\tfor famparam in allparams:\n\t\tbatchinfo = famparaminfo(famparam,famdoc,famtype,toconsiderinfo)\n\t\tif str(batchinfo[3]) != \"LoadClassification\":\n\t\t\tinfo.append(batchinfo)\n\ttochecklater = []\n\tfor i in info:\n\t\tif i[9] != None:\n\t\t\tsplitted = i[9].Split(\" \")\n\t\t\ttochecklater.append(splitted)\n\ttochecklater = flatten(tochecklater)\n\timportant = []\n\tfor i in info:\n\t\tname = i[2]\n\t\tif name in tochecklater or i[7] == True or i[3].ToString() == \"Material\":\n\t\t\timportant.append(True)\n\t\telse:\n\t\t\timportant.append(False)\n\tnewinfo = []\n\tcount = 0\n\tfor im in important:\n\t\tcurrentinfo = info[count]\n\t\tcount += 1\n\t\ttmp = []\n\t\tif im:\n\t\t\tif currentinfo[9] == None:\n\t\t\t\t#status = \"Normal Importance\"\n\t\t\t\tstatus = True\n\t\t\telse:\n\t\t\t\t#status = \"Delayed Importance\"\n\t\t\t\tstatus = True\n\t\t\tfor i in currentinfo:\n\t\t\t\ttmp.append(i)\n\t\t\ttmp.append(status)\n\t\telse:\n\t\t\tfor i in currentinfo:\n\t\t\t\ttmp.append(i)\n\t\t\ttmp.append(False)\n\t\tnewinfo.append(tmp)\n\tcount = 0\n\tmaxheight = maxfamheight(projectdoc,famdoc,autoheight,safeheight)\n\tfor i in newinfo:\n\t\tif i[2] == \"Height\" and i[4].ToString() == \"RENDER_PLANT_HEIGHT\":\n\t\t\tfamdoc.FamilyManager.Set(i[0],maxheight)\n\t\t\tnewinfo[count][1] = famtype.AsDouble(i[0])\n\t\t\tbreak\n\t\tcount += 1\n\ttry: isfam_shared = famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).AsInteger()\n\texcept: isfam_shared = 0\n\ttry: isfam_workplane = famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).AsInteger()\n\texcept: isfam_workplane = 0\n\ttry: isfam_vertical = famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).AsInteger()\n\texcept: isfam_vertical = 0\n\ttry: isfam_cuts = famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).AsInteger()\n\texcept: isfam_cuts = 0\n\tfamdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(0)\n\treturn newinfo,isfam_shared,isfam_workplane,isfam_vertical,isfam_cuts,maxheight\n\n# Initial Family Instance Information\ndef initialop(projectdoc,sourceinstance,hostwidth,autoheight,safeheight):\n\tinitialinfo = getinstanceinfo(sourceinstance)\n\tfamily = initialinfo[0]\n\tfamilyname = initialinfo[1]\n\tprojectfamtype = initialinfo[2]\n\tfamtypename = initialinfo[3]\n\tinstanceparameters = sourceinstance.GetOrderedParameters()\n\tnamesandvalues = []\n\tfor ins in  instanceparameters:\n\t\tnamesandvalues.append([ins.Definition.Name,bestparamvalue(None,None,ins)])\n\tTransactionManager.Instance.ForceCloseTransaction()\n\tfamdoc = projectdoc.EditFamily(family)\n\t#refmainOP(famdoc)\n\ttrans1 = Transaction(famdoc, 'Set Initial Height Parameter')\n\ttrans1.Start()\n\twarnhandle = WarnSwallowSimple()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\ttrans1.SetFailureHandlingOptions(foptions)\n\t#deactivaterefs(famdoc)\n\tif famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_HOSTING_BEHAVIOR).AsValueString() == \"Ceiling\":\n\t\tisceiling = True\n\telse:\n\t\tisceiling = False\n\tif hostwidth != 0:\n\t\ttry:\n\t\t\tall_walls = list(FilteredElementCollector(famdoc).OfCategory(BuiltInCategory.OST_Walls).WhereElementIsElementType())\n\t\t\tall_floors = list(FilteredElementCollector(famdoc).OfCategory(BuiltInCategory.OST_Floors).WhereElementIsElementType())\n\t\t\tall_roofs = list(FilteredElementCollector(famdoc).OfCategory(BuiltInCategory.OST_Roofs).WhereElementIsElementType())\n\t\t\tall_ceilings = list(FilteredElementCollector(famdoc).OfCategory(BuiltInCategory.OST_Ceilings).WhereElementIsElementType())\n\t\t\thost_types = all_walls + all_floors + all_roofs + all_ceilings\n\t\t\tthecompound = CompoundStructure.CreateSingleLayerCompoundStructure(MaterialFunctionAssignment.Structure,hostwidth,FilteredElementCollector(famdoc).OfClass(Material).FirstElementId())\n\t\t\tfor host_type in host_types:\n\t\t\t\thost_type.SetCompoundStructure(thecompound)\n\t\texcept:\n\t\t\tpass\n\ttry:\n\t\ttwolevelheight = projectdoc.GetElement(sourceinstance.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_PARAM).AsElementId()).Elevation - projectdoc.GetElement(sourceinstance.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_PARAM).AsElementId()).Elevation + sourceinstance.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM).AsDouble() - sourceinstance.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM).AsDouble()\n\t\tall_levels = list(FilteredElementCollector(famdoc).OfCategory(BuiltInCategory.OST_Levels).WhereElementIsNotElementType())\n\t\tif twolevelheight != None and len(all_levels) > 1:\n\t\t\tall_levels[-1].Elevation = twolevelheight\n\texcept:\n\t\tpass\n\toriginalcat = famdoc.OwnerFamily.FamilyCategory.Name\n\tfamtype = getfamtype(famdoc,famtypename)\n\tallinfo = getparaminfo(projectdoc,famdoc,famtype,namesandvalues,autoheight,safeheight)\n\ttrans1.Commit()\n\tparaminfo = allinfo[0]\n\tisfam_shared = allinfo[1]\n\tisfam_workplane = allinfo[2]\n\tisfam_vertical = allinfo[3]\n\tisfam_cuts = allinfo[4]\n\tmaxheight = allinfo[5]\n\ttypemark = projectfamtype.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_MARK).AsString()\n\tresultname = \"K-Rigged\" + separator + familyname + separator + famtypename\n\treturn resultname,famdoc,paraminfo,isfam_shared,isfam_workplane,isfam_vertical,isfam_cuts,maxheight,originalcat,famtypename,typemark,isceiling\n\n# Create New Family\ndef createfamily(fam_path,doc,uiapp,famname,famcategory,isShared,isWorkplane,isVertical,isCuts,maxheight,paraminfo,instance,initial):\n\tsave_path = '%s%s.rfa' % (temp_path, re.sub(r'[\\\\/*?:\"<>|]',\"\",famname))\n\tfamdoc = doc.Application.NewFamilyDocument(fam_path)\n\ttry:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(famdoc, 'New ' + famname + ' Family')\n\t\ttrans1.Start()\n\t\twarnhandle = WarnSwallowSimple()\n\t\tfoptions = trans1.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\ttrans1.SetFailureHandlingOptions(foptions)\n\t\tfam_cat = famdoc.Settings.Categories.get_Item(famcategory)\n\t\tfamdoc.OwnerFamily.FamilyCategory = fam_cat\n\t\ttry:\n\t\t\tfamtype = famdoc.FamilyManager.NewType(famname)\n\t\t\tfamdoc.FamilyManager.CurrentType = famtype\n\t\texcept:\n\t\t\tpass\n\t\tfor p in paraminfo:\n\t\t\ttry:\n\t\t\t\tif p[2] != \"Height_Scale\":\n\t\t\t\t\tinstatus = p[6]\n\t\t\t\telse:\n\t\t\t\t\tinstatus = instance\n\t\t\t\tif p[7] == True:\n\t\t\t\t\texternaldefOP = exdef(p[2],p[8],p[3],uiapp)\n\t\t\t\t\texternaldef = externaldefOP[0]\n\t\t\t\t\ttry:\n\t\t\t\t\t\tfreshparam = famdoc.FamilyManager.AddParameter(externaldef,p[5],instatus)\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\t\tuiapp.Application.SharedParametersFilename = externaldefOP[1]\n\t\t\t\t\tos.remove(externaldefOP[2])\n\t\t\t\telse:\n\t\t\t\t\tfreshparam = famdoc.FamilyManager.AddParameter(p[2],p[5],p[3],instatus)\n\t\t\texcept:\n\t\t\t\tpass\n\t\t\tif p[2] == \"Height\" and (initial == \"First\" or initial == \"Second\"):\n\t\t\t\tfreshparam = famdoc.FamilyManager.AddParameter(\"Height_Original\",p[5],p[3],p[6])\n\t\t\t\tif p[1] != None:\n\t\t\t\t\tfamdoc.FamilyManager.Set(freshparam,p[1])\n\t\tif famcategory != \"Planting\":\n\t\t\ttry:\n\t\t\t\tfamdoc.FamilyManager.AddParameter(\"Height_Scale\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Length,instance)\n\t\t\texcept:\n\t\t\t\tpass\n\t\tparms = famdoc.FamilyManager.GetParameters()\n\t\tfor epms in parms:\n\t\t\tpname = epms.Definition.Name\n\t\t\tif (pname == \"Height\" and famcategory == \"Planting\") or pname == \"Height_Scale\":\n\t\t\t\tfamdoc.FamilyManager.Set(epms, maxheight)\n\t\tif isShared == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(0)\n\t\t\texcept:pass\n\t\tif isWorkplane == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(0)\n\t\t\texcept:pass\n\t\tif isVertical == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(0)\n\t\t\texcept:pass\n\t\tif isCuts == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).Set(0)\n\t\t\texcept:pass\n\t\ttrans1.Commit()\n\t\tfamdoc.SaveAs(save_path, SaveAsOpt)\n\t\tloaded = famdoc\n\texcept:\n\t\ttry:\n\t\t\ttrans1.Commit()\n\t\texcept:\n\t\t\tpass\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:famdoc.Close(False)\n\t\texcept:pass\n\t\ttry:doc.Close(False)\n\t\texcept:pass\n\t\ttry:System.IO.File.Delete(save_path)\n\t\texcept:pass\n\t\tloaded = None\n\treturn loaded,save_path\n\n# Load Family\ndef loadOP(famdoc,doc,save_path,famtypename,paraminfo,initial,forceworkplane,isceiling,autoheight,safeheight):\n\ttry:\n\t\tif famdoc != None and doc != None:\n\t\t\tloaded = famdoc.LoadFamily(doc,FamOpt1())\n\t\t\tsymbols = loaded.GetFamilySymbolIds().GetEnumerator()\n\t\t\tif famtypename != None:\n\t\t\t\tfor t in symbols:\n\t\t\t\t\ttelem = doc.GetElement(t)\n\t\t\t\t\ttypename = telem.GetParameters(\"Type Name\")[0].AsString()\n\t\t\t\t\tif typename == famtypename:\n\t\t\t\t\t\tsymbol1 = doc.GetElement(t)\n\t\t\telse:\n\t\t\t\tsymbols.MoveNext()\n\t\t\t\tsymbol1 = doc.GetElement(symbols.Current)\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\t\ttrans1 = Transaction(doc, 'Placing Family')\n\t\t\ttrans1.Start()\n\t\t\twarnhandle = WarnSwallowSimple()\n\t\t\tfoptions = trans1.GetFailureHandlingOptions()\n\t\t\tfoptions.SetFailuresPreprocessor(warnhandle)\n\t\t\ttrans1.SetFailureHandlingOptions(foptions)\n\t\t\tif forceworkplane == True and ((initial == \"Second\" and isceiling) or initial == \"Last\"):\n\t\t\t\ttry:doc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(1)\n\t\t\t\texcept:pass\n\t\t\tif forceworkplane == True and initial == \"Last\":\n\t\t\t\ttry:doc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(0)\n\t\t\t\texcept:pass\n\t\t\tif not symbol1.IsActive: symbol1.Activate()\n\t\t\tnewlyplaced = False\n\t\t\ttry:\n\t\t\t\tif forceworkplane == True and (initial == \"Last\"):\n\t\t\t\t\tfirstlevel = doc.GetElement(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Levels).WhereElementIsNotElementType().FirstElementId())\n\t\t\t\t\tnewinstace = doc.FamilyCreate.NewFamilyInstance(Reference(firstlevel), XYZ.Zero, XYZ.Zero, symbol1)\n\t\t\t\telse:\n\t\t\t\t\tnewinstace = doc.FamilyCreate.NewFamilyInstance(XYZ.Zero, symbol1, Structure.StructuralType.NonStructural)\n\t\t\t\tnewlyplaced = True\n\t\t\texcept:\n\t\t\t\ttry:\n\t\t\t\t\tfirstlevel = doc.GetElement(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Levels).WhereElementIsNotElementType().FirstElementId())\n\t\t\t\t\tnewinstace = doc.FamilyCreate.NewFamilyInstance(XYZ.Zero, symbol1, firstlevel, Structure.StructuralType.NonStructural)\n\t\t\t\texcept:\n\t\t\t\t\tnewinstace = doc.GetElement(FilteredElementCollector(doc).OfCategoryId(symbol1.Category.Id).WhereElementIsNotElementType().FirstElementId())\n\t\t\t\tnewlyplaced = True\n\t\t\tif forceworkplane == True and newlyplaced and initial == \"Second\":\n\t\t\t\tnewinstace.Location.Point = XYZ(0,0,0)\n\t\t\t\tdoc.Regenerate()\n\t\t\t\tnewpoint = midbottompointreversed(newinstace)\n\t\t\t\tnewX = newpoint.X\n\t\t\t\tnewY = newpoint.Y\n\t\t\t\texistedP = newinstace.Location.Point\n\t\t\t\texistZ = existedP.Z\n\t\t\t\tnewlocation  = XYZ(newX,newY,existZ)\n\t\t\t\tnewinstace.Location.Point = newlocation\n\t\t\t#if forceworkplane == True and newlyplaced and initial == \"Last\":\n\t\t\t#\tnewinstace.IsWorkPlaneFlipped = True\n\t\t\tif newlyplaced and initial == \"First\" and safeheight != 0:\n\t\t\t\tinvline(doc,newinstace,autoheight,safeheight)\n\t\t\tfamtypeparams = list(symbol1.GetOrderedParameters()) + list(newinstace.GetOrderedParameters())\n\t\t\tallparams = list(doc.FamilyManager.GetParameters())\n\t\t\tfor elemparm in famtypeparams:\n\t\t\t\tfor famparam in allparams:\n\t\t\t\t\tif (elemparm.Definition.Name == \"Height\" and famparam.Definition.Name == \"Height_Original\" and initial == \"First\") or (elemparm.Definition.Name == famparam.Definition.Name and initial == \"Second\") or (elemparm.Definition.Name == famparam.Definition.Name and famparam.Definition.Name != \"Height\" and famparam.Definition.Name != \"Height_Original\" and initial == \"First\") or (elemparm.Definition.Name == \"Height_Original\" and famparam.Definition.Name == \"Height\" and initial == \"Last\") or (elemparm.Definition.Name == \"Height\" and famparam.Definition.Name == \"Height_Scale\" and initial == \"Last\") or (elemparm.Definition.Name == famparam.Definition.Name and elemparm.Definition.Name != \"Height\" and elemparm.Definition.Name != \"Height_Original\" and initial == \"Last\"):\n\t\t\t\t\t\tfor p in paraminfo:\n\t\t\t\t\t\t\tif p[2] == famparam.Definition.Name:\n\t\t\t\t\t\t\t\tif p[3].ToString() == \"Material\":\n\t\t\t\t\t\t\t\t\tmat_fec = FilteredElementCollector(doc).OfClass(Material)\n\t\t\t\t\t\t\t\t\tfor m in mat_fec:\n\t\t\t\t\t\t\t\t\t\tif m.Name.lower() == str(p[1]).lower():\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.Set(famparam,m.Id)\n\t\t\t\t\t\t\t\telse:\n\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.Set(famparam,p[1])\n\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.SetValueString(famparam,p[1])\n\t\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\t\tpass\n\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\tif p[10]:\n\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.SetFormula(famparam,p[9])\n\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\tpass\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(elemparm,famparam)\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\ttrans1.Commit()\n\t\t\tfamdoc.Close(False)\n\t\t\tif save_path != None:\n\t\t\t\tSystem.IO.File.Delete(save_path)\n\t\t\treturn \"Loaded\"\n\t\telse:\n\t\t\treturn \"ERROR\"\n\texcept:\n\t\ttry:\n\t\t\ttrans1.Commit()\n\t\texcept:\n\t\t\tpass\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:famdoc.Close(False)\n\t\texcept:pass\n\t\tif save_path != None:\n\t\t\tSystem.IO.File.Delete(save_path)\n\t\treturn \"ERROR\"\n\n\n# Detect Bottom Mid Point\ndef midbottompoint(elem):\n\tbigbound = elem.get_BoundingBox(None)\n\tminp = bigbound.Min.ToPoint()\n\tmaxp = bigbound.Max.ToPoint()\n\tmaxpX = maxp.X\n\tmaxpY = maxp.Y\n\tfixedmaxp = dg.Point.ByCoordinates(maxpX,maxpY,minp.Z)\n\tmidP = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minp,fixedmaxp),0.5)\n\treturn midP.ToXyz()\n\n# Detect Bottom Mid Point Reversed\ndef midbottompointreversed(elem):\n\tbigbound = elem.get_BoundingBox(None)\n\tminp = bigbound.Min.ToPoint()\n\tmaxp = bigbound.Max.ToPoint()\n\tmaxpX = maxp.X\n\tmaxpY = maxp.Y\n\tfixedmaxp = dg.Point.ByCoordinates(maxpX,maxpY,minp.Z)\n\tmidP = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minp,fixedmaxp),0.5)\n\tnewmidP = dg.Point.ByCoordinates(-midP.X,-midP.Y,minp.Z)\n\treturn newmidP.ToXyz()\n\ndef initialfamily(fam_path,doc,famname,famcategory,isShared,isWorkplane,isVertical):\n\tsave_path = '%s%s.rfa' % (temp_path, re.sub(r'[\\\\/*?:\"<>|]',\"\",famname))\n\tfamdoc = doc.Application.NewFamilyDocument(fam_path)\n\ttry:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(famdoc, 'New ' + famname + ' Family')\n\t\ttrans1.Start()\n\t\ttransferunit(doc,famdoc)\n\t\tfam_cat = famdoc.Settings.Categories.get_Item(famcategory)\n\t\tfamdoc.OwnerFamily.FamilyCategory = fam_cat\n\t\ttry:\n\t\t\tfamtype = famdoc.FamilyManager.NewType(famname)\n\t\t\tfamdoc.FamilyManager.CurrentType = famtype\n\t\texcept:\n\t\t\tpass\n\t\tif isShared == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(0)\n\t\t\texcept:pass\n\t\tif isWorkplane == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(0)\n\t\t\texcept:pass\n\t\tif isVertical == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(0)\n\t\t\texcept:pass\n\t\ttrans1.Commit()\n\t\tfamdoc.SaveAs(save_path, SaveAsOpt)\n\texcept:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:famdoc.Close(False)\n\t\texcept:pass\n\t\ttry:System.IO.File.Delete(save_path)\n\t\texcept:pass\n\t\tfamdoc = None\n\treturn famdoc,save_path\n\ndef adaptjob(adaptfamdoc):\n\tfamtype = [x for x in FilteredElementCollector(adaptfamdoc).OfClass(FamilySymbol).ToElements() if \"k-rigged\" in x.FamilyName.lower()][0]\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttrans1 = Transaction(adaptfamdoc, 'Working in Adaptive Family')\n\ttrans1.Start()\n\tif not famtype.IsActive: famtype.Activate()\n\tpt = adaptfamdoc.FamilyCreate.NewReferencePoint(XYZ.Zero)\n\tpar = pt.LookupParameter(\"Point\").Set(1)\n\tplane = pt.GetCoordinatePlaneReferenceYZ()\n\tnewinstance = adaptfamdoc.FamilyCreate.NewFamilyInstance(plane,XYZ(0,0,0),XYZ(0,0,1),famtype)\n\ttrans1.Commit()\n\treturn newinstance\n\n# Get Batch Family Parameters Information Function\ndef famparaminfo_2(famparam,famdoc,famtype = None):\n\tif famtype == None:\n\t\tfamtype = famdoc.FamilyManager.CurrentType\n\tParamName = famparam.Definition.Name\n\tis_shared = famparam.IsShared\n\tParamValueString = bestparamvalue(famdoc,famtype,famparam)\n\tif ParamValueString == None:\n\t\ttry:\n\t\t\tParamValueString = famtype.AsString(famparam)\n\t\texcept:\n\t\t\tpass\n\tParamType = famparam.Definition.ParameterType\n\tBuiltinParam = famparam.Definition.BuiltInParameter\n\tBuiltinGroup = famparam.Definition.ParameterGroup\n\tis_instance = famparam.IsInstance\n\tif is_shared:\n\t\tguid = famparam.GUID\n\telse:\n\t\tguid = None\n\tformula = famparam.Formula\n\tif formula == None:\n\t\tis_formuladefined = False\n\telse:\n\t\tis_formuladefined = True\n\tif len(list(famparam.AssociatedParameters)):\n\t\tis_associated = True\n\telse:\n\t\tis_associated = False\n\treturn famparam,ParamValueString,ParamName,ParamType,BuiltinParam,BuiltinGroup,is_instance,is_shared,guid,formula,is_formuladefined,is_associated\n\n# Get Batch Family Parameter Information\ndef getparaminfo_2(famdoc,famtype = None):\n\tif famtype == None:\n\t\tfamtype = famdoc.FamilyManager.CurrentType\n\tallparams = list(famdoc.FamilyManager.GetParameters())\n\tinfo= []\n\tfor famparam in allparams:\n\t\tbatchinfo = famparaminfo_2(famparam,famdoc,famtype)\n\t\tif str(batchinfo[3]) != \"LoadClassification\":\n\t\t\tinfo.append(batchinfo)\n\ttochecklater = []\n\tfor i in info:\n\t\tif i[9] != None:\n\t\t\tsplitted = i[9].Split(\" \")\n\t\t\ttochecklater.append(splitted)\n\ttochecklater = flatten(tochecklater)\n\timportant = []\n\tfor i in info:\n\t\tname = i[2]\n\t\tif name in tochecklater or i[7] == True or i[3].ToString() == \"Material\":\n\t\t\timportant.append(True)\n\t\telse:\n\t\t\timportant.append(False)\n\tnewinfo = []\n\tcount = 0\n\tfor im in important:\n\t\tcurrentinfo = info[count]\n\t\tcount += 1\n\t\ttmp = []\n\t\tif im:\n\t\t\tif currentinfo[9] == None:\n\t\t\t\t#status = \"Normal Importance\"\n\t\t\t\tstatus = True\n\t\t\telse:\n\t\t\t\t#status = \"Delayed Importance\"\n\t\t\t\tstatus = True\n\t\t\tfor i in currentinfo:\n\t\t\t\ttmp.append(i)\n\t\t\ttmp.append(status)\n\t\telse:\n\t\t\tfor i in currentinfo:\n\t\t\t\ttmp.append(i)\n\t\t\ttmp.append(False)\n\t\tnewinfo.append(tmp)\n\treturn newinfo\n\n# Create New Family\ndef creatparameters(famdoc,uiapp,paraminfos,famtypenames,famcategory,name):\n\ttry:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(famdoc, 'Auto Create Types & Parameters')\n\t\ttrans1.Start()\n\t\ttry:\n\t\t\tfam_cat = famdoc.Settings.Categories.get_Item(famcategory)\n\t\t\tfamdoc.OwnerFamily.FamilyCategory = fam_cat\n\t\texcept:\n\t\t\tfam_cat = famdoc.Settings.Categories.get_Item(\"Generic Models\")\n\t\t\tfamdoc.OwnerFamily.FamilyCategory = fam_cat\n\t\tbigcount = 0\n\t\tfor famtypename in famtypenames:\n\t\t\tparaminfo = paraminfos[bigcount]\n\t\t\tbigcount += 1\n\t\t\ttry:\n\t\t\t\tif name == None:\n\t\t\t\t\tfamtype = famdoc.FamilyManager.NewType(\"Adaptive\" + separator + famtypename)\n\t\t\t\telse:\n\t\t\t\t\tfamtype = famdoc.FamilyManager.NewType(name)\n\t\t\t\tfamdoc.FamilyManager.CurrentType = famtype\n\t\t\texcept:\n\t\t\t\tpass\n\t\t\tfor p in paraminfo:\n\t\t\t\ttry:\n\t\t\t\t\tinstatus = p[6]\n\t\t\t\t\tif p[7] == True:\n\t\t\t\t\t\texternaldefOP = exdef(p[2],p[8],p[3],uiapp)\n\t\t\t\t\t\texternaldef = externaldefOP[0]\n\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\tfreshparam = famdoc.FamilyManager.AddParameter(externaldef,p[5],instatus)\n\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\tpass\n\t\t\t\t\t\tuiapp.Application.SharedParametersFilename = externaldefOP[1]\n\t\t\t\t\t\tos.remove(externaldefOP[2])\n\t\t\t\t\telse:\n\t\t\t\t\t\tfreshparam = famdoc.FamilyManager.AddParameter(p[2],p[5],p[3],instatus)\n\t\t\t\texcept:\n\t\t\t\t\tpass\n\t\ttrans1.Commit()\n\t\tloaded = famdoc\n\texcept:\n\t\ttry:trans1.Commit()\n\t\texcept:pass\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:famdoc.Close(False)\n\t\texcept:pass\n\t\tloaded = None\n\treturn loaded\n\n# Load Family\ndef associateOP(famdoc,doc,famtypenames,paraminfos,newinstace):\n\ttry:\n\t\tif famdoc != None and doc != None:\n\t\t\tbigcount = 0\n\t\t\tsymbols = newinstace.Symbol.Family.GetFamilySymbolIds().GetEnumerator()\n\t\t\tsymbol1s = []\n\t\t\tfor s in symbols:\n\t\t\t\tsymbol1s.append(doc.GetElement(s))\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\t\ttrans1 = Transaction(doc, 'Auto Associate Parameters')\n\t\t\ttrans1.Start()\n\t\t\tfor symbol1 in symbol1s:\n\t\t\t\tfamtypename = famtypenames[bigcount]\n\t\t\t\tparaminfo = paraminfos[bigcount]\n\t\t\t\tbigcount += 1\n\t\t\t\tif not symbol1.IsActive: symbol1.Activate()\n\t\t\t\tcurrent_type = getfamtype(doc,famtypename)\n\t\t\t\tfamtypeparams = list(symbol1.GetOrderedParameters()) + list(newinstace.GetOrderedParameters())\n\t\t\t\tallparams = list(doc.FamilyManager.GetParameters())\n\t\t\t\tfor elemparm in famtypeparams:\n\t\t\t\t\tfor famparam in allparams:\n\t\t\t\t\t\tif (elemparm.Definition.Name == famparam.Definition.Name):\n\t\t\t\t\t\t\tfor p in paraminfo:\n\t\t\t\t\t\t\t\tif p[2] == famparam.Definition.Name:\n\t\t\t\t\t\t\t\t\tif p[3].ToString() == \"Material\":\n\t\t\t\t\t\t\t\t\t\tmat_fec = FilteredElementCollector(doc).OfClass(Material)\n\t\t\t\t\t\t\t\t\t\tfor m in mat_fec:\n\t\t\t\t\t\t\t\t\t\t\tif m.Name.lower() == str(p[1]).lower():\n\t\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.Set(famparam,m.Id)\n\t\t\t\t\t\t\t\t\telse:\n\t\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.Set(famparam,p[1])\n\t\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.SetValueString(famparam,p[1])\n\t\t\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\t\t\tpass\n\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\tif p[10]:\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.SetFormula(famparam,p[9])\n\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\tpass\n\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(elemparm,famparam)\n\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\tpass\n\t\t\ttrans1.Commit()\n\t\t\tfamdoc.Close(False)\n\t\t\treturn \"SUCCESS\"\n\t\telse:\n\t\t\treturn \"ERROR\"\n\texcept:\n\t\ttry:trans1.Commit()\n\t\texcept:pass\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:famdoc.Close(False)\n\t\texcept:pass\n\t\treturn \"ERROR\"\n\n# Get Family Instance Information\ndef getinstanceinfo_2(doc,sourceinstance):\n\tfamily = sourceinstance.Symbol.Family\n\tfamilyname = family.Name\n\ttypesids = family.GetFamilySymbolIds()\n\tfamtypes = []\n\tfamtypenames = []\n\tfor id in typesids:\n\t\tftype = doc.GetElement(id)\n\t\tfamtypes.append(ftype)\n\t\tfamtypenames.append(ftype.GetParameters(\"Type Name\")[0].AsString())\n\treturn family,familyname,famtypes,famtypenames\n\n# Initial Family Instance Information\ndef initialop_2(projectdoc,sourceinstance):\n\tinitialinfo = getinstanceinfo_2(projectdoc,sourceinstance)\n\tfamily = initialinfo[0]\n\tfamilyname = initialinfo[1]\n\tprojectfamtypes = initialinfo[2]\n\tfamtypenames = initialinfo[3]\n\tinstanceparameters = sourceinstance.GetOrderedParameters()\n\tTransactionManager.Instance.ForceCloseTransaction()\n\tfamdoc = projectdoc.EditFamily(family)\n\ttrans1 = Transaction(famdoc, 'Initial Operation')\n\ttrans1.Start()\n\twarnhandle = WarnSwallowSimple()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\ttrans1.SetFailureHandlingOptions(foptions)\n\toriginalcat = famdoc.OwnerFamily.FamilyCategory.Name\n\tallinfos = []\n\tparaminfos = []\n\tfor famtypename in famtypenames:\n\t\tfamtype = getfamtype(famdoc,famtypename)\n\t\tallinfo = getparaminfo_2(famdoc,famtype)\n\t\tparaminfos.append(allinfo)\n\ttrans1.Commit()\n\ttmpfamtypenames = []\n\tfor f in famtypenames:\n\t\ttmpfamtypenames.append(f)\n\tfamtypenames = tmpfamtypenames\n\treturn famdoc,paraminfos,originalcat,famtypenames\n\ndef ref_pt(l1, par1, doc, pmt = PointOnCurveMeasurementType.NormalizedCurveParameter, pmf = PointOnCurveMeasureFrom.Beginning):\n\tfactory = doc.FamilyCreate\n\tloc1 = PointLocationOnCurve(pmt, par1, pmf)\n\tref1 = l1.GeometryCurve.Reference\n\tuiapp = DocumentManager.Instance.CurrentUIApplication\n\tapp = uiapp.Application.Create\n\tpt_ref = app.NewPointOnEdge(ref1, loc1)\n\treturn factory.NewReferencePoint(pt_ref)\n\ndef ref_line(pts, doc):\n\tfactory = doc.FamilyCreate\n\tpt_arr = ReferencePointArray()\n\tpt_arr.Append(pts[0])\n\tpt_arr.Append(pts[1])\n\tl1 = factory.NewCurveByPoints(pt_arr)\n\tl1.IsReferenceLine = True\n\tl1.ReferenceType = ReferenceType.None\n\treturn l1\n\ndef getorsetfamparam(paramname,paramgroup,paramtype,isinstance,doc):\n\ttry:\n\t\tparam = doc.FamilyManager.AddParameter(paramname,paramgroup,paramtype,isinstance)\n\texcept:\n\t\tallparams = doc.FamilyManager.GetParameters()\n\t\tfor param in allparams:\n\t\t\tif param.Definition.Name == paramname:\n\t\t\t\tbreak\n\treturn param\n\ndef genstuff(doc,heightparam,extralength,extradepth):\n\textralength = extralength * 2\n\textradepth = extradepth * 2\n\tresult = []\n\tadaptfamtype = [x for x in FilteredElementCollector(doc).OfClass(FamilySymbol).ToElements() if \"k-rigged\" in x.FamilyName.lower()][0]\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttrans1 = Transaction(doc, 'Working In Pattern Family')\n\ttrans1.Start()\n\twarnhandle = WarnSwallowSimple()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\ttrans1.SetFailureHandlingOptions(foptions)\n\tif not adaptfamtype.IsActive: adaptfamtype.Activate()\n\tallcurves = list(FilteredElementCollector(doc).OfClass(CurveElement).WhereElementIsNotElementType())\n\tresult.append(ref_pt(allcurves[0],0.5,doc))\n\tresult.append(ref_pt(allcurves[2],0.5,doc))\n\tdoc.Regenerate()\n\trefline = ref_line(result,doc)\n\tmidpt = ref_pt(refline,0.5,doc)\n\tdimrefs = ReferenceArray()\n\tdimrefs.Append(Reference(allcurves[0]))\n\tdimrefs.Append(Reference(allcurves[2]))\n\tall_views = FilteredElementCollector(doc).OfClass(View)\n\tactive_view = None\n\tfor view in all_views:\n\t\tif str(view.ViewType) == 'ThreeD' and not view.IsTemplate:\n\t\t\tbreak\n\tdim = doc.FamilyCreate.NewLinearDimension(view,refline.GeometryCurve,dimrefs)\n\treport_param = getorsetfamparam(\"Report_Width\",BuiltInParameterGroup.INVALID,ParameterType.Length,True,doc)\n\tsize_param = getorsetfamparam(\"K-Pattern Size\",BuiltInParameterGroup.INVALID,ParameterType.Text,False,doc)\n\ttry:\n\t\tdim.FamilyLabel = report_param\n\texcept:\n\t\tpass\n\tdoc.FamilyManager.MakeReporting(report_param)\n\tif not adaptfamtype.IsActive: adaptfamtype.Activate()\n\tadaptfam = AdaptiveComponentInstanceUtils.CreateAdaptiveComponentInstance(doc,adaptfamtype)\n\tadaptpoint = doc.GetElement(AdaptiveComponentInstanceUtils.GetInstancePointElementRefIds(adaptfam)[0])\n\tadaptpoint.SetPointElementReference(midpt.GetPointElementReference())\n\tdoc.Delete(midpt.Id)\n\tdoc.Regenerate()\n\ttrans1.Commit()\n\tbbox1 = PROgetgeom(doc,adaptfam).ToCuboid()\n\tbbox2 = adaptfam.get_BoundingBox(None).ToProtoType().ToCuboid()\n\tif (bbox1.Width + bbox1.Length) < (bbox2.Width + bbox2.Length):\n\t\tbbox = bbox1\n\telse:\n\t\tbbox = bbox2\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttrans1 = Transaction(doc, 'Working In Pattern Family')\n\ttrans1.Start()\n\twarnhandle = WarnSwallowSimple()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\ttrans1.SetFailureHandlingOptions(foptions)\n\tbboxlength = bbox.Length + extralength\n\tbboxwidth = bbox.Width + extradepth\n\tbbox.Dispose()\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\tdoc.OwnerFamily.CurtainPanelVerticalSpacing = UnitUtils.ConvertToInternalUnits(bboxlength,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\n\t\tdoc.OwnerFamily.CurtainPanelHorizontalSpacing = UnitUtils.ConvertToInternalUnits(bboxwidth,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\n\telse:\n\t\tdoc.OwnerFamily.CurtainPanelVerticalSpacing = UnitUtils.ConvertToInternalUnits(bboxlength,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\t\tdoc.OwnerFamily.CurtainPanelHorizontalSpacing = UnitUtils.ConvertToInternalUnits(bboxwidth,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\tcur_width = bboxwidth\n\tcur_length = bboxlength\n\tnum1 = round(cur_length,6)\n\tnum2 = round(cur_width,6)\n\tsizename = str(num1) + \" x \" + str(num2)\n\tname = \"Size \" + sizename\n\tcurfamtype = getfamtype(doc,name)\n\tdoc.FamilyManager.RenameCurrentType(name)\n\theight_param = getorsetfamparam(heightparam,BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Length,True,doc)\n\tlookedup = adaptfam.LookupParameter(heightparam)\n\tdefaultheight = lookedup.AsDouble()\n\tdoc.FamilyManager.Set(height_param,defaultheight)\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\tformula = \"(\" + str(UnitUtils.ConvertFromInternalUnits(defaultheight,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)) + \"*\" + report_param.Definition.Name + \")\" + \"/\" + str(cur_length)\n\telse:\n\t\tformula = \"(\" + str(UnitUtils.ConvertFromInternalUnits(defaultheight,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())) + \"*\" + report_param.Definition.Name + \")\" + \"/\" + str(cur_length)\n\tdoc.FamilyManager.SetFormula(height_param,formula)\n\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(lookedup,height_param)\n\tdoc.FamilyManager.Set(size_param,sizename)\n\ttrans1.Commit()\n\treturn adaptfam,name,sizename\n\ndef PROgetgeom(doc,geom,originalnotjoinedgeom = False,includehiddengeom = False):\n\tdef on_dialog_open(sender, event):\n\t    try:\n\t        if event.DialogId == 'TaskDialog_Really_Print_Or_Export_Temp_View_Modes':\n\t            event.OverrideResult(1002) \n\t    except Exception as e:\n\t        pass\n\n\tdef cleangeomlist(geoms):\n\t\tfilteredgeoms = []\n\t\tfor e in geoms:\n\t\t\tif isinstance(e,str) or isinstance(e,dg.Solid) or isinstance(e,dg.Surface) or isinstance(e,dg.PolySurface) or isinstance(e,dg.Cuboid):\n\t\t\t\tfilteredgeoms.append(e)\n\t\treturn filteredgeoms\n\t\n\t# Better SAT Import Function\n\tdef betteimport(doc,sat,temp_path):\n\t\tgeoms = dg.Geometry.ImportFromSAT(sat)\n\t\tsat_path = None\n\t\ttry:\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits),8) * 1000\n\t\t\telse:\n\t\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId()),8) * 1000\n\t\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\t\tdg.Geometry.ExportToSAT(geoms,sat_path,factor)\n\t\t\tfor g in geoms:\n\t\t\t\tg.Dispose()\n\t\t\tscaledgeoms = dg.Geometry.ImportFromSAT(sat_path)\n\t\texcept:\n\t\t\tscaledgeoms = geoms\n\t\tif sat_path != None:\n\t\t\tSystem.IO.File.Delete(sat_path)\n\t\treturn scaledgeoms\n\t\n\tdef tolist(obj1):\n\t\tif hasattr(obj1,'__iter__'): return obj1\n\t\telse: return [obj1]\n\t\n\tdef flatten(x):\n\t    result = []\n\t    try:\n\t    \tfor el in x:\n\t        \tif hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n\t        \t    result.extend(flatten(el))\n\t        \telse:\n\t        \t    result.append(el)\n\t    except:\n\t    \tresult = x\n\t    return result\n\t    \n\tdef analgeom(elem):\n\t\tresult = []\n\t\ttry:\n\t\t\tbreakstatus = False\n\t\t\tgeoms = elem.get_Geometry(opt1)\n\t\t\textracted = []\n\t\t\tfor e in geoms:\n\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.GeometryInstance\":\n\t\t\t\t\ttry:\n\t\t\t\t\t\textracted.append(e.GetInstanceGeometry())\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\telif e.ToString() == \"Autodesk.Revit.DB.Solid\":\n\t\t\t\t\textracted.append(e)\n\t\t\tif len(extracted) == 0:\n\t\t\t\tbreakstatus = True\n\t\t\telse:\n\t\t\t\textracted = flatten(extracted)\n\t\t\t\tgeoms = extracted\n\t\t\tif breakstatus == False:\n\t\t\t\tfor e in geoms:\n\t\t\t\t\ttry:\n\t\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Solid\":\n\t\t\t\t\t\t\tattempt = e.ToProtoType()\n\t\t\t\t\t\t\tif attempt == None:\n\t\t\t\t\t\t\t\tif len(result) != 0:\n\t\t\t\t\t\t\t\t\tfor r in result:\n\t\t\t\t\t\t\t\t\t\ttry: r.Dispose()\n\t\t\t\t\t\t\t\t\t\texcept: pass\n\t\t\t\t\t\t\t\treturn False\n\t\t\t\t\t\t\telse:\n\t\t\t\t\t\t\t\tresult.append(attempt)\t\n\t\t\t\t\texcept:\n\t\t\t\t\t\tif len(result) != 0:\n\t\t\t\t\t\t\tfor r in result:\n\t\t\t\t\t\t\t\ttry: r.Dispose()\n\t\t\t\t\t\t\t\texcept: pass\n\t\t\t\t\t\t\tresult = []\n\t\t\t\t\t\t\tbreak\n\t\t\tif len(result) == 0:\n\t\t\t\treturn False\n\t\t\telse:\n\t\t\t\tnewresult = []\n\t\t\t\tfor e in result:\n\t\t\t\t\tif e != None:\n\t\t\t\t\t\tnewresult.append(e)\n\t\t\t\tif len(newresult) == 0:\n\t\t\t\t\treturn False\n\t\t\t\telse:\n\t\t\t\t\treturn newresult\n\t\texcept:\n\t\t\treturn \"Fail\"\n\t\n\tif geom != None:\n\t\tgeom = tolist(geom)\n\telse:\n\t\tpass\n\t\n\tclass WarnSwallow(IFailuresPreprocessor):\n\t\tdef PreprocessFailures(self, failuresAccessor):\n\t\t\tfailuresAccessor.DeleteAllWarnings()\n\t\t\treturn FailureProcessingResult.Continue\n\t\n\t\n\tif originalnotjoinedgeom == True:\n\t\tfrom itertools import compress\n\t\tfrom itertools import combinations\n\t\t\n\t\telements = flatten(geom)\n\t\tallwalls = True\n\t\t\n\t\tbboxes = []\n\t\taccept = []\n\t\tfor e in elements:\n\t\t\ttry:\n\t\t\t\tbb = e.get_BoundingBox(None)\n\t\t\t\tbboxes.append(bb.ToProtoType())\n\t\t\t\taccept.append(True)\n\t\t\texcept:\n\t\t\t\taccept.append(False)\n\t\t\t\t\n\t\tacceptedelements = list(compress(elements, accept))\n\t\t\n\t\ttocombineraw = combinations(acceptedelements,2)\n\t\ttocombinebboxraw = combinations(bboxes,2)\n\t\t\n\t\tcomb = []\n\t\tfor i in list(tocombineraw): \n\t\t    comb.append(i)\n\t\t\n\t\ttocombine = comb\n\t\t\n\t\tcomb2 = []\n\t\tfor i in list(tocombinebboxraw): \n\t\t    comb2.append(i)\n\t\t\n\t\ttocombinebbox = comb2\n\t\t\n\t\tif allwalls == False:\n\t\t\tresult = []\n\t\t\tallresult = []\n\t\t\tfor eachlist in tocombine:\n\t\t\t\ttmplist = []\n\t\t\t\tfor each in eachlist:\n\t\t\t\t\tif str(each.ToString()) == \"Autodesk.Revit.DB.Wall\":\n\t\t\t\t\t\ttmplist.append(True)\n\t\t\t\t\telse:\n\t\t\t\t\t\ttmplist.append(False)\n\t\t\t\tresult.append(tmplist)\n\t\t\n\t\t\tfor each in result:\n\t\t\t\tif all(each) == True:\n\t\t\t\t\tallresult.append(False)\n\t\t\t\telse:\n\t\t\t\t\tallresult.append(True)\n\t\t\tfiltered = list(compress(tocombine, allresult))\n\t\t\tfilteredbbox = list(compress(tocombinebbox, allresult))\n\t\telse:\n\t\t\tfiltered = tocombine\n\t\t\tfilteredbbox = tocombinebbox\n\t\t\n\t\tBBOX1 = [item[0] for item in filteredbbox]\n\t\tBBOX2 = [item[1] for item in filteredbbox]\n\t\t\n\t\tintersects = []\n\t\t\n\t\tcount = 0\n\t\tfor each in BBOX1:\n\t\t\tintersects.append(dg.BoundingBox.Intersects(each,BBOX2[count]))\n\t\t\tcount = count + 1\n\t\t\n\t\tcount = 0\n\t\tfor each in BBOX1:\n\t\t\teach.Dispose()\n\t\t\tBBOX2[count].Dispose()\n\t\t\tcount = count + 1\n\t\t\n\t\tintersectingelements = list(compress(filtered, intersects))\n\t\t\n\t\tlistj = len(intersectingelements)\n\t\tcount = 0\n\t\tarejoined = []\n\t\twhile (count < listj):\n\t\t\t\tresult = JoinGeometryUtils.AreElementsJoined(doc, intersectingelements[count][0], intersectingelements[count][1])\n\t\t\t\tcount = count + 1\n\t\t\t\tarejoined.append(result)\n\t\t\n\t\tjoined = list(compress(intersectingelements, arejoined))\n\t\n\ttemp_path = System.IO.Path.GetTempPath()\n\tsatOpt = SATExportOptions()\n\topt1 = Options()\n\t\n\tif includehiddengeom == True:\n\t\topt1.IncludeNonVisibleObjects = True\n\t\n\t#Find a 3D view type\n\tcollector1 = FilteredElementCollector(doc)\n\tviewFamilyTypes = collector1.OfClass((ViewFamilyType))\n\tfor e in viewFamilyTypes:\n\t\tif str(e.ViewFamily) == \"ThreeDimensional\":\n\t\t\tviewType = e.Id\n\t\t\tbreak\n\t\n\tdef NewForm_background(s1):\n\t\tDocumentManager.Instance.CurrentUIApplication.DialogBoxShowing += on_dialog_open\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:\n\t\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\t\ttrans1 = Transaction(doc, 'Fetching Geometry')\n\t\t\tfoptions = trans1.GetFailureHandlingOptions()\n\t\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\t\ttrans1.SetFailureHandlingOptions(foptions)\n\t\t\ttrans1.Start()\n\t\t\tif originalnotjoinedgeom == True:\n\t\t\t\tjointcount = 0\n\t\t\t\twhile (jointcount < len(joined)):\n\t\t\t\t\ttry:\n\t\t\t\t\t\tJoinGeometryUtils.UnjoinGeometry(doc, joined[jointcount][0], joined[jointcount][1])\n\t\t\t\t\t\tjointcount = jointcount + 1\n\t\t\t\t\texcept:\n\t\t\t\t\t\tjointcount = jointcount +1\n\t\t\t\tdoc.Regenerate()\n\t\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\t\tstatus = True\n\t\t\tfinalres = []\n\t\t\tfor each in s1:\n\t\t\t\ttry:\n\t\t\t\t\toldvalue = 1\n\t\t\t\t\teparm = each.LookupParameter(\"Visible\")\n\t\t\t\t\tif eparm != None:\n\t\t\t\t\t\tif doc.FamilyManager.GetAssociatedFamilyParameter(eparm) != None:\n\t\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(eparm, None)\n\t\t\t\t\t\tpname = eparm.Definition.Name\n\t\t\t\t\t\toldvalue = eparm.AsInteger()\n\t\t\t\t\t\tif oldvalue == 0:\n\t\t\t\t\t\t\teparm.Set(1)\n\t\t\t\texcept:\n\t\t\t\t\tcontinue\n\t\t\t\tresultgeom = analgeom(each)\n\t\t\t\tif resultgeom == \"Fail\":\n\t\t\t\t\tfinalres.append([None])\n\t\t\t\t\tcontinue\n\t\t\t\telif resultgeom == False:\n\t\t\t\t\tresultgeom = []\n\t\t\t\t\tthreedeeview = View3D.CreateIsometric(doc, viewType)\n\t\t\t\t\tthreedeeviewid = threedeeview.Id\n\t\t\t\t\ttry:\n\t\t\t\t\t\twantedsub = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Mass)\n\t\t\t\t\t\tthreedeeview.SetCategoryHidden(wantedsub.Id,False)\n\t\t\t\t\texcept:\n\t\t\t\t\t\tpass\n\t\t\t\t\tkilist = List[ElementId]([threedeeviewid])\n\t\t\t\t\ttid = []\n\t\t\t\t\ttid = [each.Id]\n\t\t\t\t\tielements = List[ElementId](tid)\n\t\t\t\t\tthreedeeview.IsolateElementsTemporary(ielements)\n\t\t\t\t\tcollectorinside = FilteredElementCollector(doc,threedeeviewid).ToElements()\n\t\t\t\t\telemento = []\n\t\t\t\t\tfor k in collectorinside:\n\t\t\t\t\t\telemento.append(int(str(k.Id)))\n\t\t\t\t\tif int(str(each.Id)) in elemento:\n\t\t\t\t\t\tdoc.Export(temp_path, randomname, kilist, satOpt)\n\t\t\t\t\t\teachlist = betteimport(doc,sat_path,temp_path)\n\t\t\t\t\t\ttmplist = []\n\t\t\t\t\t\tfor e in eachlist:\n\t\t\t\t\t\t\ttmplist.append(e)\n\t\t\t\t\t\tresultgeom.append(tmplist)\n\t\t\t\t\t\tSystem.IO.File.Delete(sat_path)\n\t\t\t\t\telse:\n\t\t\t\t\t\tresultgeom = [None]\n\t\t\t\t\tdoc.Delete(threedeeview.Id)\n\t\t\t\tfinalres.append(flatten(resultgeom))\n\t\t\t\tif oldvalue == 0:\n\t\t\t\t\teparm.Set(0)\n\t\t\ttrans1.RollBack()\n\t\t\treturn finalres\n\t\texcept:\n\t\t\ttrans1.RollBack()\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\t\treturn traceback.format_exc(),''\n\ttry:\n\t\tresult = NewForm_background(geom)\n\t\tresult = flatten(result)\n\t\tbbox = dg.BoundingBox.ByGeometry(result)\n\t\tfor rs in result:\n\t\t\trs.Dispose()\n\texcept:\n\t\tbbox = None\n\tsatOpt.Dispose()\n\topt1.Dispose()\n\treturn bbox\n\n# Family Saving Options\nSaveAsOpt = SaveAsOptions()\nSaveAsOpt.OverwriteExistingFile = True\ntemp_path = System.IO.Path.GetTempPath()\n\n# Initial Family Instance Info\nsourceinstance = UnwrapElement(IN[0])\nhostwidth = IN[1]\nfam_path = IN[2]\nadapt_fam_path = IN[3]\npat_fam_path = IN[4]\noverwriteparameters = True\nextralength = IN[5]\nextradepth = IN[6]\nsafeheight = IN[7]\nautoheight = False\n\ninstance = True\nseparator = \"_\"\nforceworkplane = True\n\n\n# Project Document and UI\nprojectdoc = DocumentManager.Instance.CurrentDBDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\n\n# Convert Host Width to Internal Units\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\thostwidth = UnitUtils.ConvertToInternalUnits(hostwidth,projectdoc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\nelse:\n\thostwidth = UnitUtils.ConvertToInternalUnits(hostwidth,projectdoc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\ntry:\n\t# Getting Info From Initial Family\n\tinitialOP = initialop(projectdoc,sourceinstance,hostwidth,autoheight,safeheight)\n\t\n\t# Familiy is Writable\n\tfamilywritable = True\nexcept:\n\t# Familiy is Not Writable\n\tfamilywritable = False\n\t\n\t# Show Message\n\tOUT = TaskDialog.Show(\"AECedx - Karam\", \"Please Close The Opened Family\")\n\n# Check if Family is Writable\nif familywritable:\n\n\t# Variables\n\tresultname = initialOP[0]\n\tinitialfamdoc = initialOP[1]\n\tparaminfo = initialOP[2]\n\tisfam_shared = initialOP[3]\n\tisfam_workplane = initialOP[4]\n\tisfam_vertical = initialOP[5]\n\tisfam_cuts = initialOP[6]\n\tmaxheight = initialOP[7]\n\toriginalcat = initialOP[8]\n\tfamtypename = initialOP[9]\n\ttypemark = initialOP[10]\n\tisceiling = initialOP[11]\n\t\n\t# Check If Forced  Workplane\n\tif forceworkplane:\n\t\tisfam_workplane = True\n\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttGroup = TransactionGroup(projectdoc, 'Load K-Pattern Magic')\n\ttGroup.Start()\n\n\t# Creating First Planting Family\n\tfirstplantOP = createfamily(fam_path,initialfamdoc,uiapp,\"First \" + resultname,\"Planting\",False,False,False,False,maxheight,paraminfo,instance,\"First\")\n\tfirstplantdoc = firstplantOP[0]\n\tfirstplantsavepath = firstplantOP[1]\n\t\n\t# Load Initial to First Planting\n\tloadOP(initialfamdoc,firstplantdoc,None,famtypename,paraminfo,\"First\",forceworkplane,isceiling,autoheight,safeheight)\n\t\n\t# Creating Second Planting Family\n\tsecondplantOP = createfamily(fam_path,initialfamdoc,uiapp,\"Second \" + resultname,\"Planting\",False,False,False,False,maxheight,paraminfo,instance,\"Second\")\n\tsecondplantdoc = secondplantOP[0]\n\tsecondplantsavepath = secondplantOP[1]\n\t\n\t# Load First to Second Planting\n\tloadOP(firstplantdoc,secondplantdoc,firstplantsavepath,None,paraminfo,\"Second\",forceworkplane,isceiling,autoheight,safeheight)\n\t\n\t# Creating Final Family\n\tfinalfamilyOP = createfamily(fam_path,initialfamdoc,uiapp,resultname,originalcat,False,isfam_workplane,False,isfam_cuts,maxheight,paraminfo,instance,\"Last\")\n\tfinalfamilydoc = finalfamilyOP[0]\n\tfinalfamilysavepath = finalfamilyOP[1]\n\t\n\t# Load Second to Final Family\n\tloadOP(secondplantdoc,finalfamilydoc,secondplantsavepath,None,paraminfo,\"Last\",forceworkplane,isceiling,autoheight,safeheight)\n\t\n\tadaptfam = initialfamily(adapt_fam_path,projectdoc,\"Adaptive\" + separator + resultname,\"Generic Models\",False,False,False)\n\tadaptfamdoc = adaptfam[0]\n\tadaptfamsavepath = adaptfam[1]\n\tif overwriteparameters:\n\t\tfinalfamilydoc.LoadFamily(adaptfamdoc,FamOpt1())\n\telse:\n\t\tfinalfamilydoc.LoadFamily(adaptfamdoc,FamOptWithout())\n\tfinalfamilydoc.Close(False)\n\tSystem.IO.File.Delete(finalfamilysavepath)\n\tsourceinstance = adaptjob(adaptfamdoc)\n\n\tinitialOP = initialop_2(adaptfamdoc,sourceinstance)\n\tinitialfamdoc = initialOP[0]\n\tparaminfos = initialOP[1]\n\toriginalcat = initialOP[2]\n\tfamtypenames = initialOP[3]\n\tcreatparameters(adaptfamdoc,uiapp,paraminfos,famtypenames,originalcat,None)\n\tassociateOP(initialfamdoc,adaptfamdoc,famtypenames,paraminfos,sourceinstance)\n\t\n\tfixedpatname = \"K-Pattern\" + resultname.replace(\"K-Rigged\", \"\")\n\tpatfam = initialfamily(pat_fam_path,projectdoc,fixedpatname,\"Generic Models\",True,False,False)\n\tpatfamdoc = patfam[0]\n\tpatfamsavepath = patfam[1]\n\t\n\tif overwriteparameters:\n\t\tadaptfamdoc.LoadFamily(patfamdoc,FamOpt1())\n\telse:\n\t\tadaptfamdoc.LoadFamily(patfamdoc,FamOptWithout())\n\tadaptfamdoc.Close(False)\n\tSystem.IO.File.Delete(adaptfamsavepath)\n\t\n\tgenOP = genstuff(patfamdoc,\"Height_Scale\",extralength,extradepth)\n\tsourceinstance = genOP[0]\n\tname = genOP[1]\n\tsizename = genOP[2]\n\t\n\tinitialOP = initialop_2(patfamdoc,sourceinstance)\n\tinitialfamdoc = initialOP[0]\n\tparaminfos = initialOP[1]\n\toriginalcat = initialOP[2]\n\tfamtypenames = initialOP[3]\n\tcreatparameters(patfamdoc,uiapp,paraminfos,famtypenames,originalcat,name)\n\tassociateOP(initialfamdoc,patfamdoc,famtypenames,paraminfos,sourceinstance)\n\t\n\texistedpat = [x for x in FilteredElementCollector(projectdoc).OfClass(Family).ToElements() if fixedpatname.ToLower() == x.Name.lower()]\n\tsafesymbols = []\n\tif len(existedpat) > 0:\n\t\tsafesymbols = list(existedpat[0].GetFamilySymbolIds())\n\t\t\n\tif overwriteparameters:\n\t\tloadedpat = patfamdoc.LoadFamily(projectdoc,FamOpt1())\n\telse:\n\t\tloadedpat = patfamdoc.LoadFamily(projectdoc,FamOptWithout())\n\tpatfamdoc.Close(False)\n\tSystem.IO.File.Delete(patfamsavepath)\n\t\n\tTransactionManager.Instance.ForceCloseTransaction()\n\ttrans1 = Transaction(projectdoc, 'Fix Size Name')\n\ttrans1.Start()\n\twarnhandle = WarnSwallowSimple()\n\tfoptions = trans1.GetFailureHandlingOptions()\n\tfoptions.SetFailuresPreprocessor(warnhandle)\n\ttrans1.SetFailureHandlingOptions(foptions)\n\tsymbolids = list(loadedpat.GetFamilySymbolIds())\n\tbestsymbol = False\n\tfor sym in symbolids:\n\t\tif len(safesymbols) > 0 and sym not in safesymbols:\n\t\t\tbestsymbol = sym\n\t\t\tcontinue\n\t\tsymelem = projectdoc.GetElement(sym)\n\t\tif not symelem.IsActive: symelem.Activate()\n\t\tsymname = symelem.GetParameters(\"Type Name\")[0].AsString()\n\t\torigname = symelem.LookupParameter(\"K-Pattern Size\").AsString()\n\t\tif origname != None:\n\t\t\tnewsymname = symname.replace(origname,sizename)\n\t\t\tsymelem.LookupParameter(\"K-Pattern Size\").Set(sizename)\n\t\t\tif symname != newsymname:\n\t\t\t\tsymelem.Name = newsymname\n\tif bestsymbol != False:\n\t\tgoodparams = []\n\t\tbestparams = projectdoc.GetElement(bestsymbol).GetOrderedParameters()\n\t\tfor bparam in bestparams:\n\t\t\tif bparam.StorageType.ToString() != \"ElementId\":\n\t\t\t\tgoodparams.append([bparam.Definition.Name,bestparamvalue(None,None,bparam)])\n\t\tfor badsym in symbolids:\n\t\t\tif badsym != bestsymbol:\n\t\t\t\tbadparams = projectdoc.GetElement(badsym).GetOrderedParameters()\n\t\t\t\tfor badparam in badparams:\n\t\t\t\t\tfor goodparam in goodparams:\n\t\t\t\t\t\tif badparam.Definition.Name == goodparam[0]:\n\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\tbadparam.Set(goodparam[1])\n\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\tpass\n\t\tprojectdoc.Delete(bestsymbol)\n\ttrans1.Commit()\n\ttGroup.Assimilate()\n\tOUT = loadedpat",
+      "VariableInputPorts": true,
+      "Id": "d03235188172477a8659177b282646d2",
+      "Inputs": [
+        {
+          "Id": "1143776897c74898b62de461f80aeca9",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "41ec907fc52446c2ad9abfa59de3bcc0",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6c16aa7277bc40b6beb925dccd825a26",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "be5b7278b1254e6fb2bcbf9ccb21de9f",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a3f5457833344985acbfe6155024fa93",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "af21727b87254923ab984f0124054592",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ec87b2b5cdcb49a9b1f63fec4dfa34c5",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "199296e5715844e3a94708f9c27edfa1",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "fe1221e6c5c349b5840060af67197839",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyInstance",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "3e1b95e6ccdc4f8a8bdad87f3c42ac2c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f55e45f0fc1c4b09a67af0826ada2029",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROutput",
+      "Id": "17fea1699baf43c185fb681c2fd093ed",
+      "Inputs": [
+        {
+          "Id": "ec985441d42847b9ad3bec51cae32e2d",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARInitialHostWidth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "0ff5a781fa0c49438033a138e7c2bd4d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "725a8b57d4dc4a4c97c078aee673f0d8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyTemplateGenericModels",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "7e363f11809a4513ae2c94146092117b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8db8ce2cd31343849888198dc3e2504f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyTemplateAdaptive",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "9b943e38223f423abe7b1e1fe10c151c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ec84c2b881b44a73b59f58760eb103c2",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyTemplatePattern",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "d3dbc526ef3b4264b5c6f75f3f71b22c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a5f0b990bc274ffaad39b97fed9dabf7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARExtraLength",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "7d9f9995736549c6b12155de4edb4ae7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e0ce931ea00748238cc1ea7b07287c2b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARExtraDepth",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "f8f136bb18fe439e9a7787df81778313",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d0ee8cec8eee4ac18ca64c85edea53bf",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSafeHeight",
+        "TypeName": "double",
+        "TypeRank": 0,
+        "DefaultValue": "0",
+        "Description": ""
+      },
+      "Id": "f1e752d21b5a4ceaa76b409e9373055b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "cf09724639b240579bcbd29635ed3f4d",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "fe1221e6c5c349b5840060af67197839",
+      "End": "ec985441d42847b9ad3bec51cae32e2d",
+      "Id": "6a630191d63c4e90bfc10c448ce76355"
+    },
+    {
+      "Start": "f55e45f0fc1c4b09a67af0826ada2029",
+      "End": "1143776897c74898b62de461f80aeca9",
+      "Id": "4c8e810560a1407b993c550d38b83b37"
+    },
+    {
+      "Start": "725a8b57d4dc4a4c97c078aee673f0d8",
+      "End": "41ec907fc52446c2ad9abfa59de3bcc0",
+      "Id": "6091e6318403403eb0e1e33f1aa03086"
+    },
+    {
+      "Start": "8db8ce2cd31343849888198dc3e2504f",
+      "End": "6c16aa7277bc40b6beb925dccd825a26",
+      "Id": "21ecf8c4dd4640edb17483c1bea64ce6"
+    },
+    {
+      "Start": "ec84c2b881b44a73b59f58760eb103c2",
+      "End": "be5b7278b1254e6fb2bcbf9ccb21de9f",
+      "Id": "7b76a49e015647aa8185a61c438b643c"
+    },
+    {
+      "Start": "a5f0b990bc274ffaad39b97fed9dabf7",
+      "End": "a3f5457833344985acbfe6155024fa93",
+      "Id": "dab384b98f5e4b8198ab420070dbd72d"
+    },
+    {
+      "Start": "e0ce931ea00748238cc1ea7b07287c2b",
+      "End": "af21727b87254923ab984f0124054592",
+      "Id": "197e5392314047598518d1c90b574c59"
+    },
+    {
+      "Start": "d0ee8cec8eee4ac18ca64c85edea53bf",
+      "End": "ec87b2b5cdcb49a9b1f63fec4dfa34c5",
+      "Id": "436bc6724894420389fc79ee2e3387c4"
+    },
+    {
+      "Start": "cf09724639b240579bcbd29635ed3f4d",
+      "End": "199296e5715844e3a94708f9c27edfa1",
+      "Id": "625d271660d940e98aa8feb9a41170e0"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "d03235188172477a8659177b282646d2",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 570.384696515518,
+        "Y": 324.114154697731
+      },
+      {
+        "Id": "3e1b95e6ccdc4f8a8bdad87f3c42ac2c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -68.0153490803668,
+        "Y": 109.31038245059
+      },
+      {
+        "Id": "17fea1699baf43c185fb681c2fd093ed",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 770.184696515518,
+        "Y": 294.840732652613
+      },
+      {
+        "Id": "0ff5a781fa0c49438033a138e7c2bd4d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -148.813770529646,
+        "Y": 243.737923509882
+      },
+      {
+        "Id": "7e363f11809a4513ae2c94146092117b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -144.609933259554,
+        "Y": 354.991645291166
+      },
+      {
+        "Id": "9b943e38223f423abe7b1e1fe10c151c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -104.177290777496,
+        "Y": 454.803998771561
+      },
+      {
+        "Id": "d3dbc526ef3b4264b5c6f75f3f71b22c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -51.0858114311927,
+        "Y": 552.514792870332
+      },
+      {
+        "Id": "7d9f9995736549c6b12155de4edb4ae7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -58.2993370698591,
+        "Y": 768.908885626895
+      },
+      {
+        "Id": "f8f136bb18fe439e9a7787df81778313",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -46.5349759725119,
+        "Y": 840.653974416013
+      },
+      {
+        "Id": "f1e752d21b5a4ceaa76b409e9373055b",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -46.0547869787948,
+        "Y": 916.276174715603
+      }
+    ],
+    "Annotations": [],
+    "X": 143.765415281508,
+    "Y": 35.7800405669151,
+    "Zoom": 0.521806476424935
+  }
+}

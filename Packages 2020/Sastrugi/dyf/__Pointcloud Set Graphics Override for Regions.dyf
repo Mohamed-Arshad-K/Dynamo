@@ -1,0 +1,112 @@
+<Workspace Version="1.3.4.6666" X="76.8801174976234" Y="-219.050123253984" zoom="0.803321593462598" ScaleFactor="1" Name="❄_Pointcloud Set Graphics Override for Regions" Description="(Sastrugi-Pointcloud_Graphics) Overrides the graphics for Region locations within a Pointcloud instance in the specified views." ID="c96b5994-d198-43e9-b3ec-af95f5e8d53f" Category="Sastrugi.Pointcloud.Graphics">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="8d0e14f1-cc77-414e-9f24-662092a42f4c" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="221.5" y="408" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="PointcloudInstance" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="fa1be66a-8e7f-4402-b6fb-bd366505384d" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="25.5" y="466" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Plese note that Regions within Pointcloud&#xD;&#xA;//Instances can only be overriden with &#xD;&#xA;//a Fixed Color graphics style. &#xD;&#xA;PointcloudOverrideSettings" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="8c478666-deb5-4ae8-959b-71163c9246ab" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="286.520674120363" y="572" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="RegionNames" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="ae13bf63-35f2-403f-84d3-47a506bfbc38" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="620.200296735905" y="480.103857566766" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="PointcloudInstance" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="adfafe86-e301-4170-b692-51a365663a70" type="PythonNodeModels.PythonNode" nickname="Python Script" x="458.505483856796" y="475.53412462908" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="4">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <PortInfo index="3" default="False" />
+      <Script># Python coding credit to Dynamo Forum user - @Ewan_Opie 2019
+# Sastrugi Package https://sites.google.com/view/sastrugi/home
+
+import clr
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+from System.Collections.Generic import *
+
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+from Autodesk.Revit import DB
+
+import sys
+pyt_path = r'C:\Program Files (x86)\IronPython 2.7\Lib'
+sys.path.append(pyt_path)
+
+clr.ImportExtensions(Revit.GeometryConversion)
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+def tolist(obj1):
+	if hasattr(obj1,"__iter__"): return obj1
+	else: return [obj1]	
+	
+cloud = tolist(UnwrapElement(IN[0]))
+
+pcORsettings = tolist(IN[1])
+
+name = tolist(IN[2])
+
+views = tolist(UnwrapElement(IN[3]))
+
+TransactionManager.Instance.EnsureInTransaction(doc)
+
+try:
+		errorReport = None
+		if len(cloud)&gt;1:
+			for c in cloud:
+				for v in views:
+					pt_overrides = v.GetPointCloudOverrides()
+				for p1,n1 in zip(pcORsettings,name):
+					for p2,n2 in zip(p1,n1):
+						pt_overrides.SetPointCloudRegionOverrideSettings(c.Id, p2,n2,doc)
+		else:
+			for c in cloud:
+				for v in views:
+					pt_overrides = v.GetPointCloudOverrides()
+				for p,n in zip(pcORsettings,name):
+						pt_overrides.SetPointCloudRegionOverrideSettings(c.Id, p,n,doc)
+except:
+		import traceback
+		errorReport = str(traceback.format_exc())
+		
+TransactionManager.Instance.TransactionTaskDone()
+
+if errorReport == None:
+	OUT = cloud
+else:
+	OUT = errorReport
+
+	</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="aceacd80-c2ce-4325-98db-e7e31a377754" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="322.5" y="640" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Views" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="8d0e14f1-cc77-414e-9f24-662092a42f4c" start_index="0" end="adfafe86-e301-4170-b692-51a365663a70" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="fa1be66a-8e7f-4402-b6fb-bd366505384d" start_index="0" end="adfafe86-e301-4170-b692-51a365663a70" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="8c478666-deb5-4ae8-959b-71163c9246ab" start_index="0" end="adfafe86-e301-4170-b692-51a365663a70" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="adfafe86-e301-4170-b692-51a365663a70" start_index="0" end="ae13bf63-35f2-403f-84d3-47a506bfbc38" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="aceacd80-c2ce-4325-98db-e7e31a377754" start_index="0" end="adfafe86-e301-4170-b692-51a365663a70" end_index="3" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-995.536804199219" eyeY="972.672424316406" eyeZ="716.995056152344" lookX="-29.082202911377" lookY="-629.75048828125" lookZ="-919.973693847656" upX="-0.0118361487984657" upY="0.927183866500854" upZ="-0.374419569969177" />
+  </Cameras>
+</Workspace>

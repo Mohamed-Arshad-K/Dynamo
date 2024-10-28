@@ -1,0 +1,172 @@
+<Workspace Version="1.3.4.6666" X="-56.7863422529427" Y="-203.930498607457" zoom="0.594053315602363" ScaleFactor="1" Name="❄_Pointcloud Get Scans and Regions" Description="(Sastrugi_Pointcloud_Geometry) This node extracts Scan Names/Origins and Scan Region Names from within a Pointcloud Instance." ID="2de8f2f3-06a8-464f-9546-b4da914d8a26" Category="Sastrugi.Pointcloud.Geometry">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="3fd809cd-68c3-4f8c-8b3d-b8debf141b5b" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="172.157328281071" y="817.727660884649" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="PointcloudInstance" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="aaae0ef3-e920-451f-90ed-b1dc53ff878e" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="868.181412832452" y="687.373562096646" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Scans" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="fea01165-e121-40ee-b654-df908ef33ffd" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="1120.06037139771" y="815.082885514224" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Origins" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="8afdc177-43bc-44cb-b4ec-fe3d10c03d16" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="824.028605193703" y="953.340052262685" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Regions" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="f92c5979-8d57-4d20-84fd-fdaccf87cd6f" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="392.633099591118" y="816.11006801431" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="Flatten({list});" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+    <PythonNodeModels.PythonNode guid="2895735f-f539-4424-8e83-58ce55f68606" type="PythonNodeModels.PythonNode" nickname="Python Script" x="647.705600957024" y="809.716392297564" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="2">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <Script># Python coding credit to Dynamo Forum user - @Ewan_Opie 2019
+# Sastrugi Package https://sites.google.com/view/sastrugi/home
+
+import clr
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+clr.ImportExtensions(Revit.GeometryConversion)
+
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.PointClouds import *
+
+clr.AddReference('DSCoreNodes') 
+import DSCore
+from DSCore import *
+
+def tolist(obj1):
+	if hasattr(obj1,"__iter__"): return obj1
+	else: return [obj1]	
+
+cloud = tolist(UnwrapElement(IN[0]))
+scans = IN[1]
+scanL = []
+sc2 =[]
+
+if len(cloud)&gt;1:
+		for sc,c in zip(scans,cloud):
+			sca = []
+			for s in sc:
+				pX = c.GetScanOrigin(s).X
+				pY = c.GetScanOrigin(s).Y
+				pZ = c.GetScanOrigin(s).Z
+				sca.append(Point.Create(XYZ(pX,pY,pZ)).ToProtoType(True))
+			sc2.append(sca)
+		scanL.append(sc2)
+else:
+	for c in cloud:
+		scanFlat=DSCore.List.Flatten(scans,1)
+		for s in scanFlat:
+			pX = c.GetScanOrigin(s).X
+			pY = c.GetScanOrigin(s).Y
+			pZ = c.GetScanOrigin(s).Z
+			scanL.append(Point.Create(XYZ(pX,pY,pZ)).ToProtoType(True))
+OUT = scanL</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="9c3b483c-6387-4ac2-9354-a0470c011570" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="List.Flatten" x="900.677654030063" y="809.329897253162" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.List.Flatten@var[]..[],int">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="8045ba40-6735-495c-bda8-a8431c3d8c12" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="795.211871508533" y="875.984866320819" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="1;" ShouldFocus="false" />
+    <PythonNodeModels.PythonNode guid="a8da808d-7c1c-4a51-a3e4-b95b6b060419" type="PythonNodeModels.PythonNode" nickname="Python Script" x="648.487824696758" y="684.536522726219" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="1">
+      <PortInfo index="0" default="False" />
+      <Script># Python coding credit to Dynamo Forum user - @Ewan_Opie 2019
+# Sastrugi Package https://sites.google.com/view/sastrugi/home
+
+import clr
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+clr.ImportExtensions(Revit.GeometryConversion)
+
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.PointClouds import *
+
+clr.AddReference('DSCoreNodes') 
+import DSCore
+from DSCore import *
+
+def tolist(obj1):
+	if hasattr(obj1,"__iter__"): return obj1
+	else: return [obj1]	
+
+cloud = UnwrapElement(IN[0])
+
+scans = []
+scansF = []
+
+if len(cloud)&gt;1:
+	for c in cloud:
+		scans.append(c.GetScans())
+else:
+	for c in cloud:
+		scansF.append(c.GetScans())
+		scans = DSCore.List.Flatten(scansF,1)
+OUT = scans</Script>
+    </PythonNodeModels.PythonNode>
+    <PythonNodeModels.PythonNode guid="967e03eb-54ec-4eb5-82d9-3b986d7d4839" type="PythonNodeModels.PythonNode" nickname="Python Script" x="647.124000458101" y="952.925193269944" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="1">
+      <PortInfo index="0" default="False" />
+      <Script># Python coding credit to Dynamo Forum user - @Ewan_Opie 2019
+# Sastrugi Package https://sites.google.com/view/sastrugi/home
+
+import clr
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+clr.ImportExtensions(Revit.GeometryConversion)
+
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.PointClouds import *
+
+clr.AddReference('DSCoreNodes') 
+import DSCore
+from DSCore import *
+
+def tolist(obj1):
+	if hasattr(obj1,"__iter__"): return obj1
+	else: return [obj1]	
+
+cloud = UnwrapElement(IN[0])
+
+regions = []
+regionsF = []
+
+if len(cloud)&gt;1:
+	for c in cloud:
+		regions.append(c.GetRegions())
+else:
+	for c in cloud:
+		regionsF.append(c.GetRegions())
+		regions = DSCore.List.Flatten(regionsF,1)
+OUT = regions</Script>
+    </PythonNodeModels.PythonNode>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="3fd809cd-68c3-4f8c-8b3d-b8debf141b5b" start_index="0" end="f92c5979-8d57-4d20-84fd-fdaccf87cd6f" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="f92c5979-8d57-4d20-84fd-fdaccf87cd6f" start_index="0" end="2895735f-f539-4424-8e83-58ce55f68606" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="f92c5979-8d57-4d20-84fd-fdaccf87cd6f" start_index="0" end="a8da808d-7c1c-4a51-a3e4-b95b6b060419" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="f92c5979-8d57-4d20-84fd-fdaccf87cd6f" start_index="0" end="967e03eb-54ec-4eb5-82d9-3b986d7d4839" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="2895735f-f539-4424-8e83-58ce55f68606" start_index="0" end="9c3b483c-6387-4ac2-9354-a0470c011570" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9c3b483c-6387-4ac2-9354-a0470c011570" start_index="0" end="fea01165-e121-40ee-b654-df908ef33ffd" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="8045ba40-6735-495c-bda8-a8431c3d8c12" start_index="0" end="9c3b483c-6387-4ac2-9354-a0470c011570" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="a8da808d-7c1c-4a51-a3e4-b95b6b060419" start_index="0" end="aaae0ef3-e920-451f-90ed-b1dc53ff878e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="a8da808d-7c1c-4a51-a3e4-b95b6b060419" start_index="0" end="2895735f-f539-4424-8e83-58ce55f68606" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="967e03eb-54ec-4eb5-82d9-3b986d7d4839" start_index="0" end="8afdc177-43bc-44cb-b4ec-fe3d10c03d16" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-995.536804199219" eyeY="972.672424316406" eyeZ="716.995056152344" lookX="-29.082202911377" lookY="-629.75048828125" lookZ="-919.973693847656" upX="-0.0118361487984657" upY="0.927183866500854" upZ="-0.374419569969177" />
+  </Cameras>
+</Workspace>

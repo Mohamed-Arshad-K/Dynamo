@@ -1,0 +1,215 @@
+{
+  "Uuid": "1915b495-3772-4f23-947a-c9fbb74b7028",
+  "IsCustomNode": true,
+  "Category": "RIE.Views",
+  "Description": "Sets sectionbox of 3D view and if the view is open, also zooms to its extents.",
+  "Name": "RIE_Set3DViewSectionBox",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "views",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "39a7e8995e894749ba63d239e40e8e2a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1d5cb324a2984aa99d0be41b597ad49f",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "BBoxes",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "e3163d3c913d401fb78590bbcce23748",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "9fb7b92d618142f3b86359d243e81441",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "Views",
+      "Id": "076686dd895149379eea2b768c65a105",
+      "Inputs": [
+        {
+          "Id": "b3ae707f39524d6d9d28645a5bdce72d",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\n#The inputs to this node will be stored as a list in the IN variables.\n\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nclr.AddReference('RevitAPIUI')\nfrom  Autodesk.Revit.UI import UIView\n\nclr.AddReference(\"RevitNodes\")\nimport Revit\n# Import ToProtoType, ToRevitType geometry conversion extension methods\nclr.ImportExtensions(Revit.GeometryConversion)\nclr.ImportExtensions(Revit.Elements)\n\n# Import DocumentManager and TransactionManager\nclr.AddReference(\"RevitServices\")\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc=DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\n\nif isinstance(IN[0], list):\n\tview = IN[0]\nelse:\n\tview = [IN[0]]\n\nif isinstance(IN[1], list):\n\tbbox = IN[1]\nelse:\n\tbbox = [IN[1]]\n\nOUT = []\n\t\nfor _ in range(0, len(view)):\n\tcurview = UnwrapElement(view[_])\n\tcurbbox = UnwrapElement(bbox[_])\n\ttry:\n\t\tTransactionManager.Instance.EnsureInTransaction(doc)\n\t\tcurview.SetSectionBox(curbbox.ToRevitType())\n\t\tTransactionManager.Instance.TransactionTaskDone()\n\t\tOUT.append(curview)\n\texcept:\n\t\tOUT.append(\"Failed\")\n\t\t\n\tfor uv in uidoc.GetOpenUIViews():\n\t\tif uv.ViewId.Equals( curview.Id ):\n\t\t\tuiview = uv\n\t\tbreak\n\ttry:\n\t\tuiview.ZoomToFit()\n\texcept:\n\t\terror = 1",
+      "VariableInputPorts": true,
+      "Id": "fffeb1584f9e4b4dba1b3873af78cffa",
+      "Inputs": [
+        {
+          "Id": "3da9f3aca79e4b918e24d8a526049265",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "101fdd90270f466cbd72955cb3c3caac",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3921d800db334189bf87f34eb86cb82f",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "1d5cb324a2984aa99d0be41b597ad49f",
+      "End": "3da9f3aca79e4b918e24d8a526049265",
+      "Id": "e11e20a1b87b4343aa30c77685168fe7"
+    },
+    {
+      "Start": "9fb7b92d618142f3b86359d243e81441",
+      "End": "101fdd90270f466cbd72955cb3c3caac",
+      "Id": "a6238661e72841908a55697503d0b849"
+    },
+    {
+      "Start": "3921d800db334189bf87f34eb86cb82f",
+      "End": "b3ae707f39524d6d9d28645a5bdce72d",
+      "Id": "130f26184d29476c84c0c9fac36a69f6"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.3.0.5885",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "39a7e8995e894749ba63d239e40e8e2a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 125.0,
+        "Y": 10.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "e3163d3c913d401fb78590bbcce23748",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 118.0,
+        "Y": 65.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "076686dd895149379eea2b768c65a105",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 333.0,
+        "Y": 14.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "fffeb1584f9e4b4dba1b3873af78cffa",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 203.0,
+        "Y": 16.0
+      }
+    ],
+    "Annotations": [],
+    "X": 239.0,
+    "Y": 192.0,
+    "Zoom": 1.0
+  }
+}

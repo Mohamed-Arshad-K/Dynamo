@@ -1,0 +1,108 @@
+<Workspace Version="0.9.0.3067" X="241.789327354209" Y="243.285564789664" zoom="0.873646406206627" Name="Export Families To RFA" Description="Export Categories Families To Directory Folder" ID="4d29fae9-7608-49e8-ac79-e7952188bdce" Category="Hot Gear.Family">
+  <NamespaceResolutionMap />
+  <Elements>
+    <PythonNodeModels.PythonNode guid="af3235df-0e46-4e80-b0c9-1768c2d73b62" type="PythonNodeModels.PythonNode" nickname="Python Script" x="889.513521064606" y="183.727099761379" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" inputcount="1">
+      <Script>import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+
+family = []
+fdoc = []
+for i in UnwrapElement(IN[0]):
+	family = Autodesk.Revit.DB.Document.EditFamily(doc,i)
+	fdoc.append(family)
+
+OUT = fdoc</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Nodes.DSFunction guid="dba5f99f-8d11-4f18-b237-a06fcc47c0a6" type="Dynamo.Nodes.DSFunction" nickname="FamilyType.Family" x="505.157643933663" y="204.352542069503" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" assembly="RevitNodes.dll" function="Revit.Elements.FamilyType.Family" />
+    <PythonNodeModels.PythonNode guid="f0ab7f04-e570-4256-a07e-19542ed592a5" type="PythonNodeModels.PythonNode" nickname="Python Script" x="1287.5998328363" y="61.676954933554" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" inputcount="2">
+      <Script>import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+
+path = IN[0]
+doc = IN[1]
+
+try:
+	for i ,j in zip(path, doc):
+		j.SaveAs(i)
+		OUT ='Success'
+except Exception,e:
+	OUT = str(e)</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Nodes.DSFunction guid="8f93743a-2ea4-480f-866f-c656cd49df40" type="Dynamo.Nodes.DSFunction" nickname="Element.Name" x="782.849223543794" y="72.9285463978276" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" assembly="RevitNodes.dll" function="Revit.Elements.Element.Name" />
+    <Dynamo.Nodes.CodeBlockNodeModel guid="796bc10c-6ee1-46b7-b2a7-fa3d3f406610" type="Dynamo.Nodes.CodeBlockNodeModel" nickname="Code Block" x="939.503685406315" y="-26.1440879006781" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" CodeText="a+'\'+familyName+&quot;.rfa&quot;;" ShouldFocus="false" />
+    <Dynamo.Nodes.Symbol guid="61ed1115-6f4a-40ff-9de4-eb4c44147b78" type="Dynamo.Nodes.Symbol" nickname="Input" x="36.1724872505634" y="53.3741451261354" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True">
+      <Symbol value="Path" />
+    </Dynamo.Nodes.Symbol>
+    <Dynamo.Nodes.Output guid="d53f972f-0d73-4377-8673-1066f0a0a18d" type="Dynamo.Nodes.Output" nickname="Output" x="1449.39478466995" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="OUT" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.Symbol guid="5395eeb3-877f-455d-96bc-d03e933904d7" type="Dynamo.Nodes.Symbol" nickname="Input" x="-199.191284325785" y="210.567549106908" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True">
+      <Symbol value="Categories : var[]..[]" />
+    </Dynamo.Nodes.Symbol>
+    <Dynamo.Nodes.DSFunction guid="fb5693e3-5098-4ad6-8bd8-c0f255676247" type="Dynamo.Nodes.DSFunction" nickname="List.UniqueItems" x="738.990320449249" y="181.708221694126" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" assembly="DSCoreNodes.dll" function="DSCore.List.UniqueItems@var[]..[]" />
+    <PythonNodeModels.PythonNode guid="7e8c9122-eebd-4705-9ef0-41e8fcbe4eca" type="PythonNodeModels.PythonNode" nickname="ClockWork" x="308.566794231336" y="215.497693590598" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" inputcount="1">
+      <Script>import System
+import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+cats = IN[0]
+
+elementlist = list()
+# This could be more elegant if only I knew how to implement a Multicategory filter in Python....
+for item in cats:
+	collector = FilteredElementCollector(doc)
+	collector.OfClass(FamilySymbol)
+	bic = System.Enum.ToObject(BuiltInCategory, item.Id)
+	collector.OfCategory(bic)
+	elementlist.append(collector.ToElements())
+OUT = elementlist</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Nodes.CodeBlockNodeModel guid="f657b215-f10a-402b-a00c-4e8ce275320d" type="Dynamo.Nodes.CodeBlockNodeModel" nickname="Code Block" x="79.8515466492235" y="218.398445106861" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" CodeText="Flatten({list});" ShouldFocus="false" />
+  </Elements>
+  <Connectors>
+    <Dynamo.Models.ConnectorModel start="af3235df-0e46-4e80-b0c9-1768c2d73b62" start_index="0" end="f0ab7f04-e570-4256-a07e-19542ed592a5" end_index="1" portType="0" />
+    <Dynamo.Models.ConnectorModel start="dba5f99f-8d11-4f18-b237-a06fcc47c0a6" start_index="0" end="8f93743a-2ea4-480f-866f-c656cd49df40" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="dba5f99f-8d11-4f18-b237-a06fcc47c0a6" start_index="0" end="fb5693e3-5098-4ad6-8bd8-c0f255676247" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="f0ab7f04-e570-4256-a07e-19542ed592a5" start_index="0" end="d53f972f-0d73-4377-8673-1066f0a0a18d" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8f93743a-2ea4-480f-866f-c656cd49df40" start_index="0" end="796bc10c-6ee1-46b7-b2a7-fa3d3f406610" end_index="1" portType="0" />
+    <Dynamo.Models.ConnectorModel start="796bc10c-6ee1-46b7-b2a7-fa3d3f406610" start_index="0" end="f0ab7f04-e570-4256-a07e-19542ed592a5" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="61ed1115-6f4a-40ff-9de4-eb4c44147b78" start_index="0" end="796bc10c-6ee1-46b7-b2a7-fa3d3f406610" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="5395eeb3-877f-455d-96bc-d03e933904d7" start_index="0" end="f657b215-f10a-402b-a00c-4e8ce275320d" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="fb5693e3-5098-4ad6-8bd8-c0f255676247" start_index="0" end="af3235df-0e46-4e80-b0c9-1768c2d73b62" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="7e8c9122-eebd-4705-9ef0-41e8fcbe4eca" start_index="0" end="dba5f99f-8d11-4f18-b237-a06fcc47c0a6" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="f657b215-f10a-402b-a00c-4e8ce275320d" start_index="0" end="7e8c9122-eebd-4705-9ef0-41e8fcbe4eca" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations>
+    <Dynamo.Models.AnnotationModel guid="238d72b4-dd49-4603-bb63-6d1cd91c0398" annotationText="All Family Types Of Category&#xD;&#xA;ClockWork Package" left="69.8515466492235" top="171.497693590598" width="372.715247582113" height="114.900751516263" fontSize="14" InitialTop="215.497693590598" InitialHeight="100.900751516263" TextblockHeight="34" backgrouund="#FFC1D676">
+      <Models ModelGuid="7e8c9122-eebd-4705-9ef0-41e8fcbe4eca" />
+      <Models ModelGuid="f657b215-f10a-402b-a00c-4e8ce275320d" />
+    </Dynamo.Models.AnnotationModel>
+  </Annotations>
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

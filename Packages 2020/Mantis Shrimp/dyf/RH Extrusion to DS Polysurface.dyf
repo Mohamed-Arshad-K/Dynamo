@@ -1,0 +1,77 @@
+<Workspace Version="1.0.0.1180" X="120.401962325447" Y="306.260249594022" zoom="1.545620359375" Name="RH Extrusion to DS Polysurface" Description="This node will convert Rhino extrusion to Design Script polysurface." ID="5167e0d9-3dde-4f2c-b0f5-e0bcfe347bc8" Category="Archi-lab_MantisShrimp.Rhinoceros.Geometry">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="c65db384-f580-490d-bb86-f306dab0cbff" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="0" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="RhinoObject" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="14b05ded-5979-4a8c-971a-98a5cbb2d968" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="449" y="0" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <Symbol value="Polysurface" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="8df4d847-0434-432b-ba2e-a7dc2774cb71" type="PythonNodeModels.PythonNode" nickname="Python Script" x="218.070523737535" y="-3.75515628082121" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="1">
+      <Script># Copyright(c) 2015, Konrad Sobon
+# @arch_laboratory, http://archi-lab.net
+
+import clr
+import sys
+
+pyt_path = r'C:\Program Files (x86)\IronPython 2.7\Lib'
+sys.path.append(pyt_path)
+
+import os
+appDataPath = os.getenv('APPDATA')
+msPath = appDataPath + r'\Dynamo\Dynamo Revit\1.0\packages\Mantis Shrimp\extra'
+if msPath not in sys.path:
+	sys.path.append(msPath)
+rhDllPath = appDataPath + r'\Dynamo\Dynamo Revit\1.0\packages\Mantis Shrimp\bin\Rhino3dmIO.dll'
+clr.AddReferenceToFileAndPath(rhDllPath)
+
+import Rhino as rc
+from mantisshrimp import rhBrepToPolySurface
+
+#The inputs to this node will be stored as a list in the IN variable.
+dataEnteringNode = IN
+
+if isinstance(IN[0], list):
+	rhObjects = IN[0]
+else:
+	rhObjects = [IN[0]]
+
+def GetExtrusion(rhObj):
+	try:
+		geo = rhObj.Geometry
+		if geo.ToString() == "Rhino.Geometry.Extrusion":
+			brep = geo.ToBrep()
+			return rhBrepToPolySurface(brep)
+	except:
+		pass
+
+def ProcessList(_func, _list):
+	return map(lambda x: ProcessList(_func, x) if type(x) == list else _func(x) , _list)
+
+#convert rhino/gh geometry to ds geometry
+try:
+	errorReport = None
+	dsSurfaces = ProcessList(GetExtrusion, rhObjects)
+except:
+	# if error accurs anywhere in the process catch it
+	import traceback
+	errorReport = traceback.format_exc()
+	
+#Assign your output to the OUT variable
+if errorReport == None:
+	OUT = dsSurfaces
+else:
+	OUT = errorReport</Script>
+    </PythonNodeModels.PythonNode>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="c65db384-f580-490d-bb86-f306dab0cbff" start_index="0" end="8df4d847-0434-432b-ba2e-a7dc2774cb71" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="8df4d847-0434-432b-ba2e-a7dc2774cb71" start_index="0" end="14b05ded-5979-4a8c-971a-98a5cbb2d968" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

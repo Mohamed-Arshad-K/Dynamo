@@ -1,0 +1,167 @@
+{
+  "Uuid": "7e414e38-e25c-44e5-9c67-5818848af20e",
+  "IsCustomNode": true,
+  "Category": "Modelical.Elements.Actions",
+  "Description": "This node enables or disables the analytical model.",
+  "Name": "Structure.DisableAnalyticalModel",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "/*Analytical model status*/\r\n_status",
+      "Id": "9059ae17b075464fa6a0d3b60a2a1f01",
+      "Inputs": [
+        {
+          "Id": "713eed3fef074834955503c6794a156d",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "_bool",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": "Set Toggle to TRUE to disable analytical model"
+      },
+      "Id": "215d48d73cdc4589b205d47c4d6a2edb",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "694d3b871ea346b8ae0fa8466f05fc98",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# This node has been made by Modelical\r\n# www.modelical.com\r\n\r\nimport clr\r\nclr.AddReference(\"ProtoGeometry\")\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n\r\nclr.AddReference(\"DSCoreNodes\")\r\nfrom DSCore import *\r\n\r\n\r\nclr.AddReference(\"RevitAPI\")\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB.Structure import *\r\n\r\nclr.AddReference(\"RevitAPIUI\")\r\nfrom Autodesk.Revit.UI import *\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n\r\nclr.AddReference(\"RevitServices\")\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nuidoc = DocumentManager.Instance.CurrentUIApplication\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\napp = uidoc.Application\r\n\r\n\r\nimport sys\r\nsys.path.append(r\"C:\\Program Files (x86)\\IronPython 2.7\\Lib\")\r\n# Function Helpers\r\ndef Feet2m(value):\r\n\treturn value * 0.3048\r\n\r\ndef toList(input):\r\n\r\n    if hasattr(input, \"__iter__\") and not isinstance(input, basestring):\r\n        return iter(input)\r\n    else:\r\n        return [input]\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\n# Logic starts here\r\nbool = IN[0]\r\nif bool==True:\r\n\tsetValue=0\r\n\tstate=\"Disabled\"\r\nelse:\r\n\tsetValue=1\r\n\tstate=\"Enabled\"\r\n\t\r\nstrElements=[]\r\n\r\nfor a in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralColumns).ToElements():\r\n\tstrElements.append(a)\r\nfor b in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralFraming).ToElements():\r\n\tstrElements.append(b)\r\nfor c in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Walls).ToElements():\r\n\tstrElements.append(c)\r\nfor d in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralFoundation).ToElements():\r\n\tstrElements.append(d)\r\nfor e in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralTruss).ToElements():\r\n\tstrElements.append(e)\r\nfor f in FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Floors).ToElements():\r\n\tstrElements.append(f)\r\n\t\r\nTransactionManager.Instance.EnsureInTransaction(doc)\t\r\nfor ele in strElements:\r\n\ttry:\r\n\t\ta=ele.get_Parameter(BuiltInParameter.STRUCTURAL_ANALYTICAL_MODEL).Set(setValue)\r\n\texcept:\r\n\t\tNone\r\n\t\t\r\nTransactionManager.Instance.TransactionTaskDone()\r\n# Output\r\nOUT = state",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "63b29d19f98340a0950d3c73bf881946",
+      "Inputs": [
+        {
+          "Id": "fd861e0814074e22a51cf6b6bb7ccb26",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "905d97749df844a7994725bfccee7910",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "694d3b871ea346b8ae0fa8466f05fc98",
+      "End": "fd861e0814074e22a51cf6b6bb7ccb26",
+      "Id": "aef7c0694aa749e492225fb0418cfad9"
+    },
+    {
+      "Start": "905d97749df844a7994725bfccee7910",
+      "End": "713eed3fef074834955503c6794a156d",
+      "Id": "ac454b10d33644758809a27931f06bd1"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.12.0.5650",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "9059ae17b075464fa6a0d3b60a2a1f01",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -225.49801169131433,
+        "Y": 380.62755654034294
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "215d48d73cdc4589b205d47c4d6a2edb",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -882.44543746348438,
+        "Y": 327.84691799469209
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "63b29d19f98340a0950d3c73bf881946",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -400.02997720969836,
+        "Y": 369.84953429375241
+      }
+    ],
+    "Annotations": [],
+    "X": 1460.3437876789146,
+    "Y": -177.25122391268064,
+    "Zoom": 1.7157430822192543
+  }
+}

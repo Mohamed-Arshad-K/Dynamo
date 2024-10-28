@@ -1,0 +1,170 @@
+{
+  "Uuid": "78eb660b-6053-4606-b5da-94306817ae93",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "DisableReferencePlanes",
+  "Name": "DisableReferencePlanes",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\r\n# Enable Python support and load DesignScript library\r\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript import Geometry as dg\r\n\r\n# EXTENSION Enable ToDSType\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Enable Revit Elements\r\nfrom Revit.Elements import *\r\n\r\n# EXTENSION Enable Geometry Conversion Methods\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\n# Enable Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\n\r\n# Enable DocumentManager and TransactionManager\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Enable ICollection List Translate\r\nclr.AddReference(\"System\")\r\nimport System.Collections.Generic\r\nfrom System.Collections.Generic import List\r\n\r\nimport sys\r\nsys.path.append(r'C:\\Program Files (x86)\\IronPython 2.7\\DLLs')\r\nsys.path.append(r'C:\\Program Files (x86)\\IronPython 2.7\\Lib')\r\nfrom collections import Iterable\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\napp = doc.Application\r\n\r\nclass FamOpt1(IFamilyLoadOptions):\r\n\tdef __init__(self):\r\n\t\tpass\r\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\r\n\t\treturn True\r\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\r\n\t\treturn True\r\n\r\ndef tolist(obj1):\r\n\tif hasattr(obj1,'__iter__'): return obj1\r\n\telse: return [obj1]\r\n\r\ndef flatten(x):\r\n    result = []\r\n    for el in x:\r\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n            result.extend(flatten(el))\r\n        else:\r\n            result.append(el)\r\n    return result\r\n\r\n# Simple Warning Swallow Class\r\nclass WarnSwallowSimple(IFailuresPreprocessor):\r\n\tdef PreprocessFailures(self, failuresAccessor):\r\n\t\tfailuresAccessor.DeleteAllWarnings()\r\n\t\treturn FailureProcessingResult.Continue\r\n\r\nfamilytype = UnwrapElement(flatten(tolist(IN[0])))\r\n\r\ndef changerefs(familytype):\r\n\tTransactionManager.Instance.ForceCloseTransaction()\r\n\tfamdoc = doc.EditFamily(familytype.Family)\r\n\tTransactionManager.Instance.ForceCloseTransaction()\r\n\ttrans1 = Transaction(famdoc, 'Disable Reference Planes')\r\n\ttrans1.Start()\r\n\twarnhandle = WarnSwallowSimple()\r\n\tfoptions = trans1.GetFailureHandlingOptions()\r\n\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\ttrans1.SetFailureHandlingOptions(foptions)\r\n\ttry:\r\n\t\treflines = [x for x in FilteredElementCollector(famdoc).OfClass(ReferencePlane).ToElements()]\r\n\t\tfor r in reflines:\r\n\t\t\ttry:\r\n\t\t\t\tparam = r.LookupParameter(\"Is Reference\")\r\n\t\t\t\tparam.Set(12)\r\n\t\t\texcept:\r\n\t\t\t\tpass\r\n\t\ttrans1.Commit()\r\n\t\tfamily1 = famdoc.LoadFamily(doc, FamOpt1() )\r\n\t\tfamdoc.Close(False)\r\n\texcept:\r\n\t\ttrans1.RollBack()\r\n\t\tfamdoc.Close(False)\r\n\r\nfor e in familytype:\r\n\tchangerefs(e)\r\n\r\nOUT = \"Done\"",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "e00c55ddb92c486397b01d86bfbf33ae",
+      "Inputs": [
+        {
+          "Id": "1d2f05d5c9614c1980bea72a84cdc7b1",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "863b5560a9cf401982b06c85045daeb5",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROUT",
+      "Id": "93f294d8ae0042ffbe209dc1b6c6554f",
+      "Inputs": [
+        {
+          "Id": "9f6731c734924f3caae6c2680a95f059",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyTypes",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "951d3701f40543e182b43b2a405384c1",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7fda9a3413c4448485685a1545894795",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "863b5560a9cf401982b06c85045daeb5",
+      "End": "9f6731c734924f3caae6c2680a95f059",
+      "Id": "6440daca4cbb41758bc837b565b37677",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7fda9a3413c4448485685a1545894795",
+      "End": "1d2f05d5c9614c1980bea72a84cdc7b1",
+      "Id": "276f4dbf19e14717bb4a61518620bb7d",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "e00c55ddb92c486397b01d86bfbf33ae",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Id": "93f294d8ae0042ffbe209dc1b6c6554f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 498.38007230599612,
+        "Y": -2.0398553880073678
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "951d3701f40543e182b43b2a405384c1",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -125.60000000000014,
+        "Y": 3.6000000000000227
+      }
+    ],
+    "Annotations": [],
+    "X": 126.13581122729374,
+    "Y": 297.44025165552836,
+    "Zoom": 0.91006380393143915
+  }
+}

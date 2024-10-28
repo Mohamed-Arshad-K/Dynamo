@@ -1,0 +1,212 @@
+<Workspace Version="1.3.1.1736" X="-1010.28795401991" Y="3211.8272713007" zoom="1.23551708798244" ScaleFactor="1" Name="Wall Finishes by Room" Description="Place wall finishes with the info contained in room parameters" ID="d2a8c274-9163-4661-8784-5e976e583184" Category="Modelical.Elements">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="4ad266b1-5196-40ef-950f-2a268301be3c" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="897.233299170098" y="-2407.08822484632" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Rooms" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="17deddfd-b6f4-45d1-9baf-2b30428c666c" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="895.674921683033" y="-2344.30975628055" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Wall Finish param" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="ebf13336-143e-4988-a95d-ccd93ce29dc6" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="895.962921140578" y="-2285.55721659531" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="Ceiling Height param" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="056f7f35-9108-47b2-a006-0d1a39f093c7" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="1329.65881011703" y="-2404.98859898114" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="finishes" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="7f72cd93-8aae-41e0-a790-e4a040d0110f" type="PythonNodeModels.PythonNode" nickname="Python Script" x="1153.25665745775" y="-2405.16366682224" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="3">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <Script># This node has been made by Modelical
+# www.modelical.com
+
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+#Load Dynamo wrappers
+clr.AddReference("RevitNodes")
+import Revit
+from Revit.Elements import *
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+#Load Revit API
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+import Autodesk
+
+#Load document reference
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+uiapp = DocumentManager.Instance.CurrentUIApplication
+app = uiapp.Application
+
+def toList(input):
+	if isinstance(input,list) == False:
+		return [input]
+	else:
+		return input
+
+def flatten(x):
+    result = []
+    for el in x:
+        if hasattr(el, "__iter__") and not isinstance(el, basestring):
+            result.extend(flatten(el))
+        else:
+            result.append(el)
+    return result
+
+def vecSimilarity(v1,v2):
+	tolerance = 0.000001
+	if abs(v1.X - v2.X) &lt;= tolerance and abs(v1.Y - v2.Y) &lt;= tolerance and abs(v1.Z - v2.Z) &lt;= tolerance:
+		return True
+	else:
+		return False
+	
+rooms = flatten(toList(IN[0]))
+wfParam = IN[1]
+whParam = IN[2]
+
+#Get room boundaries, elements and disjoined curves
+roomElems = []
+disjoinedCurves = []
+options = Autodesk.Revit.DB.SpatialElementBoundaryOptions()
+roomBounds = []
+for r in rooms:
+	roomBounds.append(UnwrapElement(r).GetBoundarySegments(options))
+
+for rb in roomBounds:
+	tempCrvList = []
+	for closedCrv in rb:
+		tempCCCrvList = []
+		for elem in closedCrv:
+			if doc.GetElement(elem.ElementId) is None:
+				roomElems.append(None)
+				tempCCCrvList.append(elem.GetCurve().ToProtoType())
+			else:
+				roomElems.append(doc.GetElement(elem.ElementId))
+				tempCCCrvList.append(elem.GetCurve().ToProtoType())
+		tempCrvList.append(tempCCCrvList)
+	disjoinedCurves.append(tempCrvList)
+
+#Join curves in polycurves
+joinedCurves = []
+for d in disjoinedCurves:
+	tempList = []
+	for item in d:
+		tempList.append(PolyCurve.ByJoinedCurves(item))
+	joinedCurves.append(tempList)
+
+#Check the sense of the polycurve
+for j in joinedCurves:
+	for crv in j:
+		if crv.BasePlane().Normal.Z &gt; 0:
+			crv = crv
+		else:
+			crv = crv.Reverse()
+
+repeatedRooms = []
+count = 0
+for j in joinedCurves:
+	tempList = []
+	for crv in j:
+		tempList.append(rooms[count])
+	repeatedRooms.append(tempList)
+	count += 1
+
+joinedCurves = flatten(joinedCurves)
+repeatedRooms = flatten(repeatedRooms)
+
+
+#Retrieve wallTypes and heights
+wTypes = []
+wHeights = []
+
+allWallTypes = FilteredElementCollector(doc).OfClass(WallType)
+for r in repeatedRooms:
+	wHeights.append(r.GetParameterValueByName(whParam))
+	for wt in allWallTypes:
+		if Element.Name.__get__(wt) == r.GetParameterValueByName(wfParam):
+			wTypes.append(wt.ToDSType(True))
+
+#Retrieve the level of each room
+levels = []
+for r in repeatedRooms:
+	levels.append(UnwrapElement(r).Level)
+
+#Create an offseted curve to place finishes. Wall by curve are modeled by Wall Centerline
+offsetedCurves = []
+count = 0
+for j in joinedCurves:
+	if UnwrapElement(repeatedRooms[count]).IsPointInRoom(j.Offset(wTypes[count].GetParameterValueByName("Width")*0.5,False).StartPoint.ToXyz()) == True:
+		offsetedCurves.append(j.Offset(wTypes[count].GetParameterValueByName("Width")*0.5,False))
+	else:
+		offsetedCurves.append(j.Offset(wTypes[count].GetParameterValueByName("Width")*-0.5,False))
+	count +=1
+
+explodedCurves = []
+for oc in offsetedCurves:
+	explodedCurves.append(oc.Explode())
+
+#Create walls on top of the curves with fixed height
+wHeightsList = [] #List of height for each wall
+distances = [] #distance to move a probe point to check the paralel wall
+walls = []
+TransactionManager.Instance.EnsureInTransaction(doc)
+count = 0
+for group in explodedCurves:
+	for crv in group:
+		if vecSimilarity(crv.TangentAtParameter(0),crv.TangentAtParameter(1)):
+			rbldCrv = Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint(crv.StartPoint, crv.EndPoint)
+		else:
+			rbldCrv = Autodesk.DesignScript.Geometry.Arc.ByThreePoints(crv.PointAtParameter(0), crv.PointAtParameter(0.5), crv.PointAtParameter(1))
+		w = Wall.Create(doc, rbldCrv.ToRevitType(), UnwrapElement(wTypes[count]).Id, UnwrapElement(levels[count]).Id, 5, 0, True, False);
+		wHeightsList.append(wHeights[count])
+		walls.append(w.ToDSType(False))
+	count +=1
+TransactionManager.Instance.TransactionTaskDone()
+
+#Change the height of the walls to meet requirements, change Location line to Finish Face Exterior and turn off Room Bounding
+count = 0
+for w in walls:
+	w.SetParameterByName("Unconnected Height", wHeightsList[count])
+	w.SetParameterByName("Location Line", 2)
+	w.SetParameterByName("Room Bounding", 0)
+	#Here is the best location to add any room parameter to the walls p.e. Room Number
+	#w.SetParameterByName("RoomNumber", UnwrapElement(repeatedRooms[count]).GetParameterValueByName(Number))
+	count +=1
+
+#If the suport wall has inserts, this will join it to the finish wall.
+#If the suport wall is a curtain wall, this will delete the finish associated to it.
+TransactionManager.Instance.EnsureInTransaction(doc)
+count = 0
+for r in roomElems:
+	if r is not None and UnwrapElement(r).Category.Name.ToString() == "Walls" and len(UnwrapElement(r).FindInserts(True, True, True, True)) != 0:
+		JoinGeometryUtils.JoinGeometry(doc, UnwrapElement(walls[count]), UnwrapElement(r))
+	if r is not None and UnwrapElement(r).Category.Name.ToString() == "Walls" and UnwrapElement(r).WallType.Kind == WallKind.Curtain:
+		doc.Delete(UnwrapElement(walls[count]).Id)
+	count += 1
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = walls</Script>
+    </PythonNodeModels.PythonNode>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="4ad266b1-5196-40ef-950f-2a268301be3c" start_index="0" end="7f72cd93-8aae-41e0-a790-e4a040d0110f" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="17deddfd-b6f4-45d1-9baf-2b30428c666c" start_index="0" end="7f72cd93-8aae-41e0-a790-e4a040d0110f" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="ebf13336-143e-4988-a95d-ccd93ce29dc6" start_index="0" end="7f72cd93-8aae-41e0-a790-e4a040d0110f" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="7f72cd93-8aae-41e0-a790-e4a040d0110f" start_index="0" end="056f7f35-9108-47b2-a006-0d1a39f093c7" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="9.34316954179558" eyeY="67.2449213225616" eyeZ="-29.4978946137416" lookX="22.922978763125" lookY="-61.5656676775" lookZ="37.6859219275" upX="0.347732216119766" upY="0.743144810199738" upZ="0.571680009365082" />
+  </Cameras>
+</Workspace>

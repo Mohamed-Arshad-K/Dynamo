@@ -1,0 +1,859 @@
+{
+  "Uuid": "3f16ef78-b80a-4a13-8705-e9483100c75a",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Packages.LunchBox.Archive.Geometry.Panel",
+  "Description": "Create a Triangular XYZ grid on a face.  The face surface must have an untrimmed UV parameter space.",
+  "Name": "LB.LunchBox Triangle Grid by Face",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [
+    {
+      "Id": "be7b9240010a468f89aa26cc57411c8b",
+      "Name": "Number",
+      "Type": "number",
+      "Value": "1",
+      "NumberType": "Double",
+      "Description": "Creates a number."
+    },
+    {
+      "Id": "58e117ca0d7b4f43af572aa50e01dd94",
+      "Name": "Number",
+      "Type": "number",
+      "Value": "0",
+      "NumberType": "Double",
+      "Description": "Creates a number."
+    }
+  ],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSurface",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "8d85fb30bc8643bd92882a1ced4469d7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "550ab564bea64025943525098ec1bdc7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARU",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "5b620cf9cc7c44559c07c693d820aef8",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1214b349da9e4f89bdce18cb70850321",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARV",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "d3b4a7b77a5844b89aec60e61cd9bcf6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c6958c68b2e8469b84028142fb6dd208",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPanelPts",
+      "Id": "de1e1cf3a58c411cb29250763e6bf743",
+      "Inputs": [
+        {
+          "Id": "e2468895af904041bfb37d775c46b162",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPanelPolys",
+      "Id": "9d8dd293afb5413fa961d7de3ce18cbd",
+      "Inputs": [
+        {
+          "Id": "6990c08cf932422b8e52b8c4ab4a291c",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "#Copyright(c) 2014, Nathan Miller\n# The Proving Ground, http://theprovingground.org\n\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\n\n# Panel division class\nclass PanelDivision:\n\t\n\t# divide surface\n\tdef TriDivision(self, srf, udiv, vdiv):\n\t\tustep = 1.0/udiv\n\t\tvstep = 1.0/vdiv\n\t\t\n\t\ttris = []\n\t\tpolys = []\n\t\tpanels = []\n\t\tfor i in range(0,int(udiv)):\n\t\t\tfor j in range(0,int(vdiv)):\n\t\t\t\n\t\t\t\ttriA = []\n\t\t\t\ttriB = []\n\t\t\t\t\n\t\t\t\t#XYZ Tris A\n\t\t\t\tmyXYZ1A = srf.PointAtParameter(i*ustep, j*vstep)\n\t\t\t\tmyXYZ1B = srf.PointAtParameter((i+1)*ustep,j*vstep)\n\t\t\t\tmyXYZ1C = srf.PointAtParameter((i+1)*ustep,(j+1)*vstep)\n\t\t\t\t\n\t\t\t\t#XYZ Tris B\n\t\t\t\tmyXYZ2A = srf.PointAtParameter((i+1)*ustep,(j+1)*vstep)\n\t\t\t\tmyXYZ2B = srf.PointAtParameter(i*ustep,(j+1)*vstep)\n\t\t\t\tmyXYZ2C = srf.PointAtParameter(i*ustep, j*vstep)\n\t\t\t\t\n\t\t\t\t#Append to tri\n\t\t\t\ttriA.append(myXYZ1A)\n\t\t\t\ttriA.append(myXYZ1B)\n\t\t\t\ttriA.append(myXYZ1C)\n\t\t\n\t\t\t\ttriB.append(myXYZ2A)\n\t\t\t\ttriB.append(myXYZ2B)\n\t\t\t\ttriB.append(myXYZ2C)\n\t\t\t\t\n\t\t\t\t#Append tris\n\t\t\t\ttris.append(triA)\n\t\t\t\ttris.append(triB)\n\t\t\t\t\n\t\t\t\t#Polygons\n\t\t\t\t#polyA = Polygon.ByPoints(triA)\n\t\t\t\t#polyB = Polygon.ByPoints(triB)\n\t\t\t\t#polys.append(polyA)\n\t\t\t\t#polys.append(polyB)\n\t\t\t\t\n\t\t\t\t#Panels\n\t\t\t\t#panelA = Surface.ByPerimeterPoints(triA)\n\t\t\t\t#panelB = Surface.ByPerimeterPoints(triB)\n\t\t\t\t#panels.append(panelA)\n\t\t\t\t#panels.append(panelB)\n\t\t\t\t\n\t\tself.tris = tris\n\t\t#self.polys = polys\n\t\t#self.panels = panels\n\n#Main code\nsrf = IN[0]\nudiv = IN[1]\nvdiv = IN[2]\n\ntris = []\n#polys = []\n#panels = []\n\nfor k in range(0, len(srf)):\n\ts = srf[k]\n\tu = udiv[k]\n\tv = vdiv[k]\n\t\t\t\n\tdivide = PanelDivision()\n\tdivide.TriDivision(s,u,v)\n\t\t\t\t\t\n\ttris.append(divide.tris)\n\t#panels.append(divide.panels)\n\t#polys.append(divide.polys)\n\t\n\noutput = []\noutput.append(tris)\n#output.append(polys)\n#output.append(panels)\n\n#Assign your output to the OUT variable\nOUT = output",
+      "VariableInputPorts": true,
+      "Id": "f1269f76e8124f3391090b0fdd3e2e09",
+      "Inputs": [
+        {
+          "Id": "b0b45f4f7dba4143a272604a458a4a99",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3a8304b2811a459bb7b9d4592363ec4c",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "eadc8b422f3a4c028359593be855b8bf",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "5b607cb909c94dab8c47f441f1ad9700",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GetItemAtIndex@var[]..[],int",
+      "Id": "56c639019a8a4f36b26debc35fb26a37",
+      "Inputs": [
+        {
+          "Id": "d09c64e9577349a58b52ea8298a41ab0",
+          "Name": "list",
+          "Description": "List to fetch an item from.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "097f486a19b04b09af8f19ac79ce3256",
+          "Name": "index",
+          "Description": "Index of the item to be fetched.\n\nint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "32efdea5b8474dffaed54a0f5909197b",
+          "Name": "item",
+          "Description": "Item in the list at the given index.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns an item from the given list that's located at the specified index.\n\nList.GetItemAtIndex (list: var[]..[], index: int): var[]..[]"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 1.0,
+      "Id": "be7b9240010a468f89aa26cc57411c8b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "07fe20905ee649868c3974ac73a0889a",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GetItemAtIndex@var[]..[],int",
+      "Id": "bbb0e80352c94516a0176ec3d680d546",
+      "Inputs": [
+        {
+          "Id": "cca0c6ed415a416296e2f3c07287f41d",
+          "Name": "list",
+          "Description": "List to fetch an item from.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "38f48936dacf4fe8afbca3ea13d65a5f",
+          "Name": "index",
+          "Description": "Index of the item to be fetched.\n\nint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0b25d0bc20944370809885c3f1dfc428",
+          "Name": "item",
+          "Description": "Item in the list at the given index.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns an item from the given list that's located at the specified index.\n\nList.GetItemAtIndex (list: var[]..[], index: int): var[]..[]"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 0.0,
+      "Id": "58e117ca0d7b4f43af572aa50e01dd94",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "aeb369ef42e04b3c805979cc455867df",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a number."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "3f6186b6-21c3-4885-bd79-4bd795fa1327",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "d087871a7cda4b68815eb0bda552551f",
+      "Inputs": [
+        {
+          "Id": "32301ac1d78140d9aef329f368f88cb7",
+          "Name": "VARListA",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6024b290e9d540a0adfe4c2ba107b14e",
+          "Name": "VARListB",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "c385c6f208e349a6b6cdc4440e47f5aa",
+          "Name": "VARListA",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "cfffc3ff8b9b4a6abff6d8d79237b901",
+          "Name": "VARMatchListB",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Compares a List A against a List B and matches length of List A.  If ListA > ListB, ListB will be extended.  If ListA < ListB, ListB will be truncated."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "3f6186b6-21c3-4885-bd79-4bd795fa1327",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "683280e2445f4fe0941672c13bad9d70",
+      "Inputs": [
+        {
+          "Id": "26bcccce65954d02b04733ee1cb32db6",
+          "Name": "VARListA",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8042a8d640874bc08f1224b9ea8606d0",
+          "Name": "VARListB",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "a46c6a6717c74b4c80ab0df0453db89e",
+          "Name": "VARListA",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "357a3996325a43008637baad4b79a12b",
+          "Name": "VARMatchListB",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Compares a List A against a List B and matches length of List A.  If ListA > ListB, ListB will be extended.  If ListA < ListB, ListB will be truncated."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARPolygons",
+      "Id": "e7e1f40576aa4b719dafcd0f38ac1816",
+      "Inputs": [
+        {
+          "Id": "fd4c2770a18544a0b6ea3a8084bc54d0",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.Polygon.ByPoints@Autodesk.DesignScript.Geometry.Point[]",
+      "Id": "b67414b6fe154b6c89e6f0e85895dc1f",
+      "Inputs": [
+        {
+          "Id": "5c0c20481268459ca90a7ba038abed7c",
+          "Name": "points",
+          "Description": "Point[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "c446564501c140be8fdc1b38cc0c3ddd",
+          "Name": "Polygon",
+          "Description": "Polygon",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Construct a Polygon Curve by connecting Points.\n\nPolygon.ByPoints (points: Point[]): Polygon"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "597def74-6997-4484-bb18-67a97819c8bd",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "6b3e29e1b1e24747ac52aedac03bf80d",
+      "Inputs": [
+        {
+          "Id": "750e860cb12e426aa0db015cebf5ea65",
+          "Name": "VARtest",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b237e811b1194f68a246531685bb19f1",
+          "Name": "VARtrue",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "abf13f0589c546ea939e9d557f2a5569",
+          "Name": "VARfalse",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "8383055ca69d4ac3bbf4ecabb05c3634",
+          "Name": "VARresult",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "A (hopefully) more robust implementation of ScopeIf. Tests a single boolean and returns a value accordingly."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.Empty",
+      "Id": "cb641b26ce9440efa24273ac81b7a987",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bec9f60ff5374b3ca7dc9163f79b0a6a",
+          "Name": "list",
+          "Description": "Empty list.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns an Empty List.\n\nList.Empty: var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARShowPolygons",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "3d3b11aa3acd4db29a4559e4ad0b0045",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "06c6e25d310648a2bb8b788712abf6ba",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "550ab564bea64025943525098ec1bdc7",
+      "End": "26bcccce65954d02b04733ee1cb32db6",
+      "Id": "3d941022ec7f4e8e8921bdac6b85dc06"
+    },
+    {
+      "Start": "550ab564bea64025943525098ec1bdc7",
+      "End": "32301ac1d78140d9aef329f368f88cb7",
+      "Id": "d999e0c30e354449b5e9e154cdf1f8d0"
+    },
+    {
+      "Start": "1214b349da9e4f89bdce18cb70850321",
+      "End": "6024b290e9d540a0adfe4c2ba107b14e",
+      "Id": "c8470bef9b344b259263cf0bc565b0ae"
+    },
+    {
+      "Start": "c6958c68b2e8469b84028142fb6dd208",
+      "End": "8042a8d640874bc08f1224b9ea8606d0",
+      "Id": "5b782c30ee8c4bcdbd97c6c7fc61c137"
+    },
+    {
+      "Start": "5b607cb909c94dab8c47f441f1ad9700",
+      "End": "cca0c6ed415a416296e2f3c07287f41d",
+      "Id": "df539e6e34794c7e83265ad73d47fd50"
+    },
+    {
+      "Start": "5b607cb909c94dab8c47f441f1ad9700",
+      "End": "d09c64e9577349a58b52ea8298a41ab0",
+      "Id": "898a2745d20a455598c2b9ca1d8e4103"
+    },
+    {
+      "Start": "32efdea5b8474dffaed54a0f5909197b",
+      "End": "6990c08cf932422b8e52b8c4ab4a291c",
+      "Id": "a432a9ee5dea4cff9efb75934a9134eb"
+    },
+    {
+      "Start": "07fe20905ee649868c3974ac73a0889a",
+      "End": "097f486a19b04b09af8f19ac79ce3256",
+      "Id": "77e08d10c37341628947fb620313d8d0"
+    },
+    {
+      "Start": "0b25d0bc20944370809885c3f1dfc428",
+      "End": "e2468895af904041bfb37d775c46b162",
+      "Id": "b3fd683acd404f868287cbe783e6bc72"
+    },
+    {
+      "Start": "0b25d0bc20944370809885c3f1dfc428",
+      "End": "b237e811b1194f68a246531685bb19f1",
+      "Id": "46f0072d6dc14b3ca1d1aa622290c95d"
+    },
+    {
+      "Start": "aeb369ef42e04b3c805979cc455867df",
+      "End": "38f48936dacf4fe8afbca3ea13d65a5f",
+      "Id": "dc974ba9dc2e45ca918eaa0a94045777"
+    },
+    {
+      "Start": "c385c6f208e349a6b6cdc4440e47f5aa",
+      "End": "b0b45f4f7dba4143a272604a458a4a99",
+      "Id": "a06b9effe22f4748a015f15d66aa8065"
+    },
+    {
+      "Start": "cfffc3ff8b9b4a6abff6d8d79237b901",
+      "End": "3a8304b2811a459bb7b9d4592363ec4c",
+      "Id": "ca801d2ffdb6499dae158955e8c1e300"
+    },
+    {
+      "Start": "357a3996325a43008637baad4b79a12b",
+      "End": "eadc8b422f3a4c028359593be855b8bf",
+      "Id": "ab0392815e404a9c98b04698f89e13fc"
+    },
+    {
+      "Start": "c446564501c140be8fdc1b38cc0c3ddd",
+      "End": "fd4c2770a18544a0b6ea3a8084bc54d0",
+      "Id": "20fda0119b4740b7adf49fdaf70b0c22"
+    },
+    {
+      "Start": "8383055ca69d4ac3bbf4ecabb05c3634",
+      "End": "5c0c20481268459ca90a7ba038abed7c",
+      "Id": "fac8a6bef20146aaba4301e20f51c068"
+    },
+    {
+      "Start": "bec9f60ff5374b3ca7dc9163f79b0a6a",
+      "End": "abf13f0589c546ea939e9d557f2a5569",
+      "Id": "2a2b12b52b9f430e86644f74b9f0811d"
+    },
+    {
+      "Start": "06c6e25d310648a2bb8b788712abf6ba",
+      "End": "750e860cb12e426aa0db015cebf5ea65",
+      "Id": "37f0751ad8ba4d93a9e67ccf240b33be"
+    }
+  ],
+  "Dependencies": [
+    "3f6186b6-21c3-4885-bd79-4bd795fa1327",
+    "597def74-6997-4484-bb18-67a97819c8bd"
+  ],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 33.510093688964844,
+      "EyeY": 52.358806610107422,
+      "EyeZ": 70.026435852050781,
+      "LookX": -45.6616096496582,
+      "LookY": -63.234153747558594,
+      "LookZ": -93.992019653320313,
+      "UpX": -0.14082010090351105,
+      "UpY": 0.94664913415908813,
+      "UpZ": -0.28987056016921997
+    },
+    "NodeViews": [
+      {
+        "Id": "8d85fb30bc8643bd92882a1ced4469d7",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -246.64931600962,
+        "Y": 64.0968804655453
+      },
+      {
+        "Id": "5b620cf9cc7c44559c07c693d820aef8",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -260.594716205865,
+        "Y": 181.539361463293
+      },
+      {
+        "Id": "d3b4a7b77a5844b89aec60e61cd9bcf6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -246.726039636968,
+        "Y": 257.962756128484
+      },
+      {
+        "Id": "de1e1cf3a58c411cb29250763e6bf743",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1670.47561696616,
+        "Y": -26.2043079310364
+      },
+      {
+        "Id": "9d8dd293afb5413fa961d7de3ce18cbd",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1667.85013296682,
+        "Y": 68.6991463645692
+      },
+      {
+        "Id": "f1269f76e8124f3391090b0fdd3e2e09",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 324.449663406147,
+        "Y": 111.968105162011
+      },
+      {
+        "Id": "56c639019a8a4f36b26debc35fb26a37",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "List.GetItemAtIndex",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 614.096379120078,
+        "Y": 43.1825551124278
+      },
+      {
+        "Id": "be7b9240010a468f89aa26cc57411c8b",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Name": "Number",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 493.437108505072,
+        "Y": 93.865554971003
+      },
+      {
+        "Id": "bbb0e80352c94516a0176ec3d680d546",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "List.GetItemAtIndex",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 614.096379120078,
+        "Y": -80.5782584957209
+      },
+      {
+        "Id": "58e117ca0d7b4f43af572aa50e01dd94",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Name": "Number",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 493.437108505072,
+        "Y": -29.8952586371457
+      },
+      {
+        "Id": "d087871a7cda4b68815eb0bda552551f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "LB.LunchBox List Matcher",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -13.7165703138556,
+        "Y": 50.665725790851
+      },
+      {
+        "Id": "683280e2445f4fe0941672c13bad9d70",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "LB.LunchBox List Matcher",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -5.00976108779102,
+        "Y": 173.365461131944
+      },
+      {
+        "Id": "e7e1f40576aa4b719dafcd0f38ac1816",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1673.83459810741,
+        "Y": 264.812378124759
+      },
+      {
+        "Id": "b67414b6fe154b6c89e6f0e85895dc1f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Polygon.ByPoints",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 1323.46275562352,
+        "Y": 307.415133759967
+      },
+      {
+        "Id": "6b3e29e1b1e24747ac52aedac03bf80d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "CW.ScopeIf+",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 980.35384724201,
+        "Y": 387.473879048988
+      },
+      {
+        "Id": "cb641b26ce9440efa24273ac81b7a987",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "List.Empty",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 744.35196573034,
+        "Y": 648.245828958598
+      },
+      {
+        "Id": "3d3b11aa3acd4db29a4559e4ad0b0045",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -261.706351235342,
+        "Y": 369.730023398997
+      }
+    ],
+    "Annotations": [],
+    "X": 289.544452454169,
+    "Y": 118.413131590409,
+    "Zoom": 0.673891896002379
+  }
+}

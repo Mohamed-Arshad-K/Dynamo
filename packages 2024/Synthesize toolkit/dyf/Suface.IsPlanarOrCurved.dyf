@@ -1,0 +1,164 @@
+{
+  "Uuid": "14487abe-5240-42b5-b34d-46adb6566297",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Surface",
+  "Description": "Suface.IsPlanarOrCurved",
+  "Name": "Suface.IsPlanarOrCurved",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\ndef isplanarsurf(s):\n\tnorms = [0,0.333,0.666,1]\n\tpts = []\n\tfor n in norms:\n\t\tfor n2 in norms:\n\t\t\tpts.append(dg.Surface.PointAtParameter(s,n,n2))\n\tplane = dg.Plane.ByBestFitThroughPoints(pts)\n\tstatus = True\n\tfor p in pts:\n\t\ttry:\n\t\t\tinter = dg.Geometry.DoesIntersect(p,plane)\n\t\t\tif inter == False:\n\t\t\t\tstatus = False\n\t\t\t\tbreak\n\t\texcept:\n\t\t\tpass\n\treturn status\n\ndef iscurvesurf(s):\n\tnorms = [0,0.333,0.666,1]\n\ttry:\n\t\tfor n in norms:\n\t\t\tcurve1 = dg.Geometry.Explode(dg.Curve.ByIsoCurveOnSurface(s,0,n))[0]\n\t\t\tcurve2 = dg.Geometry.Explode(dg.Curve.ByIsoCurveOnSurface(s,1,n))[0]\n\t\t\tif (isinstance(curve1, dg.Line) or isinstance(curve1, dg.Circle)) and (isinstance(curve2, dg.Line) or isinstance(curve2, dg.Circle)):\n\t\t\t\tcontinue\n\t\t\telse:\n\t\t\t\tisgood = False\n\t\t\t\ttry:\n\t\t\t\t\tarclength1 = dg.Arc.ByThreePoints(curve1.StartPoint,dg.Curve.PointAtParameter(curve1,0.5),curve1.EndPoint).Length\n\t\t\t\t\tif round(arclength1,2) == round(curve1.Length):\n\t\t\t\t\t\tcontinue\n\t\t\t\t\telse:\n\t\t\t\t\t\treturn False\n\t\t\t\texcept:\t\n\t\t\t\t\tisgood = True\n\t\t\t\t\tpass\n\t\t\t\ttry:\n\t\t\t\t\tarclength2 = dg.Arc.ByThreePoints(curve2.StartPoint,dg.Curve.PointAtParameter(curve2,0.5),curve2.EndPoint).Length\n\t\t\t\t\tif round(arclength2,2) == round(curve2.Length):\n\t\t\t\t\t\tcontinue\n\t\t\t\t\telse:\n\t\t\t\t\t\treturn False\n\t\t\t\texcept:\n\t\t\t\t\tisgood = True\n\t\t\t\t\tpass\n\t\t\t\tif isgood:\n\t\t\t\t\tcontinue\n\t\treturn True\n\texcept:\n\t\treturn False\nsurfs = flatten(tolist(IN[0]))\nresult = []\nfor s in surfs:\n\tif isplanarsurf(s) or iscurvesurf(s):\n\t\tresult.append(True)\n\telse:\n\t\tresult.append(False)\nOUT = result",
+      "VariableInputPorts": true,
+      "Id": "afe67dfd16df45bc9492c21fd249d48a",
+      "Inputs": [
+        {
+          "Id": "02a3f53f0eaa4cb9a324b80fb9348ac2",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "abfc61c58347480d9dbbd1dfa6d436b1",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARsurface",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "0a1356a919ed472f9314b7a81eb6b461",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d3009ef935504b178e1057eac77577a8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARbool",
+      "Id": "2a2e6aed770f430ea8f34b37b1004e5e",
+      "Inputs": [
+        {
+          "Id": "3690dee9f6ee479b8e6f2dabfeee8446",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "abfc61c58347480d9dbbd1dfa6d436b1",
+      "End": "3690dee9f6ee479b8e6f2dabfeee8446",
+      "Id": "7356ec44ba9d439ebcc8d934307b0821"
+    },
+    {
+      "Start": "d3009ef935504b178e1057eac77577a8",
+      "End": "02a3f53f0eaa4cb9a324b80fb9348ac2",
+      "Id": "ee7c760cebbf4537808db16be3d415ad"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "afe67dfd16df45bc9492c21fd249d48a",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "0a1356a919ed472f9314b7a81eb6b461",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "2a2e6aed770f430ea8f34b37b1004e5e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 255.2,
+    "Y": 157.6,
+    "Zoom": 1.0
+  }
+}

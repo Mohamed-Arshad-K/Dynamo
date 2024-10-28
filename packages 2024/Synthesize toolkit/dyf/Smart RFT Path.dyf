@@ -1,0 +1,219 @@
+{
+  "Uuid": "330d6a06-076a-4112-9cc1-d5e601b646c6",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.List",
+  "Description": "Smart RFT Path",
+  "Name": "Smart RFT Path",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Category": {
+        "Key": "Revit.Elements.Category",
+        "Value": "RevitNodes.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\n\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\nclr.AddReference('RevitServices')\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\nclr.AddReference(\"System\")\nimport System\nimport sys\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nfrom System.Net import WebRequest\nimport urllib2\nimport urllib\nimport os\nimport clr\n# Adding the DynamoRevitDS.dll module to work with the Dynamo API\nclr.AddReference('DynamoRevitDS')\nimport Dynamo \nclr.AddReference('DSCoreNodes')\nimport DSCore\nfrom DSCore import *\nclr.AddReference(\"RevitServices\")\nfrom RevitServices.Persistence import DocumentManager\ndoc = DocumentManager.Instance.CurrentDBDocument\napp = DocumentManager.Instance.CurrentUIApplication.Application\n# access to the current Dynamo instance and workspace\n\noriginalpath = IN[0]\ncategory = UnwrapElement(IN[1])\n\ntry:\n\tcategory = Revit.Elements.Category.ByName(category)\nexcept:\n\tcategory = category\n\ncategory = category.Name\n\nscript = \"\\\\\".join(Dynamo.Applications.DynamoRevit().RevitDynamoModel.CurrentWorkspace.FileName.split(\"\\\\\")[:-1])\n\nif category == \"Ceilings\":\n\tfinalfile = script + \"\\\\Sample K-3D Ceilings.rft\"\nelif category == \"Floors\":\n\tfinalfile = script + \"\\\\Sample K-3D Floors.rft\"\nelif category == \"Roofs\":\n\tfinalfile = script + \"\\\\Sample K-3D Roofs.rft\"\nelif category == \"Stairs\":\n\tfinalfile = script + \"\\\\Sample K-3D Stairs.rft\"\nelif category == \"Topography\":\n\tfinalfile = script + \"\\\\Sample K-3D Topography.rft\"\nelif category == \"Walls\":\n\tfinalfile = script + \"\\\\Sample K-3D Walls.rft\"\nelse:\n\tif category == \"Planting\":\n\t\tcategory = \"Generic Model\"\n\telif category == \"Adaptive Points\":\n\t\tcategory = \"Generic Model Adaptive\"\n\telif category == \"Curtain Panels\":\n\t\tcategory = \"Generic Model Pattern Based\"\n\telif category[-1] == \"s\" and category != \"Mass\":\n\t\tcategory = category[0:-1]\n\t\n\tdef fast_files(dir):\n\t    allfiles = [os.path.join(path, name) for path, subdirs, files in os.walk(dir) for name in files]\n\t    return allfiles\n\t\n\trevitversion = app.VersionName.split(\" \")[-1]\n\twantedfolder = \"RVT \" + revitversion\n\t\n\tdoesexist = os.path.isfile(originalpath)\n\t\n\tif wantedfolder not in originalpath:\n\t\tdoesexist = False\n\t\n\tif category != \"Mass\" and \"Mass\" in originalpath:\n\t\tdoesexist = False\n\t\n\tif doesexist == False:\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\tunits = doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits.ToString()\n\t\telse:\n\t\t\tunits = LabelUtils.GetLabelForUnit(doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\t\tfullpath = \"C:\\\\ProgramData\\\\Autodesk\\\\\"\n\t\tallexisted = os.listdir(fullpath)\n\t\t\n\t\treallywanted = []\n\t\tfor a in allexisted:\n\t\t\tif a == wantedfolder:\n\t\t\t\tif \"feet\" in units.lower() or \"inches\" in units.lower():\n\t\t\t\t\tif float(revitversion) < 2021:\n\t\t\t\t\t\treallywanted = fullpath + wantedfolder + \"\\\\Family Templates\\\\English_I\"\n\t\t\t\t\telse:\n\t\t\t\t\t\treallywanted = fullpath + wantedfolder + \"\\\\Family Templates\\\\English-Imperial\"\n\t\t\t\t\tprefix = \"\"\n\t\t\t\telse:\n\t\t\t\t\treallywanted = fullpath + wantedfolder + \"\\\\Family Templates\\\\English\"\n\t\t\t\t\tprefix = \"Metric \"\n\t\t\t\tbreak\n\t\t\n\t\ttry:\n\t\t\ttargetcat = prefix + category + \".rft\"\n\t\t\tallfiles = fast_files(reallywanted)\n\t\t\tfinalfile = []\n\t\t\tfor a in allfiles:\n\t\t\t\tsplitted = a.split(\"\\\\\")[-1]\n\t\t\t\tif splitted == targetcat:\n\t\t\t\t\tfinalfile = a\n\t\t\t\t\tbreak\n\t\texcept:\n\t\t\tpass\n\t\t\n\t\tif reallywanted == [] or finalfile == []:\n\t\t\tfinalfile = originalpath\n\telse:\n\t\tfinalfile = originalpath\n\nOUT = finalfile",
+      "VariableInputPorts": true,
+      "Id": "bf878aa5eba247c79b48dd4774f72558",
+      "Inputs": [
+        {
+          "Id": "ca173b534a9e4207856000ea5bda2f5d",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2519b9e7fa394a95bf1304e8034b9017",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "967619216e6f45d5b29f16749e6cf388",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARRFTFile",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "ceff9d3d96d54792af9664ad04d15c3d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "074667d2971548ccbb74361835337fb5",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARCategory",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": "Revit.Elements.Category.ByName(\"OST_GenericModel\")",
+        "Description": ""
+      },
+      "Id": "5f41c6f92373412d97ded6b8dfcc2bf9",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "de0101c75dbf4d96ae9ad99ff0174ae9",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARout",
+      "Id": "a9e90c7b526e4aecaaccb573ec885d30",
+      "Inputs": [
+        {
+          "Id": "9e4dc0e315a94ff9b401671193949282",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "967619216e6f45d5b29f16749e6cf388",
+      "End": "9e4dc0e315a94ff9b401671193949282",
+      "Id": "6db6ad33017247e9b01f233e85b0bde7"
+    },
+    {
+      "Start": "074667d2971548ccbb74361835337fb5",
+      "End": "ca173b534a9e4207856000ea5bda2f5d",
+      "Id": "4eea67e0c122447787d59099f23f2414"
+    },
+    {
+      "Start": "de0101c75dbf4d96ae9ad99ff0174ae9",
+      "End": "2519b9e7fa394a95bf1304e8034b9017",
+      "Id": "9ca8e300ddb0465faf0ca4bf8e8fdd61"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "bf878aa5eba247c79b48dd4774f72558",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "ceff9d3d96d54792af9664ad04d15c3d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "5f41c6f92373412d97ded6b8dfcc2bf9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -244.014177903573,
+        "Y": 161.739513713574
+      },
+      {
+        "Id": "a9e90c7b526e4aecaaccb573ec885d30",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 197.915273142249,
+    "Y": 175.3750232692,
+    "Zoom": 0.679007436100058
+  }
+}

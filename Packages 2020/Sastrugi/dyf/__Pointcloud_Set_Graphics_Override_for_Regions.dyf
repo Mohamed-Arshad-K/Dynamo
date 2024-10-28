@@ -1,0 +1,314 @@
+{
+  "Uuid": "c96b5994-d198-43e9-b3ec-af95f5e8d53f",
+  "IsCustomNode": true,
+  "Category": "Sastrugi.Pointcloud.Graphics",
+  "Description": "(Sastrugi-Pointcloud_Graphics) Overrides the graphics for Region locations within a Pointcloud instance in the specified views.",
+  "Name": "❄_Pointcloud Set Graphics Override for Regions",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "PointcloudInstance",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "8d0e14f1cc77414e9f24662092a42f4c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4268e359ab944a80be1508300c084a87",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "PointcloudOverrideSettings",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Plese note that Regions within Pointcloud\nInstances can only be overriden with \na Fixed Color graphics style. "
+      },
+      "Id": "fa1be66a8e7f4402b6fbbd366505384d",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "8259e1fc49944018842ad7563651737b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "RegionNames",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "8c478666deb54ae8959b71163c9246ab",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c043f0c3ef1a42c3a39521b3c2136888",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "PointcloudInstance",
+      "Id": "ae13bf6335f2403f84d347a506bfbc38",
+      "Inputs": [
+        {
+          "Id": "43632f2dc1cb4c2f8e4e0b6bdd9b2718",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Python coding credit to Dynamo Forum user - @Ewan_Opie 2019\n# Sastrugi Package https://sites.google.com/view/sastrugi/home\n\nimport clr\nclr.AddReference(\"RevitNodes\")\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\nclr.AddReference(\"RevitServices\")\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\nfrom System.Collections.Generic import *\n\nclr.AddReference(\"RevitAPI\")\nimport Autodesk\nfrom Autodesk.Revit.DB import *\n\nfrom Autodesk.Revit import DB\n\nimport sys\npyt_path = r'C:\\Program Files (x86)\\IronPython 2.7\\Lib'\nsys.path.append(pyt_path)\n\nclr.ImportExtensions(Revit.GeometryConversion)\n\ndoc = DocumentManager.Instance.CurrentDBDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\ndef tolist(obj1):\n\tif hasattr(obj1,\"__iter__\"): return obj1\n\telse: return [obj1]\t\n\t\ncloud = tolist(UnwrapElement(IN[0]))\n\npcORsettings = tolist(IN[1])\n\nname = tolist(IN[2])\n\nviews = tolist(UnwrapElement(IN[3]))\n\nTransactionManager.Instance.EnsureInTransaction(doc)\n\ntry:\n\t\terrorReport = None\n\t\tif len(cloud)>1:\n\t\t\tfor c in cloud:\n\t\t\t\tfor v in views:\n\t\t\t\t\tpt_overrides = v.GetPointCloudOverrides()\n\t\t\t\tfor p1,n1 in zip(pcORsettings,name):\n\t\t\t\t\tfor p2,n2 in zip(p1,n1):\n\t\t\t\t\t\tpt_overrides.SetPointCloudRegionOverrideSettings(c.Id, p2,n2,doc)\n\t\telse:\n\t\t\tfor c in cloud:\n\t\t\t\tfor v in views:\n\t\t\t\t\tpt_overrides = v.GetPointCloudOverrides()\n\t\t\t\tfor p,n in zip(pcORsettings,name):\n\t\t\t\t\t\tpt_overrides.SetPointCloudRegionOverrideSettings(c.Id, p,n,doc)\nexcept:\n\t\timport traceback\n\t\terrorReport = str(traceback.format_exc())\n\t\t\nTransactionManager.Instance.TransactionTaskDone()\n\nif errorReport == None:\n\tOUT = cloud\nelse:\n\tOUT = errorReport\n\n\t",
+      "VariableInputPorts": true,
+      "Id": "adfafe86e3014170b69251a365663a70",
+      "Inputs": [
+        {
+          "Id": "0e185159197845ea99e20c3c83f022c6",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f45de918e42a4ec8816cf5fd07af1aa1",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "85fb31f58f8d4370b4ddf5c0e8d00835",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e55aa43bb6e54cf59710c49c4480f160",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "022e60e3711548d7b0026b7903093506",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "ViewList",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "aceacd80c2ce432598dbe7e31a377754",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "13c86aa32b5040cfa405f11844ede77a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "4268e359ab944a80be1508300c084a87",
+      "End": "0e185159197845ea99e20c3c83f022c6",
+      "Id": "c2b1ad09a3504bcbb666c41aa6dd3545"
+    },
+    {
+      "Start": "8259e1fc49944018842ad7563651737b",
+      "End": "f45de918e42a4ec8816cf5fd07af1aa1",
+      "Id": "630a614aaf5745e8978f42e37459b10b"
+    },
+    {
+      "Start": "c043f0c3ef1a42c3a39521b3c2136888",
+      "End": "85fb31f58f8d4370b4ddf5c0e8d00835",
+      "Id": "8aae03308ea64e12aa622e568ea6f34d"
+    },
+    {
+      "Start": "022e60e3711548d7b0026b7903093506",
+      "End": "43632f2dc1cb4c2f8e4e0b6bdd9b2718",
+      "Id": "bd693c3f70854b1cad98353a4e8410f7"
+    },
+    {
+      "Start": "13c86aa32b5040cfa405f11844ede77a",
+      "End": "e55aa43bb6e54cf59710c49c4480f160",
+      "Id": "53baf93e9f4f4c9c82dad5158dc0625a"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.2.1.5175",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "8d0e14f1cc77414e9f24662092a42f4c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 221.5,
+        "Y": 408.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "fa1be66a8e7f4402b6fbbd366505384d",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 25.5,
+        "Y": 466.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "8c478666deb54ae8959b71163c9246ab",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 193.15831387715872,
+        "Y": 572.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "ae13bf6335f2403f84d347a506bfbc38",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 620.200296735905,
+        "Y": 480.103857566766
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "adfafe86e3014170b69251a365663a70",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 458.505483856796,
+        "Y": 475.53412462908
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "aceacd80c2ce432598dbe7e31a377754",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 209.22033623824552,
+        "Y": 637.51033706018131
+      }
+    ],
+    "Annotations": [],
+    "X": 29.880117497623417,
+    "Y": -207.050123253984,
+    "Zoom": 0.803321593462598
+  }
+}

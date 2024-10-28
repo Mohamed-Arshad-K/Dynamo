@@ -1,0 +1,2090 @@
+{
+  "Uuid": "e15fd09b-a0a3-4b76-bb87-9439bc9b52fc",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "K-Family Insert",
+  "Name": "K-Family Insert",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Revit.Elements.Category": {
+        "Key": "Revit.Elements.Category",
+        "Value": "RevitNodes.dll"
+      }
+    }
+  },
+  "Inputs": [
+    {
+      "Id": "8b515dc3e8154235bab83e424cff8c2e",
+      "Name": "Default Family Template",
+      "Type": "string",
+      "Value": "C:\\ProgramData\\Autodesk\\RVT 2020\\Family Templates\\English\\Metric Generic Model.rft",
+      "Description": "Creates a string.",
+      "SelectedIndex": 0
+    }
+  ],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki, karam@aecedx.com\r\n\r\nimport clr\r\nimport System\r\n\r\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\r\nimport sys\r\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\r\nimport traceback\r\nimport random\r\nimport string\r\nimport re\r\n\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript import Geometry as dg\r\n\r\nclr.AddReference('RevitServices')\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB.Structure import StructuralType\r\n\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\nclr.AddReference('DynamoRevitDS')\r\nimport Dynamo\r\n\r\nclr.AddReference(\"RevitAPIUI\")\r\nfrom Autodesk.Revit.UI import TaskDialog\r\n\r\nclr.AddReference(\"System\")\r\nfrom System import Array\r\n\r\nimport math\r\n\r\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\tallSpecsNames = []\r\nelse:\r\n\tallSpecs = SpecUtils.GetAllSpecs()\r\n\tallSpecsNames = []\r\n\tfor spec in allSpecs:\r\n\t\tallSpecsNames.append(LabelUtils.GetLabelForSpec(spec))\r\n\r\ndef getSpec(specName):\r\n\tindexOf = allSpecsNames.IndexOf(specName)\r\n\tif indexOf != -1:\r\n\t\treturn allSpecs[indexOf]\r\n\treturn None\r\n\r\n# Family Load Options Class\r\nclass FamOpt1(IFamilyLoadOptions):\r\n\tdef __init__(self):\r\n\t\tpass\r\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\r\n\t\toverwriteParameterValues.Value = True\r\n\t\treturn True\r\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\r\n\t\toverwriteParameterValues.Value = True\r\n\t\treturn True\r\n\r\n# Family Load Options Class - Without Overwriting Parameters\r\nclass FamOptWithout(IFamilyLoadOptions):\r\n\tdef __init__(self):\r\n\t\tpass\r\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\r\n\t\toverwriteParameterValues.Value = False\r\n\t\treturn True\r\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\r\n\t\toverwriteParameterValues.Value = False\r\n\t\treturn True\r\n\r\n# Simple Warning Swallow Class\r\nclass WarnSwallowSimple(IFailuresPreprocessor):\r\n\tdef PreprocessFailures(self, failuresAccessor):\r\n\t\tfailuresAccessor.DeleteAllWarnings()\r\n\t\treturn FailureProcessingResult.Continue\r\n\r\n# Get/Create Wanted Family Type\r\ndef getfamtype(famdoc,famtypename = None):\r\n\talltypes = famdoc.FamilyManager.Types\r\n\tif len(list(alltypes)) == 1 or famtypename == None:\r\n\t\tfamtype = famdoc.FamilyManager.CurrentType\r\n\telif len(list(alltypes)) == 0 or famtypename == None:\r\n\t\tfamtype = famdoc.FamilyManager.NewType(famtypename)\r\n\t\tfamdoc.FamilyManager.CurrentType = famtype\r\n\telse:\r\n\t\tfor t in alltypes:\r\n\t\t\tif t.Name == famtypename:\r\n\t\t\t\tfamdoc.FamilyManager.CurrentType = t\r\n\t\t\t\tfamtype = t\r\n\t\t\t\tbreak\r\n\treturn famtype\r\n\r\n# To List\r\ndef tolist(obj1):\r\n\tif hasattr(obj1,'__iter__'): return obj1\r\n\telse: return [obj1]\r\n\r\n# Free Form of Import Instance\r\ndef freeformfromimportinstance(famdoc,importedelement,opt1):\r\n\tgeomfix = []\r\n\tif famdoc.IsFamilyDocument == True:\r\n\t\tgeom = importedelement.get_Geometry(opt1)\r\n\t\tfor e in geom:\r\n\t\t\tgo = e.GetInstanceGeometry()\r\n\t\t\tfor g in go:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tgeomfix.append(FreeFormElement.Create(famdoc,g))\r\n\t\t\t\texcept:\r\n\t\t\t\t\tpass\r\n\telse:\r\n\t\tgeomfix.append(importedelement)\r\n\treturn geomfix\r\n\r\n# Flatten List\r\ndef flatten(x):\r\n    result = []\r\n    try:\r\n    \tfor el in x:\r\n        \tif hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n        \t    result.extend(flatten(el))\r\n        \telse:\r\n        \t    result.append(el)\r\n    except:\r\n    \tresult = x\r\n    return result\r\n\r\n# Change Material\r\ndef changemat(famname,doc,togolist,material,subcategory,subcategorymat,isonemat,ismatinstance,matparamname,separator):\r\n\tsubcatmat = None\r\n\tif doc.IsFamilyDocument == True:\r\n\t\tmat_fec = FilteredElementCollector(doc).OfClass(Material)\r\n\t\ttry:\r\n\t\t\tSUB_fam_mat = False\r\n\t\t\tif subcategorymat != \"\" and subcategorymat != None and subcategory != \"\" and subcategory != None:\r\n\t\t\t\tfor sm in mat_fec:\r\n\t\t\t\t\tif sm.Name.lower() == subcategorymat.lower():\r\n\t\t\t\t\t\tSUB_fam_mat = sm.Id\r\n\t\t\t\t\t\tsubcatmat = doc.GetElement(SUB_fam_mat)\r\n\t\t\t\t\t\tbreak\r\n\t\t\t\tif SUB_fam_mat == False:\r\n\t\t\t\t\tSUBnewmat = Material.Create(doc, subcategorymat)\r\n\t\t\t\t\tdefcolor = Color(120,120,120)\r\n\t\t\t\t\tSUBmatelement = doc.GetElement(SUBnewmat)\r\n\t\t\t\t\tSUBmatelement.Color = defcolor\r\n\t\t\t\t\tif \"transparen\" in subcategorymat.lower():\r\n\t\t\t\t\t\tSUBmatelement.Transparency = 50\r\n\t\t\t\t\tsubcatmat = SUBmatelement\r\n\t\texcept: pass\t\t\t\t\t\r\n\t\tif material != \"\" and material != None:\r\n\t\t\tfam_mat = False\r\n\t\t\tfor m in mat_fec:\r\n\t\t\t\tif m.Name.lower() == material.lower():\r\n\t\t\t\t\tfam_mat = m.Id\r\n\t\t\t\t\tbreak\r\n\t\t\tif fam_mat == False:\r\n\t\t\t\tnewmat = Material.Create(doc, material)\r\n\t\t\t\tdefcolor = Color(120,120,120)\r\n\t\t\t\tmatelement = doc.GetElement(newmat)\r\n\t\t\t\tmatelement.Color = defcolor\r\n\t\t\t\tif \"transparen\" in material.lower():\r\n\t\t\t\t\tmatelement.Transparency = 50\r\n\t\t\t\tfam_mat = newmat\r\n\t\tgetfamtype(doc,famname)\r\n\t\tif material != None:\r\n\t\t\tif isonemat == False:\r\n\t\t\t\t#if len(togolist) == 1:\r\n\t\t\t\t#\tactuallyone = True\r\n\t\t\t\t#else:\r\n\t\t\t\t#\tactuallyone = False\r\n\t\t\t\tcount = 1\r\n\t\t\t\tfor k in togolist:\r\n\t\t\t\t\tmatpname = matparamname + separator + str(count)\r\n\t\t\t\t\t#if actuallyone:\r\n\t\t\t\t\t#\tmatpname = matparamname\r\n\t\t\t\t\t#else:\r\n\t\t\t\t\t#\tmatpname = matparamname + separator + str(count)\r\n\t\t\t\t\tcount += 1\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(matpname,BuiltInParameterGroup.PG_MATERIALS,ParameterType.Material,ismatinstance)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(matpname,GroupTypeId.Materials,getSpec(\"Material\"),ismatinstance)\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\texistedparams = doc.FamilyManager.GetParameters()\r\n\t\t\t\t\t\tfor existedp in existedparams:\r\n\t\t\t\t\t\t\tif existedp.Definition.Name == matpname:\r\n\t\t\t\t\t\t\t\tfamnewpar = existedp\r\n\t\t\t\t\t\t\t\tif (ismatinstance and existedp.IsInstance) or (ismatinstance == False and existedp.IsInstance == False):\r\n\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\t\telif ismatinstance:\r\n\t\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeInstance(famnewpar)\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeType(famnewpar)\r\n\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\tif isinstance(k, list):\r\n\t\t\t\t\t\tfor minik in k:\r\n\t\t\t\t\t\t\tmatparam = minik.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM)\r\n\t\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(matparam,famnewpar)\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tmatparam = k.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM)\r\n\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(matparam,famnewpar)\r\n\t\t\t\t\tif material != \"\" and material != None:\r\n\t\t\t\t\t\tdoc.FamilyManager.Set(famnewpar,fam_mat)\r\n\t\t\telse:\r\n\t\t\t\tmatpname = matparamname\r\n\t\t\t\ttry:\r\n\t\t\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(matpname,BuiltInParameterGroup.PG_MATERIALS,ParameterType.Material,ismatinstance)\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(matpname,GroupTypeId.Materials,getSpec(\"Material\"),ismatinstance)\r\n\t\t\t\texcept:\r\n\t\t\t\t\texistedparams = doc.FamilyManager.GetParameters()\r\n\t\t\t\t\tfor existedp in existedparams:\r\n\t\t\t\t\t\tif existedp.Definition.Name == matpname:\r\n\t\t\t\t\t\t\tfamnewpar = existedp\r\n\t\t\t\t\t\t\tif (ismatinstance and existedp.IsInstance) or (ismatinstance == False and existedp.IsInstance == False):\r\n\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\telif ismatinstance:\r\n\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeInstance(famnewpar)\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeType(famnewpar)\r\n\t\t\t\t\t\t\tbreak\r\n\t\t\t\tif material != \"\" and material != None:\r\n\t\t\t\t\tdoc.FamilyManager.Set(famnewpar,fam_mat)\r\n\t\t\t\ttogolist = flatten(togolist)\r\n\t\t\t\tfor k in togolist:\r\n\t\t\t\t\tmatparam = k.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM)\r\n\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(matparam,famnewpar)\r\n\t\t\tdoc.FamilyManager.SortParameters(ParametersOrder.Ascending)\r\n\treturn subcatmat\r\n\r\n# Change Subcategory\r\ndef changesubcat(doc,togolist,subcategory,subcatmat):\r\n\tif doc.IsFamilyDocument == True and subcategory != \"\" and subcategory != None:\r\n\t\ttry:\t\r\n\t\t\tsubcat1 = subcategory\r\n\t\t\tcurrent_fam_cat = doc.OwnerFamily.FamilyCategory\r\n\t\t\tsub_fec = current_fam_cat.SubCategories\r\n\t\t\tsub_cat = False\r\n\t\t\tfor sub in sub_fec:\r\n\t\t\t\tif sub.Name.lower() == subcat1.lower():\r\n\t\t\t\t\tsub_cat = sub\r\n\t\t\t\t\tbreak\r\n\t\t\tif sub_cat == False:\r\n\t\t\t\tnewsubcat = doc.Settings.Categories.NewSubcategory(current_fam_cat, subcat1)\r\n\t\t\t\tsub_cat = newsubcat\r\n\t\t\t\ttry:\r\n\t\t\t\t\tsub_cat.Material = subcatmat\r\n\t\t\t\texcept:\r\n\t\t\t\t\tpass\r\n\t\t\ttogolist = flatten(togolist)\r\n\t\t\tfor s2 in togolist:\r\n\t\t\t\ts2.Subcategory = sub_cat\r\n\t\texcept: pass\r\n\treturn \"Done\"\r\n\r\n# Change to Void\r\ndef changetovoid(doc,togolist,tovoid):\r\n\tif tovoid == True and doc.IsFamilyDocument == True:\r\n\t\ttogolist = flatten(togolist)\r\n\t\tfor k in togolist:\r\n\t\t\tvoid_par = k.get_Parameter(BuiltInParameter.ELEMENT_IS_CUTTING)\r\n\t\t\tvoid_par.Set(1)\r\n\treturn \"Done\"\r\n\r\n# Free Form Function\r\ndef New_FreeForm(doc,view,opt1,dyngeom,factor,filemode,tovoid,material,subcategory,subcategorymat,temp_path,selforigin,unitfactor,mainvec,autoalternative,docimportmethod):\r\n\tif dyngeom == None or dyngeom == []:\r\n\t\treturn None\r\n\ttry:\r\n\t\tif filemode:\r\n\t\t\tsat_path = dyngeom\r\n\t\telse:\r\n\t\t\trandomname = \"Dynamo-\" + ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\t\tdg.Geometry.ExportToSAT(dyngeom,sat_path,factor)\r\n\t\ttogolist = []\r\n\t\tisgood = True\r\n\t\tif docimportmethod:\r\n\t\t\tsatopt1 = SATImportOptions()\r\n\t\t\timportedelement = doc.GetElement(doc.Import(sat_path, satopt1, view))\r\n\t\t\timportedelement.Pinned = False\r\n\t\t\ttogolist = freeformfromimportinstance(doc,importedelement,opt1)\r\n\t\t\tif doc.IsFamilyDocument == True:\r\n\t\t\t\tdoc.Delete(importedelement.Id)\r\n\t\telse:\r\n\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\tconverted = shapeImporter.Convert(doc, sat_path)\r\n\t\t\tfor e in converted:\r\n\t\t\t\ttry:\r\n\t\t\t\t\ttogolist.append(FreeFormElement.Create(doc,e))\r\n\t\t\t\texcept:\r\n\t\t\t\t\tif autoalternative and filemode:\r\n\t\t\t\t\t\tisgood = False\r\n\t\t\t\t\t\tbreak\r\n\t\t\tshapeImporter.Dispose()\r\n\t\tif isgood == False:\r\n\t\t\tisdanger = True\r\n\t\t\tif len(togolist) != 0:\r\n\t\t\t\tfor togo in togolist:\r\n\t\t\t\t\tdoc.Delete(togo.Id)\r\n\t\telse:\r\n\t\t\tisdanger = False\r\n\t\tif isdanger:\r\n\t\t\treturn None,True\r\n\t\tif len(togolist) == 0:\r\n\t\t\tsatopt1 = SATImportOptions()\r\n\t\t\timportedelement = doc.GetElement(doc.Import(sat_path, satopt1, view))\r\n\t\t\timportedelement.Pinned = False\r\n\t\t\ttogolist = freeformfromimportinstance(doc,importedelement,opt1)\r\n\t\t\tif doc.IsFamilyDocument == True:\r\n\t\t\t\tdoc.Delete(importedelement.Id)\r\n\t\tif filemode == False: System.IO.File.Delete(sat_path)\r\n\t\tif selforigin and filemode:\r\n\t\t\tfor togo in togolist:\r\n\t\t\t\tElementTransformUtils.MoveElement(doc,togo.Id,mainvec.Scale(unitfactor).ToXyz())\r\n\t\treturn togolist,isdanger\r\n\texcept:\r\n\t\treturn traceback.format_exc(),''\r\n\r\n# Get/Create Wanted Family Type\r\ndef getfamtype(famdoc,famtypename = None):\r\n\talltypes = famdoc.FamilyManager.Types\r\n\tif len(list(alltypes)) == 1 or famtypename == None:\r\n\t\tfamtype = famdoc.FamilyManager.CurrentType\r\n\telif len(list(alltypes)) == 0 or famtypename == None:\r\n\t\tfamtype = famdoc.FamilyManager.NewType(famtypename)\r\n\t\tfamdoc.FamilyManager.CurrentType = famtype\r\n\telse:\r\n\t\tfor t in alltypes:\r\n\t\t\tif t.Name == famtypename:\r\n\t\t\t\tfamdoc.FamilyManager.CurrentType = t\r\n\t\t\t\tfamtype = t\r\n\t\t\t\tbreak\r\n\treturn famtype\r\n\r\n# Create New Family\r\ndef createfamily(fam_path,doc,famname,famcategory,isShared,isWorkplane,isVertical,isCuts):\r\n\tsave_path = '%s%s.rfa' % (temp_path, famname)\r\n\tfamdoc = doc.Application.NewFamilyDocument(fam_path)\r\n\ttry:\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttrans1 = Transaction(famdoc, 'New ' + famname + ' Family')\r\n\t\ttrans1.Start()\r\n\t\twarnhandle = WarnSwallowSimple()\r\n\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\ttransferunit(doc,famdoc)\r\n\t\ttry:\r\n\t\t\tfam_cat = famdoc.Settings.Categories.get_Item(famcategory)\r\n\t\t\tfamdoc.OwnerFamily.FamilyCategory = fam_cat\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tgetfamtype(famdoc)\r\n\t\tif isShared == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(0)\r\n\t\t\texcept:pass\r\n\t\tif isWorkplane == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(0)\r\n\t\t\texcept:pass\r\n\t\tif isVertical == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(0)\r\n\t\t\texcept:pass\r\n\t\tif isCuts == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).Set(0)\r\n\t\t\texcept:pass\r\n\t\ttrans1.Commit()\r\n\t\tfamdoc.SaveAs(save_path, SaveAsOpt)\r\n\t\tloaded = famdoc\r\n\texcept:\r\n\t\ttry:\r\n\t\t\ttrans1.Commit()\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttry:famdoc.Close(False)\r\n\t\texcept:pass\r\n\t\ttry:System.IO.File.Delete(save_path)\r\n\t\texcept:pass\r\n\t\tloaded = None\r\n\treturn loaded,save_path\r\n\r\n# Load Family\r\ndef loadOP(famdoc,overwrite,doc,save_path,needsrestore,tmpname,tmpid,sorigin,mainvec,unitfactor,autoassociate,ismatinstance,famname,material):\r\n\ttry:\r\n\t\tif famdoc != None and doc != None:\r\n\t\t\tif overwrite:\r\n\t\t\t\tloaded = famdoc.LoadFamily(doc,FamOpt1())\r\n\t\t\telse:\r\n\t\t\t\tloaded = famdoc.LoadFamily(doc,FamOptWithout())\r\n\t\t\tsymbols = loaded.GetFamilySymbolIds().GetEnumerator()\r\n\t\t\tsymbols.MoveNext()\r\n\t\t\tsymbol1 = doc.GetElement(symbols.Current)\r\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\t\ttrans1 = Transaction(doc, 'Placing Family ' + famname)\r\n\t\t\ttrans1.Start()\r\n\t\t\twarnhandle = WarnSwallowSimple()\r\n\t\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\t\tif doc.IsFamilyDocument:\r\n\t\t\t\tcreation = doc.FamilyCreate\r\n\t\t\telse:\r\n\t\t\t\tcreation = doc.Create\r\n\t\t\tif not symbol1.IsActive: symbol1.Activate()\r\n\t\t\tif needsrestore:\r\n\t\t\t\texistedelems = [x for x in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements() if tmpname == x.Symbol.FamilyName]\r\n\t\t\telse:\r\n\t\t\t\texistedelems = [x for x in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements() if loaded.Name == x.Symbol.FamilyName]\r\n\t\t\tif len(existedelems) == 0:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tnewinstace = [creation.NewFamilyInstance(XYZ.Zero, symbol1, Structure.StructuralType.NonStructural)]\r\n\t\t\t\texcept:\r\n\t\t\t\t\tpass\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfirstlevel = doc.GetElement(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Levels).WhereElementIsNotElementType().FirstElementId())\r\n\t\t\t\t\t\tnewinstace = creation.NewFamilyInstance(XYZ.Zero, symbol1, firstlevel, Structure.StructuralType.NonStructural)\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tnewinstace = [x for x in FilteredElementCollector(projectdoc).OfClass(FamilyInstance).ToElements() if loaded.Name == x.Symbol.FamilyName]\r\n\t\t\t\tif sorigin and autoassociate == False:\r\n\t\t\t\t\tElementTransformUtils.MoveElement(doc,newinstace[-1].Id,mainvec.Reverse().Scale(unitfactor).ToXyz())\r\n\t\t\telif needsrestore:\r\n\t\t\t\tnewinstace = existedelems\r\n\t\t\t\tfor e in newinstace:\r\n\t\t\t\t\te.ChangeTypeId(symbol1.Id)\r\n\t\t\telse:\r\n\t\t\t\tnewinstace = existedelems\r\n\t\t\tif tmpid != None:\r\n\t\t\t\tdoc.Delete(tmpid)\r\n\t\t\tif autoassociate:\r\n\t\t\t\tif material != \"\" and material != None:\r\n\t\t\t\t\tmat_fec = FilteredElementCollector(doc).OfClass(Material)\r\n\t\t\t\t\tfam_mat = False\r\n\t\t\t\t\tfor m in mat_fec:\r\n\t\t\t\t\t\tif m.Name.lower() == material.lower():\r\n\t\t\t\t\t\t\tfam_mat = m.Id\r\n\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\tgetfamtype(doc,famname)\r\n\t\t\t\t\tfamtypeparams = list(symbol1.GetOrderedParameters()) + list(newinstace[-1].GetOrderedParameters())\r\n\t\t\t\t\texistedparams = False\r\n\t\t\t\t\tfor famparam in famtypeparams:\r\n\t\t\t\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\t\t\t\t\tisMaterialSpec = famparam.Definition.ParameterType.ToString() == \"Material\"\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tisMaterialSpec = LabelUtils.GetLabelForSpec(famparam.Definition.GetDataType()) == \"Material\"\r\n\t\t\t\t\t\tif isMaterialSpec:\r\n\t\t\t\t\t\t\tdefnametoadd = famparam.Definition.Name\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\t\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(defnametoadd,BuiltInParameterGroup.PG_MATERIALS,ParameterType.Material,ismatinstance)\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(defnametoadd,GroupTypeId.Materials,getSpec(\"Material\"),ismatinstance)\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tif existedparams == False:\r\n\t\t\t\t\t\t\t\t\texistedparams = doc.FamilyManager.GetParameters()\r\n\t\t\t\t\t\t\t\tfor existedp in existedparams:\r\n\t\t\t\t\t\t\t\t\tif existedp.Definition.Name == defnametoadd:\r\n\t\t\t\t\t\t\t\t\t\tfamnewpar = existedp\r\n\t\t\t\t\t\t\t\t\t\tif (ismatinstance and existedp.IsInstance) or (ismatinstance == False and existedp.IsInstance == False):\r\n\t\t\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\t\t\t\telif ismatinstance:\r\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeInstance(famnewpar)\r\n\t\t\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeType(famnewpar)\r\n\t\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\tdoc.FamilyManager.Set(famnewpar,fam_mat)\r\n\t\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(famparam,famnewpar)\r\n\t\t\t\t\tdoc.FamilyManager.SortParameters(ParametersOrder.Ascending)\r\n\t\t\t\telse:\r\n\t\t\t\t\tgetfamtype(doc,famname)\r\n\t\t\t\t\tfamtypeparams = list(symbol1.GetOrderedParameters()) + list(newinstace[-1].GetOrderedParameters())\r\n\t\t\t\t\texistedparams = False\r\n\t\t\t\t\tfor famparam in famtypeparams:\r\n\t\t\t\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\t\t\t\t\tisMaterialSpec = famparam.Definition.ParameterType.ToString() == \"Material\"\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tisMaterialSpec = LabelUtils.GetLabelForSpec(famparam.Definition.GetDataType()) == \"Material\"\r\n\t\t\t\t\t\tif isMaterialSpec:\r\n\t\t\t\t\t\t\tdefnametoadd = famparam.Definition.Name\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\t\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(defnametoadd,BuiltInParameterGroup.PG_MATERIALS,ParameterType.Material,ismatinstance)\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tfamnewpar = doc.FamilyManager.AddParameter(defnametoadd,GroupTypeId.Materials,getSpec(\"Material\"),ismatinstance)\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tif existedparams == False:\r\n\t\t\t\t\t\t\t\t\texistedparams = doc.FamilyManager.GetParameters()\r\n\t\t\t\t\t\t\t\tfor existedp in existedparams:\r\n\t\t\t\t\t\t\t\t\tif existedp.Definition.Name == defnametoadd:\r\n\t\t\t\t\t\t\t\t\t\tfamnewpar = existedp\r\n\t\t\t\t\t\t\t\t\t\tif (ismatinstance and existedp.IsInstance) or (ismatinstance == False and existedp.IsInstance == False):\r\n\t\t\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\t\t\t\telif ismatinstance:\r\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeInstance(famnewpar)\r\n\t\t\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\t\t\tdoc.FamilyManager.MakeType(famnewpar)\r\n\t\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\tdoc.FamilyManager.AssociateElementParameterToFamilyParameter(famparam,famnewpar)\r\n\t\t\t\t\tdoc.FamilyManager.SortParameters(ParametersOrder.Ascending)\r\n\t\t\ttrans1.Commit()\r\n\t\t\tfamdoc.Close(False)\r\n\t\t\tif save_path != None:\r\n\t\t\t\tSystem.IO.File.Delete(save_path)\r\n\t\t\treturn loaded,symbol1,newinstace\r\n\t\telse:\r\n\t\t\treturn \"ERROR\"\r\n\texcept:\r\n\t\ttry:\r\n\t\t\ttrans1.Commit()\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttry:famdoc.Close(False)\r\n\t\texcept:pass\r\n\t\tif save_path != None:\r\n\t\t\tSystem.IO.File.Delete(save_path)\r\n\t\treturn \"ERROR\"\r\n\r\n# Edit Existed Family\r\ndef editfamily(doc,famdoc,isWorkplane,isVertical,isCuts):\r\n\ttry:\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttrans1 = Transaction(famdoc, 'Editing ' + famname + ' Family')\r\n\t\ttrans1.Start()\r\n\t\twarnhandle = WarnSwallowSimple()\r\n\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\ttransferunit(doc,famdoc)\r\n\t\tif isWorkplane == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(0)\r\n\t\t\texcept:pass\r\n\t\tif isVertical == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(0)\r\n\t\t\texcept:pass\r\n\t\tif isCuts == True:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).Set(1)\r\n\t\t\texcept:pass\r\n\t\telse:\r\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS).Set(0)\r\n\t\t\texcept:pass\r\n\t\ttrans1.Commit()\r\n\t\tloaded = famdoc\r\n\texcept:\r\n\t\ttry:\r\n\t\t\ttrans1.Commit()\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttry:famdoc.Close(False)\r\n\t\texcept:pass\r\n\t\tloaded = None\r\n\treturn loaded\r\n\r\n# Geometry Operation\r\ndef geometryOP(famcategory,famname,doc,dynaproc,geoms,tovoid,material,isonemat,ismatinstance,matparamname,separator,subcategory,subcategorymat,impOpt,opt1,temp_path,selforigin,joinsurfs,joinsolids,version,unitfactor,autoalternative,docimportmethod,bypasscheck):\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\tif type(geoms[0]) is str:\r\n\t\t\tfactor = 1000\r\n\t\t\tfilemode = True\r\n\t\telse:\r\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\t\t\tfactor = UnitUtils.ConvertToInternalUnits(304.8,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\t\telse:\r\n\t\t\t\tfactor = UnitUtils.ConvertToInternalUnits(304.8,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\t\tfilemode = False\r\n\t\tif dynaproc and filemode:\r\n\t\t\tgeoms = betteimport(doc,geoms[0],temp_path)\r\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\t\t\tfactor = UnitUtils.ConvertToInternalUnits(304.8,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\t\telse:\r\n\t\t\t\tfactor = UnitUtils.ConvertToInternalUnits(304.8,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\t\tfilemode = False\r\n\t\tif selforigin and filemode:\r\n\t\t\tif isinstance(geoms[0],str):\r\n\t\t\t\ttmpgeoms = betteimport(doc,geoms[0],temp_path)\r\n\t\t\t\tmainvec = dg.Vector.ByTwoPoints(midbottompoint(tmpgeoms), dg.Point.Origin())\r\n\t\t\t\tfor tmp in tmpgeoms:\r\n\t\t\t\t\ttmp.Dispose()\r\n\t\t\telse:\r\n\t\t\t\tmainvec = dg.Vector.ByTwoPoints(midbottompoint(geoms), dg.Point.Origin())\r\n\t\telif selforigin:\r\n\t\t\tmainvec = dg.Vector.ByTwoPoints(midbottompoint(geoms), dg.Point.Origin())\r\n\t\t\ttrangeoms = []\r\n\t\t\tfor g in geoms:\r\n\t\t\t\ttrangeoms.append(g.Translate(mainvec))\r\n\t\t\tgeoms = trangeoms\r\n\t\telse:\r\n\t\t\tmainvec = None\r\n\t\tif filemode == False and (joinsurfs or joinsolids):\r\n\t\t\tgeoms = smartjoinOP(geoms,joinsurfs,joinsolids)\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttrans1 = Transaction(doc, 'Creating FreeForms')\r\n\t\ttrans1.Start()\r\n\t\twarnhandle = WarnSwallowSimple()\r\n\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\tacceptable_views = ('ThreeD', 'FloorPlan', 'EngineeringPlan', 'CeilingPlan', 'Elevation', 'Section')\r\n\t\tall_views = FilteredElementCollector(doc).OfClass(View)\r\n\t\tactive_view = None\r\n\t\tfor view in all_views:\r\n\t\t\tif str(view.ViewType) in acceptable_views and not view.IsTemplate:\r\n\t\t\t\tbreak\r\n\t\tresult = []\r\n\t\tcleaned = []\r\n\t\tdangermode = False\r\n\t\tfor e in geoms:\r\n\t\t\tif filemode or isinstance(e,dg.Solid) or isinstance(e,dg.Surface) or isinstance(e,dg.PolySurface) or isinstance(e,dg.Cuboid):\r\n\t\t\t\tfreeform = New_FreeForm(doc,view,opt1,e,factor,filemode,tovoid,material,subcategory,subcategorymat,temp_path,selforigin,unitfactor,mainvec,autoalternative,docimportmethod)\r\n\t\t\t\tif freeform[1]:\r\n\t\t\t\t\tdangermode = True\r\n\t\t\t\t\tbreak\r\n\t\t\t\tresult.append(freeform[0])\r\n\t\t\t\tcleaned.append(freeform[0])\r\n\t\t\telse:\r\n\t\t\t\tresult.append([None])\r\n\t\tif dangermode and filemode:\r\n\t\t\tgeoms = betteimport(doc,geoms[0],temp_path)\r\n\t\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\t\t\tfactor = UnitUtils.ConvertToInternalUnits(304.8,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\t\telse:\r\n\t\t\t\tfactor = UnitUtils.ConvertToInternalUnits(304.8,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\t\tfilemode = False\r\n\t\t\tif selforigin:\r\n\t\t\t\tmainvec = dg.Vector.ByTwoPoints(midbottompoint(geoms), dg.Point.Origin())\r\n\t\t\t\ttrangeoms = []\r\n\t\t\t\tfor g in geoms:\r\n\t\t\t\t\ttrangeoms.append(g.Translate(mainvec))\r\n\t\t\t\tgeoms = trangeoms\r\n\t\t\telse:\r\n\t\t\t\tmainvec = None\r\n\t\t\tif joinsurfs or joinsolids:\r\n\t\t\t\tgeoms = smartjoinOP(geoms,joinsurfs,joinsolids)\r\n\t\t\tfor e in geoms:\r\n\t\t\t\tif isinstance(e,dg.Solid) or isinstance(e,dg.Surface) or isinstance(e,dg.PolySurface) or isinstance(e,dg.Cuboid):\r\n\t\t\t\t\tfreeform = New_FreeForm(doc,view,opt1,e,factor,filemode,tovoid,material,subcategory,subcategorymat,temp_path,selforigin,unitfactor,mainvec,autoalternative,docimportmethod)\r\n\t\t\t\t\tresult.append(freeform[0])\r\n\t\t\t\t\tcleaned.append(freeform[0])\r\n\t\t\t\telse:\r\n\t\t\t\t\tresult.append([None])\r\n\t\tallfreeforms = flatten(cleaned)\r\n\t\tchangetovoid(doc,allfreeforms,tovoid)\r\n\t\tif tovoid == False:\r\n\t\t\tsubcatmat = changemat(famname,doc,allfreeforms,material,subcategory,subcategorymat,isonemat,ismatinstance,matparamname,separator)\r\n\t\t\tchangesubcat(doc,allfreeforms,subcategory,subcatmat)\r\n\t\ttrans1.Commit()\r\n\telse:\r\n\t\tif type(geoms[0]) is str:\r\n\t\t\tgeoms = geoms[0]\r\n\t\t\tfilemode = True\r\n\t\telse:\r\n\t\t\tfilemode = False\r\n\t\tif dynaproc and filemode:\r\n\t\t\tgeoms = dg.Geometry.ImportFromSAT(geoms)\r\n\t\t\tfilemode = False\r\n\t\tif joinsurfs or joinsolids:\r\n\t\t\tif filemode:\r\n\t\t\t\tgeoms = dg.Geometry.ImportFromSAT(geoms)\r\n\t\t\t\tfilemode = False\r\n\t\t\tgeoms = smartjoinOP(geoms,joinsurfs,joinsolids)\r\n\t\tallfreeforms = smartFreeForm(geoms,[1,1,1],doc,selforigin,famcategory,False,False,False,temp_path,bypasscheck,False) #[1,1,1] Will be replaced when Dynamo 2.11.1 or above is out.\r\n\t\tresult = flatten(allfreeforms[0])\r\n\t\tmainvec = allfreeforms[1]\r\n\t\tdangermode = allfreeforms[2]\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttrans1 = Transaction(doc, 'Changing Materials and Subcategories')\r\n\t\ttrans1.Start()\r\n\t\twarnhandle = WarnSwallowSimple()\r\n\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\tchangetovoid(doc,result,tovoid)\r\n\t\tif tovoid == False:\r\n\t\t\tsubcatmat = changemat(famname,doc,allfreeforms[0],material,subcategory,subcategorymat,isonemat,ismatinstance,matparamname,separator)\r\n\t\t\tchangesubcat(doc,result,subcategory,subcatmat)\r\n\t\ttrans1.Commit()\r\n\treturn result,selforigin,mainvec,dangermode\r\n\r\n# Better SAT Import Function\r\ndef betteimport(doc,sat,temp_path):\r\n\tgeoms = dg.Geometry.ImportFromSAT(sat)\r\n\tgeoms = cleangeomlist(geoms)\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits),8) * 1000\r\n\telse:\r\n\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId()),8) * 1000\r\n\trandomname = \"Dynamo-\" + ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\tsat_path = '%s%s.sat' % (temp_path, randomname)\r\n\tdg.Geometry.ExportToSAT(geoms,sat_path,factor)\r\n\tfor g in geoms:\r\n\t\tg.Dispose()\r\n\tscaledgeoms = dg.Geometry.ImportFromSAT(sat_path)\r\n\tSystem.IO.File.Delete(sat_path)\r\n\treturn scaledgeoms\r\n\r\n# Transfer Document Units\r\ndef transferunit(doc,famdoc):\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\tunit = famdoc.GetUnits()\r\n\t\tcurrectformat = doc.GetUnits().GetFormatOptions(UnitType.UT_Length)\r\n\t\taccuracy = currectformat.Accuracy\r\n\t\tunit.SetFormatOptions(UnitType.UT_Length,FormatOptions(currectformat.DisplayUnits,accuracy))\r\n\t\tfamdoc.SetUnits(unit)\r\n\telse:\r\n\t\tunit = famdoc.GetUnits()\r\n\t\tcurrectformat = doc.GetUnits().GetFormatOptions(SpecTypeId.Length)\r\n\t\tunit.SetFormatOptions(SpecTypeId.Length,currectformat)\r\n\t\tfamdoc.SetUnits(unit)\r\n\r\n# Deep Checking for Conflicts\r\ndef checkOP(famname,isShared,doublefamilies):\r\n\texisted = [x for x in FilteredElementCollector(projectdoc).OfClass(FamilySymbol).ToElements() if famname.lower() == x.FamilyName.lower()]\r\n\texistedelems = [x for x in FilteredElementCollector(projectdoc).OfClass(FamilyInstance).ToElements() if famname.lower() == x.Symbol.FamilyName.lower()]\r\n\tneedsrestore = False\r\n\tneedsremoval = False\r\n\ttmpname = None\r\n\tif len(existed) != 0:\r\n\t\tfamilyelem = existed[0].Family\r\n\t\ttmpid = familyelem.Id\r\n\t\texistedfamname = familyelem.Name\r\n\t\texistedcat = existed[0].Category.Name\r\n\t\tif len(existedelems) > 0:\r\n\t\t\tchecksuper = existedelems[0].SuperComponent\r\n\t\telse:\r\n\t\t\tchecksuper = None\r\n\t\tif (existedcat != \"Mass\" and famcategory == \"Mass\") or (existedcat == \"Mass\" and famcategory != \"Mass\") or (checksuper and isShared == False):\r\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\t\ttrans1 = Transaction(projectdoc, 'Delete Category Conflicting Family')\r\n\t\t\ttrans1.Start()\r\n\t\t\twarnhandle = WarnSwallowSimple()\r\n\t\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\t\tprojectdoc.Delete(existed[0].Family.Id)\r\n\t\t\tneedsremoval = True\r\n\t\t\ttrans1.Commit()\r\n\t\telif isShared == False and doublefamilies == False:\r\n\t\t\ttry:isinit_shared = familyelem.get_Parameter(BuiltInParameter.FAMILY_SHARED).AsInteger()\r\n\t\t\texcept:isinit_shared = 0\r\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\t\ttrans1 = Transaction(projectdoc, 'Renaming Conflicting Family')\r\n\t\t\ttrans1.Start()\r\n\t\t\twarnhandle = WarnSwallowSimple()\r\n\t\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\t\tif isinit_shared:\r\n\t\t\t\toriginalname = existed[0].Family.Name\r\n\t\t\t\ttmpname = originalname + \"_TMP_\" + ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\t\t\texisted[0].Family.Name = tmpname\r\n\t\t\t\tneedsrestore = True\r\n\t\t\ttrans1.Commit()\r\n\telse:\r\n\t\texistedfamname = None\r\n\tif tmpname == None:\r\n\t\ttmpid = None\r\n\treturn existedelems,existedfamname,needsrestore,needsremoval,tmpname,tmpid\r\n\r\n# Check If Family Is Here\r\ndef isfamhere(projectdoc,famname):\r\n\texisted = [x for x in FilteredElementCollector(projectdoc).OfClass(FamilySymbol).ToElements() if famname.lower() == x.FamilyName.lower()]\r\n\tif len(existed) != 0:\r\n\t\treturn True\r\n\telse:\r\n\t\treturn False\r\n\r\n# Main Operation\r\ndef mainOP(geoms,dynaproc,famname,famnumber,autoavoidconflict,famcategory,fam_path,isShared,isWorkplane,isVertical,isCuts,tovoid,material,isonemat,ismatinstance,matparamname,subcategory,subcategorymat,overwrite,projectdoc,SaveAsOpt,impOpt,opt1,temp_path,separator,selforigin,unitfactor,doublefamilies,joinsurfs,joinsolids,version,autoalternative,docimportmethod,bypasscheck):\r\n\t# Extra Suffix\r\n\tif selforigin:\r\n\t\tselfextra = separator + \"Origin (Self)\"\r\n\telse:\r\n\t\tselfextra = separator + \"Origin (Global)\"\r\n\tif projectdoc.IsFamilyDocument:\r\n\t\textra = separator + \"Nested\" + selfextra\r\n\telse:\r\n\t\textra = \"\"\r\n\t\t\r\n\t# Creating Name\r\n\tpurefamname = famname\r\n\tfamname = purefamname + separator + str(famnumber) + extra\r\n\r\n\t# Check If There Is A Conflict\r\n\tinitconflict = isfamhere(projectdoc,famname)\r\n\tif initconflict and autoavoidconflict:\r\n\t\tconflict = True\r\n\telse:\r\n\t\tconflict = False\r\n\t\r\n\treportnumber = None\r\n\twhile conflict:\r\n\t\tnumber = int(re.findall(r'\\d+', famname)[-1])\r\n\t\tnumber += 1\r\n\t\tfamname = purefamname + separator + str(number) + extra\r\n\t\treportnumber = number\r\n\t\tconflict = isfamhere(projectdoc,famname)\r\n\t\r\n\tif reportnumber == None:\r\n\t\treportnumber = famnumber\r\n\t\r\n\t# Checking Existed Family\r\n\tcheckexistedfamily = checkOP(famname,isShared,doublefamilies)\r\n\texistedinstances = checkexistedfamily[0]\r\n\texistedfamname = checkexistedfamily[1]\r\n\tneedsrestore = checkexistedfamily[2]\r\n\tneedsremoval = checkexistedfamily[3]\r\n\ttmpname = checkexistedfamily[4]\r\n\ttmpid = checkexistedfamily[5]\r\n\tif doublefamilies:\r\n\t\tfirstfamname = famname + separator + \"Nested\" + selfextra\r\n\t\tinitialfam1 = createfamily(fam_path,projectdoc,firstfamname,famcategory,False,False,False,isCuts)\r\n\t\tinitialfamdoc1 = initialfam1[0]\r\n\t\tinitialfamsavepath1 = initialfam1[1]\r\n\t\tgeomOP = geometryOP(famcategory,firstfamname,initialfamdoc1,dynaproc,geoms,tovoid,material,isonemat,ismatinstance,matparamname,separator,subcategory,subcategorymat,impOpt,opt1,temp_path,selforigin,joinsurfs,joinsolids,version,unitfactor,autoalternative,docimportmethod,bypasscheck)\r\n\t\tsorigin = geomOP[1]\r\n\t\tmainvec = geomOP[2]\r\n\t\twasidanger = geomOP[3]\r\n\t\tif initconflict and autoavoidconflict == False:\r\n\t\t\tfami = [x for x in FilteredElementCollector(projectdoc).OfClass(Family).ToElements() if famname.lower() == x.Name.lower()]\r\n\t\t\tif len(fami) != 0 and needsremoval == False:\r\n\t\t\t\tinitialfamdoc2 = projectdoc.EditFamily(fami[-1])\r\n\t\t\t\tinitialfamsavepath2 = None\r\n\t\t\t\teditfamily(projectdoc,initialfamdoc2,isWorkplane,isVertical,isCuts)\r\n\t\t\telse:\r\n\t\t\t\tinitialfam2 = createfamily(fam_path,projectdoc,famname,famcategory,isShared,isWorkplane,isVertical,isCuts)\r\n\t\t\t\tinitialfamdoc2 = initialfam2[0]\r\n\t\t\t\tinitialfamsavepath2 = initialfam2[1]\r\n\t\telse:\r\n\t\t\tinitialfam2 = createfamily(fam_path,projectdoc,famname,famcategory,isShared,isWorkplane,isVertical,isCuts)\r\n\t\t\tinitialfamdoc2 = initialfam2[0]\r\n\t\t\tinitialfamsavepath2 = initialfam2[1]\r\n\t\tloadOP(initialfamdoc1,overwrite,initialfamdoc2,initialfamsavepath1,needsrestore,tmpname,tmpid,sorigin,mainvec,unitfactor,True,ismatinstance,famname,material)\r\n\t\tresult = loadOP(initialfamdoc2,overwrite,projectdoc,initialfamsavepath2,needsrestore,tmpname,tmpid,sorigin,mainvec,unitfactor,False,ismatinstance,famname,material)\r\n\t\tif result == \"ERROR\":\r\n\t\t\tresult = [\"Failed to Load\",\"Failed to Load\",\"Failed to Load\"]\r\n\t\tfamily = result[0]\r\n\t\tfamilytype = result[1]\r\n\t\tfamilyinstance = result[2]\r\n\telse:\r\n\t\tinitialfam = createfamily(fam_path,projectdoc,famname,famcategory,isShared,isWorkplane,isVertical,isCuts)\r\n\t\tinitialfamdoc = initialfam[0]\r\n\t\tinitialfamsavepath = initialfam[1]\r\n\t\tgeomOP = geometryOP(famcategory,famname,initialfamdoc,dynaproc,geoms,tovoid,material,isonemat,ismatinstance,matparamname,separator,subcategory,subcategorymat,impOpt,opt1,temp_path,selforigin,joinsurfs,joinsolids,version,unitfactor,autoalternative,docimportmethod,bypasscheck)\r\n\t\tsorigin = geomOP[1]\r\n\t\tmainvec = geomOP[2]\r\n\t\twasidanger = geomOP[3]\r\n\t\tresult = loadOP(initialfamdoc,overwrite,projectdoc,initialfamsavepath,needsrestore,tmpname,tmpid,sorigin,mainvec,unitfactor,False,ismatinstance,famname,material)\r\n\t\tif result == \"ERROR\":\r\n\t\t\tresult = [\"Failed to Load\",\"Failed to Load\",\"Failed to Load\"]\r\n\t\tfamily = result[0]\r\n\t\tfamilytype = result[1]\r\n\t\tfamilyinstance = result[2]\r\n\treturn family,familytype,familyinstance,reportnumber,wasidanger\r\n\r\n# House Clean Up Function\r\ndef housecleanup(doc,cleanlist):\r\n\ttodel = []\r\n\tfor clean in cleanlist:\r\n\t\talltypes = [x for x in FilteredElementCollector(projectdoc).OfClass(FamilySymbol).ToElements() if clean.lower() in x.FamilyName.lower()]\r\n\t\tfor eachtype in alltypes:\r\n\t\t\telemsintype = [x for x in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements() if x.Symbol.FamilyName == eachtype.FamilyName]\r\n\t\t\tif len(elemsintype) == 0:\t\t\t\t\r\n\t\t\t\ttodel.append(eachtype.Family)\r\n\tfamilystatus = doc.IsFamilyDocument\r\n\tif len(todel) != 0:\r\n\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\ttrans1 = Transaction(doc, 'House Cleanup')\r\n\t\ttrans1.Start()\r\n\t\twarnhandle = WarnSwallowSimple()\r\n\t\tfoptions = trans1.GetFailureHandlingOptions()\r\n\t\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\t\ttrans1.SetFailureHandlingOptions(foptions)\r\n\t\tfor d in todel:\r\n\t\t\tif familystatus == False and \"nested\" in d.Name.lower():\r\n\t\t\t\tpass\r\n\t\t\telse:\r\n\t\t\t\tdoc.Delete(d.Id)\r\n\t\ttrans1.Commit()\r\n\r\n# Detect Bottom Mid Point\r\ndef midbottompoint(geoms):\r\n\tbigbound = dg.BoundingBox.ByGeometry(geoms)\r\n\tminp = bigbound.MinPoint\r\n\tmaxp = bigbound.MaxPoint\r\n\tmaxpX = maxp.X\r\n\tmaxpY = maxp.Y\r\n\tfixedmaxp = dg.Point.ByCoordinates(maxpX,maxpY,minp.Z)\r\n\tmidP = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minp,fixedmaxp),0.5)\r\n\treturn midP\r\n\r\ndef joinsurfsOP(surfs):\r\n\tdef surf_doesinter(a,b,tollerance = 0.00001):\r\n\t\tif round(dg.Geometry.DistanceTo(a,b),2) < tollerance:\r\n\t\t\treturn True\r\n\t\telse:\r\n\t\t\treturn False\r\n\tcrvs = flatten(tolist(surfs))\r\n\tcrvGroup = [-1 for x in range(len(crvs))]\r\n\tcrvGroup[0] = 0\r\n\tmaxGroupNum = 1\r\n\tfor i in range(len(crvs)):\r\n\t\tif (crvGroup[i] == -1):\r\n\t\t\tcrvGroup[i] = i\r\n\t\tfor j in range(len(crvs)):\r\n\t\t\ttry:\r\n\t\t\t\tif i != j and surf_doesinter(crvs[i], crvs[j]):\r\n\t\t\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\t\t\texcept:\r\n\t\t\t\tpass\r\n\tgroups = []\r\n\texcluded = []\r\n\tfor n in crvGroup:\r\n\t\tinnercount = 0\r\n\t\ttmp = []\r\n\t\tfor n2 in crvGroup:\r\n\t\t\tif n == n2 and n2 not in excluded:\r\n\t\t\t\ttmp.append(crvs[innercount])\r\n\t\t\tinnercount += 1\r\n\t\tif len(tmp) == 0:\r\n\t\t\tcontinue\r\n\t\ttry:\r\n\t\t\ttmp = dg.Surface.ByUnion(tmp)\r\n\t\t\tgroups.append(tmp)\r\n\t\texcept:\r\n\t\t\ttry:\r\n\t\t\t\ttmp = dg.PolySurface.ByJoinedSurfaces(tmp)\r\n\t\t\t\tgroups.append(tmp)\r\n\t\t\texcept:\r\n\t\t\t\tfor t in tmp:\r\n\t\t\t\t\tgroups.append(t)\r\n\t\texcluded.append(n)\r\n\tjoinedsurfs = groups\r\n\treturn joinedsurfs\r\n\r\n# Main Surface Join Operation\r\ndef surfjoinOP(surfaces):\r\n\tif len(surfaces) > 1:\r\n\t\tsurfaces = joinsurfsOP(surfaces)\r\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\t\tfor s in surfaces:\r\n\t\t\t\ttry:\r\n\t\t\t\t\toffset = dg.Surface.Offset(s,0)\r\n\t\t\t\t\toffset.Dispose()\r\n\t\t\t\t\tfinalsurfaces.append(s)\r\n\t\t\t\texcept:\r\n\t\t\t\t\texploded = dg.Geometry.Explode(s)\r\n\t\t\t\t\tfinalsurfaces.append(exploded)\r\n\t\telse:\r\n\t\t\tfinalsurfaces = surfaces\r\n\t\tfinalsurfaces = flatten(finalsurfaces)\r\n\t\treturn finalsurfaces\r\n\telse:\r\n\t\treturn surfaces\r\n\r\n# Main Solid Union Operation\r\ndef tryunion(flattenedsolids):\r\n\tif len(flattenedsolids) > 1:\r\n\t\tsolids = [x for x in flattenedsolids if x]\r\n\t\tif len(solids) > 1:\r\n\t\t\tpass\r\n\t\telse:\r\n\t\t\treturn flattenedsolids\r\n\t\tunioned = [solids[0]]\r\n\t\tsolids = solids[1:]\r\n\t\tfor s in solids:\r\n\t\t\ti = 0\r\n\t\t\tunionDone = False\r\n\t\t\twhile i < len(unioned):\r\n\t\t\t\ttry:\r\n\t\t\t\t\tunioned[i] = unioned[i].Union(s)\r\n\t\t\t\t\tunionDone = True\r\n\t\t\t\t\tbreak\r\n\t\t\t\texcept:\ti += 1\r\n\t\t\tif not unionDone: unioned.append(s)\r\n\t\treturn unioned\r\n\telse:\r\n\t\treturn flattenedsolids\r\n\r\n# Smart Join Operation\r\ndef smartjoinOP(geoms,joinsurfs,joinsolids):\r\n\tgeoms = list(geoms)\r\n\tseparatedsurfs = []\r\n\tseparatedsolids = []\r\n\tfor g in geoms:\r\n\t\tif isinstance(g,dg.Surface):\r\n\t\t\tseparatedsurfs.append(g)\r\n\t\telse:\r\n\t\t\tseparatedsolids.append(g)\r\n\tif joinsurfs:\r\n\t\tseparatedsurfs = surfjoinOP(separatedsurfs)\r\n\tif joinsolids:\r\n\t\tseparatedsolids = tryunion(separatedsolids)\r\n\tgeoms = separatedsolids + separatedsurfs\r\n\treturn geoms\r\n\r\ndef cleangeomlist(geoms):\r\n\tfilteredgeoms = []\r\n\tfor e in geoms:\r\n\t\tif isinstance(e,str) or isinstance(e,dg.Solid) or isinstance(e,dg.Surface) or isinstance(e,dg.PolySurface) or isinstance(e,dg.Cuboid):\r\n\t\t\tfilteredgeoms.append(e)\r\n\treturn filteredgeoms\r\n\r\ndef smartFreeForm(geoms,scaleup,doc,centermode=False,category=\"Generic Models\",importinstance=False,singlefinalprocess=False,safemode=False,temp_path=System.IO.Path.GetTempPath(),bypasscheck=False,returnfailures=False):\r\n\tclass WarnSwallowImport(IFailuresPreprocessor):\r\n\t\tdef PreprocessFailures(self, failuresAccessor):\r\n\t\t\tfailuresAccessor.DeleteAllWarnings()\r\n\t\t\treturn FailureProcessingResult.Continue\r\n\tdef finalimport(importinstance,geoms,satopt,singlefinalprocess):\r\n\t\trandomname = \"Dynamo-\" + ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\tdg.Geometry.ExportToSAT(geoms,sat_path)\r\n\t\tif importinstance:\r\n\t\t\timported = doc.Import(sat_path,satopt,None)\r\n\t\t\telement = doc.GetElement(imported)\r\n\t\t\telement.Pinned = False\r\n\t\t\tresult = [element]\r\n\t\telse:\r\n\t\t\tresult = []\r\n\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\r\n\t\t\tif doc.IsFamilyDocument:\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tresult.append(FreeFormElement.Create(doc,e))\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\telse:\r\n\t\t\t\tform = DirectShape.CreateElement(doc,doc.Settings.Categories.get_Item(category).Id)\r\n\t\t\t\ttry:\r\n\t\t\t\t\tform.SetShape(converted)\r\n\t\t\t\texcept:\r\n\t\t\t\t\tdoc.Delete(form.Id)\r\n\t\t\t\t\timported = doc.Import(sat_path,satopt,None)\r\n\t\t\t\t\telement = doc.GetElement(imported)\r\n\t\t\t\t\telement.Pinned = False\r\n\t\t\t\t\tform = element\r\n\t\t\t\tresult.append(form)\r\n\t\t\tshapeImporter.Dispose()\r\n\t\tSystem.IO.File.Delete(sat_path)\r\n\t\treturn result\r\n\tdef allisone(testlist):\r\n\t\tfor t in testlist:\r\n\t\t\tif t != 1:\r\n\t\t\t\treturn False\r\n\t\treturn True\r\n\tdef tolist(obj1):\r\n\t\tif hasattr(obj1,'__iter__'): return obj1\r\n\t\telse: return [obj1]\r\n\tdef flatten(x):\r\n\t\tresult = []\r\n\t\tfor el in x:\r\n\t\t\tif hasattr(el, \"__iter__\") and not isinstance(el, basestring):\r\n\t\t\t\tresult.extend(flatten(el))\r\n\t\t\telse:\r\n\t\t\t\tresult.append(el)\r\n\t\treturn result\r\n\tdef movecenter(doc,elements):\r\n\t\ttry:\r\n\t\t\telements = flatten(elements)\r\n\t\t\tpts = []\r\n\t\t\tfor e in elements:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tbbox = e.get_BoundingBox(None)\r\n\t\t\t\t\tpts.append(bbox.Max.ToPoint())\r\n\t\t\t\t\tpts.append(bbox.Min.ToPoint())\r\n\t\t\t\texcept:\r\n\t\t\t\t\tpass\r\n\t\t\tXs = []\r\n\t\t\tYs = []\r\n\t\t\tZs = []\r\n\t\t\tfor pt in pts:\r\n\t\t\t\tXs.append(pt.X)\r\n\t\t\t\tYs.append(pt.Y)\r\n\t\t\t\tZs.append(pt.Z)\r\n\t\t\tbigbox = dg.BoundingBox.ByCorners(dg.Point.ByCoordinates(max(Xs),max(Ys),max(Zs)),dg.Point.ByCoordinates(min(Xs),min(Ys),min(Zs)))\r\n\t\t\tminp = bigbox.MinPoint\r\n\t\t\tmaxp = bigbox.MaxPoint\r\n\t\t\tmidpoint = dg.Curve.PointAtParameter(dg.Line.ByStartPointEndPoint(minp,dg.Point.ByCoordinates(maxp.X,maxp.Y,minp.Z)),0.5)\r\n\t\t\tmainvec = dg.Vector.ByTwoPoints(midpoint, dg.Point.Origin())\r\n\t\t\tscaledvec = mainvec.Scale(unitconverter(1,doc,False))\r\n\t\t\tfor e in elements:\r\n\t\t\t\tElementTransformUtils.MoveElement(doc,e.Id,scaledvec.ToXyz())\r\n\t\t\treturn mainvec\r\n\t\texcept:\r\n\t\t\treturn None\r\n\tdef unitconverter(value,doc,frominternal=True):\r\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\t\tif frominternal:\r\n\t\t\t\tvalue = UnitUtils.ConvertFromInternalUnits(value,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\t\telse:\r\n\t\t\t\tvalue = UnitUtils.ConvertToInternalUnits(value,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\t\telse:\r\n\t\t\tif frominternal:\r\n\t\t\t\tvalue = UnitUtils.ConvertFromInternalUnits(value,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\t\telse:\r\n\t\t\t\tvalue = UnitUtils.ConvertToInternalUnits(value,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\treturn value\r\n\tdef smartrevitsolid(surfs,doc,importinstance,safemode,geometrymode,disposeinit,temp_path):\r\n\t\tdef polysurfaceOP(surfaces,chunks=12):\r\n\t\t\tdef smartpolysurface(surfaces,times,round=0):\r\n\t\t\t\tif len(surfaces) > chunks:\r\n\t\t\t\t\tif times == 0:\r\n\t\t\t\t\t\treturn surfaces\r\n\t\t\t\t\tresult = []\r\n\t\t\t\t\tchopped = [surfaces[x:x+chunks] for x in xrange(0, len(surfaces), chunks)]\r\n\t\t\t\t\tfor chop in chopped:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tjoined = dg.PolySurface.ByJoinedSurfaces(chop)\r\n\t\t\t\t\t\t\t#if round != 0:\r\n\t\t\t\t\t\t\t#\tfor c in chop:\r\n\t\t\t\t\t\t\t#\t\tc.Dispose()\r\n\t\t\t\t\t\t\tresult.append(joined)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tfor c in chop:\r\n\t\t\t\t\t\t\t\tresult.append(c)\r\n\t\t\t\t\ttimes -= 1\r\n\t\t\t\t\tround += 1\r\n\t\t\t\t\tresult = smartpolysurface(result,times,round)\r\n\t\t\t\t\treturn result\r\n\t\t\t\telse:\r\n\t\t\t\t\tif isinstance(surfaces, dg.PolySurface):\r\n\t\t\t\t\t\treturn surfaces\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\treturn dg.PolySurface.ByJoinedSurfaces(surfaces)\r\n\t\t\tsurfaces = flatten(tolist(surfaces))\r\n\t\t\tn = len(surfaces)\r\n\t\t\ttimes = 0\r\n\t\t\twhile n > 1:\r\n\t\t\t\tn //= chunks\r\n\t\t\t\ttimes += 1\r\n\t\t\ttimes *= 1.5\r\n\t\t\ttimes = int(round(times))\r\n\t\t\tjoined = smartpolysurface(surfaces,times)\r\n\t\t\tif isinstance(joined, list):\r\n\t\t\t\ttry:\r\n\t\t\t\t\tjoined = dg.PolySurface.ByJoinedSurfaces(joined)\r\n\t\t\t\texcept:\r\n\t\t\t\t\tjoined = joined\r\n\t\t\treturn joined\r\n\t\tdef isActuallygood(geomorsat,converted,firstTime,geometrymode,bypasscheck):\r\n\t\t\tif firstTime:\r\n\t\t\t\tif bypasscheck == False:\r\n\t\t\t\t\toriginalfaces = []\r\n\t\t\t\t\tif isinstance(geomorsat,dg.Solid) or isinstance(geomorsat,dg.PolySurface):\r\n\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\telif isinstance(geomorsat,dg.Surface):\r\n\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\t\tif geomorsat.Closed:\r\n\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\telif isinstance(geomorsat,str):\r\n\t\t\t\t\t\tgeomsorsat = dg.Geometry.ImportFromSAT(geomorsat)\r\n\t\t\t\t\t\tfor geomorsat in geomsorsat:\r\n\t\t\t\t\t\t\tif isinstance(geomorsat,dg.Solid) or isinstance(geomorsat,dg.PolySurface):\r\n\t\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\tif geometrymode == False and doc.IsFamilyDocument:\r\n\t\t\t\t\t\t\t\t\tgeomorsat.Dispose()\r\n\t\t\t\t\t\t\telif isinstance(geomorsat,dg.Surface):\r\n\t\t\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\t\t\t\tif geomorsat.Closed:\r\n\t\t\t\t\t\t\t\t\t\toriginalfaces.append(geomorsat)\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\texploded = dg.Geometry.Explode(geomorsat)\r\n\t\t\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\t\t\t\t\tif exp.Closed:\r\n\t\t\t\t\t\t\t\t\t\t\toriginalfaces.append(exp)\r\n\t\t\t\t\t\tif geometrymode:\r\n\t\t\t\t\t\t\tgeomorsat = list(geomsorsat)\r\n\t\t\t\t\toriginalnum = len(originalfaces)\r\n\t\t\t\t\tfor org in originalfaces:\r\n\t\t\t\t\t\torg.Dispose()\r\n\t\t\t\t\tFFfaces = []\r\n\t\t\t\t\tfor e in converted:\r\n\t\t\t\t\t\tgetfaces = e.Faces\r\n\t\t\t\t\t\tfor gotten in getfaces:\r\n\t\t\t\t\t\t\tFFfaces.append(gotten)\r\n\t\t\t\t\tFFfacesnum = len(FFfaces)\r\n\t\t\t\t\tif FFfacesnum >= originalnum:\r\n\t\t\t\t\t\tsamefaces = True\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tsamefaces = False\r\n\t\t\t\telse:\r\n\t\t\t\t\tsamefaces = True\r\n\t\t\t\tfreeforms = []\r\n\t\t\t\tif doc.IsFamilyDocument == False and singlefinalprocess and geometrymode == False and samefaces and importinstance == False:\r\n\t\t\t\t\tform = DirectShape.CreateElement(doc,doc.Settings.Categories.get_Item(category).Id)\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tform.SetShape(converted)\r\n\t\t\t\t\t\tfreeforms.append(form)\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tdoc.Delete(form.Id)\r\n\t\t\t\t\t\tsatopt = SATImportOptions()\r\n\t\t\t\t\t\tfreeforms.append(finalimport(True,geomsorsat,satopt,True)[0])\r\n\t\t\t\t\t\tsatopt.Dispose()\r\n\t\t\t\tif geometrymode == False and samefaces and importinstance == False:\r\n\t\t\t\t\tfor e in converted:\r\n\t\t\t\t\t\tif doc.IsFamilyDocument:\r\n\t\t\t\t\t\t\tform = FreeFormElement.Create(doc,e)\r\n\t\t\t\t\t\t\tfreeforms.append(form)\r\n\t\t\t\t\t\telif singlefinalprocess == False:\r\n\t\t\t\t\t\t\tform = DirectShape.CreateElement(doc,doc.Settings.Categories.get_Item(category).Id)\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tform.SetShape([e])\r\n\t\t\t\t\t\t\t\tfreeforms.append(form)\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tdoc.Delete(form.Id)\r\n\t\t\telse:\r\n\t\t\t\tsamefaces = False\r\n\t\t\tif geometrymode:\r\n\t\t\t\tif isinstance(geomorsat, list):\r\n\t\t\t\t\tfreeforms = geomorsat\r\n\t\t\t\telse:\r\n\t\t\t\t\tfreeforms = [geomorsat]\r\n\t\t\tif len(freeforms) == 0:\r\n\t\t\t\treturn [False]\r\n\t\t\tif firstTime == False:\r\n\t\t\t\treturn freeforms\r\n\t\t\telif samefaces and firstTime:\r\n\t\t\t\treturn freeforms\r\n\t\t\telse:\r\n\t\t\t\treturn [False]\r\n\t\tdef isbellowarea(surface):\r\n\t\t\tif round(meternumber(surface.Area),2) < meternumber(0.0025):\r\n\t\t\t\treturn True\r\n\t\t\telse:\r\n\t\t\t\treturn False\r\n\t\tdef isbellowlength(surface):\r\n\t\t\tedges = surface.Edges\r\n\t\t\tfor e in edges:\r\n\t\t\t\tcurvegeom = e.CurveGeometry\r\n\t\t\t\tlength = curvegeom.Length\r\n\t\t\t\tcurvegeom.Dispose()\r\n\t\t\t\tif length <= 0.0007803686370625:\r\n\t\t\t\t\treturn True\r\n\t\t\treturn False\r\n\t\tdef meternumber(value):\r\n\t\t\tvalue = value\r\n\t\t\treturn value\r\n\t\tdef metersurfarea(surface):\r\n\t\t\tarea = meternumber(surface.Area)\r\n\t\t\treturn area\r\n\t\tdef almostsame(surf1,surf2,tollerance = 2):\r\n\t\t\tif round(metersurfarea(surf1),tollerance) == round(metersurfarea(surf2),tollerance):\r\n\t\t\t\treturn True\r\n\t\t\telse:\r\n\t\t\t\treturn False\r\n\t\tdef quickSATcheck(sat_path,customscale=[1,1,1],importinstance=False,firstTime=True,geometrymode=False,bypasscheck=False):\r\n\t\t\tif allisone(customscale) == False:\r\n\t\t\t\treturn [False]\r\n\t\t\tconverted = []\r\n\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\r\n\t\t\tshapeImporter.Dispose()\r\n\t\t\tif bypasscheck:\r\n\t\t\t\tcleanconverted = []\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\r\n\t\t\t\t\t\tcontinue\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tcleanconverted.append(e)\r\n\t\t\t\tconverted = cleanconverted\r\n\t\t\telse:\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\r\n\t\t\t\t\t\treturn [False]\r\n\t\t\tif len(converted) != 0:\r\n\t\t\t\tconverted = isActuallygood(sat_path,converted,firstTime,geometrymode,bypasscheck)\r\n\t\t\tif (bypasscheck and importinstance) or (importinstance and converted[0] != False):\r\n\t\t\t\tsatopt = SATImportOptions()\r\n\t\t\t\timported = doc.Import(sat_path,satopt,None)\r\n\t\t\t\telement = doc.GetElement(imported)\r\n\t\t\t\telement.Pinned = False\r\n\t\t\t\tconverted = [element]\r\n\t\t\t\tsatopt.Dispose()\r\n\t\t\tif len(converted) == 0:\r\n\t\t\t\treturn [False]\r\n\t\t\treturn converted\r\n\t\tdef batchattempt(temp_path,surfs,importinstance,bypasscheck,scaleup,sendmessage):\r\n\t\t\trandomname = \"Dynamo-\" + ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\t\tx_sat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\t\tdg.Geometry.ExportToSAT(surfs,x_sat_path)\r\n\t\t\tif importinstance and bypasscheck:\r\n\t\t\t\tsatopt = SATImportOptions()\r\n\t\t\t\timported = doc.Import(x_sat_path,satopt,None)\r\n\t\t\t\telement = doc.GetElement(imported)\r\n\t\t\t\telement.Pinned = False\r\n\t\t\t\tx_finalsurfaces = [element]\r\n\t\t\t\tsatopt.Dispose()\r\n\t\t\telse:\r\n\t\t\t\tx_finalsurfaces = quickSATcheck(x_sat_path,scaleup,importinstance,True,False,bypasscheck)\r\n\t\t\tSystem.IO.File.Delete(x_sat_path)\r\n\t\t\tif x_finalsurfaces[0] == False:\r\n\t\t\t\treturn [False]\r\n\t\t\telse:\r\n\t\t\t\tx_choppedfinal = []\r\n\t\t\t\tfor xf in x_finalsurfaces:\r\n\t\t\t\t\tx_choppedfinal.append([xf])\r\n\t\t\t\treturn x_choppedfinal,sendmessage,True\r\n\t\tdef SurfacesLaundry(surfs,doc,importinstance,geometrymode,temp_path):\r\n\t\t\t#scaleup = round(unitconverter(3.280839895,doc,True),8)\r\n\t\t\tdef tolist(obj1):\r\n\t\t\t\tif hasattr(obj1,'__iter__'): return obj1\r\n\t\t\t\telse: return [obj1]\t\r\n\t\t\tdef checkcompatible(geoms,customscale=[1,1,1],firstTime=False,geometrymode=True,bypasscheck=False):\r\n\t\t\t\trandomname = \"Dynamo-\" + ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\r\n\t\t\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\r\n\t\t\t\tif allisone(customscale) == False:\r\n\t\t\t\t\tscaledgeoms = geoms.Scale(customscale[0],customscale[1],customscale[2])\r\n\t\t\t\t\tgeoms = scaledgeoms\r\n\t\t\t\tdg.Geometry.ExportToSAT(geoms,sat_path)\r\n\t\t\t\tconverted = []\r\n\t\t\t\tshapeImporter = ShapeImporter()\r\n\t\t\t\tconverted = list(shapeImporter.Convert(doc, sat_path))\r\n\t\t\t\tshapeImporter.Dispose()\r\n\t\t\t\tSystem.IO.File.Delete(sat_path)\r\n\t\t\t\tfor e in converted:\r\n\t\t\t\t\tif e.ToString() == \"Autodesk.Revit.DB.Mesh\":\r\n\t\t\t\t\t\treturn [False]\r\n\t\t\t\tif len(converted) != 0:\r\n\t\t\t\t\tconverted = isActuallygood(geoms,converted,firstTime,geometrymode,bypasscheck)\r\n\t\t\t\tif len(converted) == 0:\r\n\t\t\t\t\treturn [False]\r\n\t\t\t\treturn converted\r\n\t\t\tdef revitOP(finalsub,nurbs=None,cleanexplodes=None,customscale=[1,1,1],disposeNurbs=True,geometrymode=True):\r\n\t\t\t\tif nurbs == None and cleanexplodes == None:\r\n\t\t\t\t\ttestit = checkcompatible(finalsub,customscale,False,geometrymode)\r\n\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\traise Exception(\"Geometry Incompatible With Revit\")\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\tfinalsub.Dispose()\r\n\t\t\t\t\t\treturn testit\r\n\t\t\t\tcleanfinalsub = dg.Geometry.Explode(finalsub)\r\n\t\t\t\trevitgeom = []\r\n\t\t\t\tfor c in cleanfinalsub:\r\n\t\t\t\t\ttestit = checkcompatible(c,customscale,False,geometrymode)\r\n\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\tc.Dispose()\r\n\t\t\t\t\t\traise Exception(\"Geometry Incompatible With Revit\")\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tif geometrymode == False:\r\n\t\t\t\t\t\t\tc.Dispose()\r\n\t\t\t\t\t\trevitgeom.append(testit)\r\n\t\t\t\trevitgeom = flatten(revitgeom)\r\n\t\t\t\tif disposeNurbs:\r\n\t\t\t\t\tnurbs.Dispose()\r\n\t\t\t\tfor cleanex in cleanexplodes:\r\n\t\t\t\t\tcleanex.Dispose()\r\n\t\t\t\tfinalsub.Dispose()\r\n\t\t\t\treturn revitgeom\r\n\t\t\tdef cleanupSurface(surface):\r\n\t\t\t\tdef subtractfunction(nurbs,cleanexplodes):\r\n\t\t\t\t\tdef loopclean(nurbs,thick,counter):\r\n\t\t\t\t\t\tresult = dg.Surface.SubtractFrom(nurbs,thick)[0]\r\n\t\t\t\t\t\tif counter != 0:\r\n\t\t\t\t\t\t\tnurbs.Dispose()\r\n\t\t\t\t\t\tthick.Dispose()\r\n\t\t\t\t\t\treturn result\r\n\t\t\t\t\tthickforms = []\r\n\t\t\t\t\tfor cleanex in cleanexplodes:\r\n\t\t\t\t\t\tsafearea = metersurfarea(cleanex)/10\r\n\t\t\t\t\t\tif safearea > meternumber(0.1):\r\n\t\t\t\t\t\t\tmaxthicken = meternumber(0.1)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tmaxthicken = safearea\r\n\t\t\t\t\t\tthickforms.append(dg.Surface.Thicken(cleanex,maxthicken,True))\r\n\t\t\t\t\tcounter = 0\r\n\t\t\t\t\tfor thick in thickforms:\r\n\t\t\t\t\t\tnurbs = loopclean(nurbs,thick,counter)\r\n\t\t\t\t\t\tcounter += 1\r\n\t\t\t\t\treturn nurbs\r\n\t\t\t\tdef tryingforall(surface,nurbs,cleanexplodes,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfinalsub = subtractfunction(nurbs,cleanexplodes)\r\n\t\t\t\t\t\treturn revitOP(finalsub,nurbs,cleanexplodes,scaleup,True,geometrymode)\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tfinalsub = dg.Surface.Difference(nurbs,cleanexplodes)\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,nurbs,cleanexplodes,scaleup,True,geometrymode)\r\n\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\tif str(e) == \"Cannot difference an empty list\" and almostsame(nurbs,surface):\r\n\t\t\t\t\t\t\t\tfinalsub = nurbs\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\treturn revitOP(finalsub,nurbs,cleanexplodes,scaleup,False,geometrymode)\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\treturn None,finalsub\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\treturn None,finalsub\r\n\t\t\t\tdef gencleanexplodes(subtractnurbs):\r\n\t\t\t\t\tif isinstance(subtractnurbs, list):\r\n\t\t\t\t\t\tif len(subtractnurbs) == 0:\r\n\t\t\t\t\t\t\treturn []\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\texplodednurbs = dg.Geometry.Explode(subtractnurbs)\r\n\t\t\t\t\t\tcleanexplodes = []\r\n\t\t\t\t\t\tif safemode:\r\n\t\t\t\t\t\t\tfor ex in explodednurbs:\r\n\t\t\t\t\t\t\t\tif ex.Area < meternumber(0.002):\r\n\t\t\t\t\t\t\t\t\tex.Dispose()\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tcleanexplodes.append(ex)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tcleanexplodes = list(explodednurbs)\r\n\t\t\t\t\t\tsubtractnurbs.Dispose()\r\n\t\t\t\t\t\treturn cleanexplodes\r\n\t\t\t\tdef easymethod(surface,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tnurbs = dg.Surface.ToNurbsSurface(surface)\r\n\t\t\t\t\t\tif almostsame(nurbs,surface):\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\treturn True,revitOP(nurbs,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\treturn None,nurbs\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn None,nurbs\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn None,None\r\n\t\t\t\tdef isplanarsurf(s):\r\n\t\t\t\t\tnorms = [0,0.333,0.666,1]\r\n\t\t\t\t\tpts = []\r\n\t\t\t\t\tfor n in norms:\r\n\t\t\t\t\t\tfor n2 in norms:\r\n\t\t\t\t\t\t\tpts.append(dg.Surface.PointAtParameter(s,n,n2))\r\n\t\t\t\t\tplane = dg.Plane.ByBestFitThroughPoints(pts)\r\n\t\t\t\t\tstatus = True\r\n\t\t\t\t\tfor p in pts:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tinter = dg.Geometry.DoesIntersect(p,plane)\r\n\t\t\t\t\t\t\tif inter == False:\r\n\t\t\t\t\t\t\t\tstatus = False\r\n\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tpass\r\n\t\t\t\t\treturn status\r\n\t\t\t\tdef joincurves(crvs):\r\n\t\t\t\t\tdef PointsEqual(pt1, pt2):\r\n\t\t\t\t\t\ttolerance = 0.00001\r\n\t\t\t\t\t\tif (math.fabs(pt1.X - pt2.X) < tolerance and\r\n\t\t\t\t\t\t    math.fabs(pt1.Y - pt2.Y) < tolerance and\r\n\t\t\t\t\t\t    math.fabs(pt1.Z - pt2.Z) < tolerance):\r\n\t\t\t\t\t\t\treturn True\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn False\r\n\t\t\t\t\tcrvs = flatten(tolist(crvs))\r\n\t\t\t\t\tcrvGroup = [-1 for x in range(len(crvs))]\r\n\t\t\t\t\tcrvGroup[0] = 0\r\n\t\t\t\t\tmaxGroupNum = 1\r\n\t\t\t\t\tstarts = []\r\n\t\t\t\t\tends = []\r\n\t\t\t\t\tfor crv in crvs:\r\n\t\t\t\t\t\tstarts.append(crv.PointAtParameter(0))\r\n\t\t\t\t\t\tends.append(crv.PointAtParameter(1))\r\n\t\t\t\t\tfor i in range(len(crvs)):\r\n\t\t\t\t\t\tif (crvGroup[i] == -1):\r\n\t\t\t\t\t\t\tcrvGroup[i] = i\r\n\t\t\t\t\t\tfor j in range(len(crvs)):\r\n\t\t\t\t\t\t\tif (i != j and\r\n\t\t\t\t\t\t\t\t(PointsEqual(starts[i], starts[j]) or\r\n\t\t\t\t\t\t\t\tPointsEqual(starts[i], ends[j]) or\r\n\t\t\t\t\t\t\t\tPointsEqual(ends[i], starts[j]) or\r\n\t\t\t\t\t\t\t\tPointsEqual(ends[i], ends[j]))):\r\n\t\t\t\t\t\t\t\tif (crvGroup[j] == -1):\r\n\t\t\t\t\t\t\t\t\tcrvGroup[j] = crvGroup[i]\r\n\t\t\t\t\t\t\t\telif (crvGroup[i] != crvGroup[j]):\r\n\t\t\t\t\t\t\t\t\toldNum = crvGroup[j]\r\n\t\t\t\t\t\t\t\t\tfor k in range(len(crvs)):\r\n\t\t\t\t\t\t\t\t\t\tif (crvGroup[k] == oldNum):\r\n\t\t\t\t\t\t\t\t\t\t\tcrvGroup[k] = crvGroup[i]\r\n\t\t\t\t\tgroups = []\r\n\t\t\t\t\texcluded = []\r\n\t\t\t\t\tfor n in crvGroup:\r\n\t\t\t\t\t\tinnercount = 0\r\n\t\t\t\t\t\ttmp = []\r\n\t\t\t\t\t\tfor n2 in crvGroup:\r\n\t\t\t\t\t\t\tif n == n2 and n2 not in excluded:\r\n\t\t\t\t\t\t\t\ttmp.append(crvs[innercount])\r\n\t\t\t\t\t\t\tinnercount += 1\r\n\t\t\t\t\t\tif len(tmp) == 0:\r\n\t\t\t\t\t\t\tcontinue\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\ttmp = dg.PolyCurve.ByJoinedCurves(tmp)\r\n\t\t\t\t\t\t\tgroups.append(tmp)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tfor t in tmp:\r\n\t\t\t\t\t\t\t\tgroups.append(dg.PolyCurve.ByJoinedCurves([t]))\r\n\t\t\t\t\t\texcluded.append(n)\r\n\t\t\t\t\tjoinedcurves = groups\r\n\t\t\t\t\treturn joinedcurves\r\n\t\t\t\tdef simplifypolycurve(polycurves,safeangle=0.001):\r\n\t\t\t\t\tresult = []\r\n\t\t\t\t\tfor polycurve in polycurves: \r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\texploded = dg.Geometry.Explode(polycurve)\r\n\t\t\t\t\t\t\tcount = 0\r\n\t\t\t\t\t\t\ttotalpts = []\r\n\t\t\t\t\t\t\tcurves = []\r\n\t\t\t\t\t\t\ttriggerlast = False\r\n\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\tvec1 = dg.Curve.TangentAtParameter(exploded[count],0)\r\n\t\t\t\t\t\t\t\tvec2 = dg.Curve.TangentAtParameter(exploded[count - 1],1)\r\n\t\t\t\t\t\t\t\tangle = dg.Vector.AngleWithVector(vec1,vec2)\r\n\t\t\t\t\t\t\t\tnurbspts = exp.ToNurbsCurve().ControlPoints()\r\n\t\t\t\t\t\t\t\tif angle >= safeangle:\r\n\t\t\t\t\t\t\t\t\ttotalpts.append(nurbspts)\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tif len(totalpts) == 0:\r\n\t\t\t\t\t\t\t\t\t\ttriggerlast = True\r\n\t\t\t\t\t\t\t\t\t\tstorelast = nurbspts\r\n\t\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\t\tlast_list = list(totalpts[-1])\r\n\t\t\t\t\t\t\t\t\t\tnurbspts = nurbspts[1:]\r\n\t\t\t\t\t\t\t\t\t\tfor n in nurbspts:\r\n\t\t\t\t\t\t\t\t\t\t\tlast_list.append(n)\r\n\t\t\t\t\t\t\t\t\t\ttotalpts[-1] = last_list\r\n\t\t\t\t\t\t\t\tcount += 1\r\n\t\t\t\t\t\t\tif triggerlast:\r\n\t\t\t\t\t\t\t\tlast_list = list(totalpts[-1])\r\n\t\t\t\t\t\t\t\tnurbspts = storelast[1:]\r\n\t\t\t\t\t\t\t\tfor n in nurbspts:\r\n\t\t\t\t\t\t\t\t\tlast_list.append(n)\r\n\t\t\t\t\t\t\t\ttotalpts[-1] = last_list\r\n\t\t\t\t\t\t\t\r\n\t\t\t\t\t\t\tfor total in totalpts:\r\n\t\t\t\t\t\t\t\tcurves.append(dg.NurbsCurve.ByControlPoints(total))\r\n\t\t\t\t\t\t\tjoinedcurve = dg.PolyCurve.ByJoinedCurves(curves)\r\n\t\t\t\t\t\t\tresult.append(joinedcurve)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tresult.append(polycurve)\r\n\t\t\t\t\treturn result\r\n\t\t\t\tdef trimloopmethod(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tif surface.Closed:\r\n\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tjoinedperms = [dg.PolyCurve.ByJoinedCurves(surface.PerimeterCurves())]\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tjoinedperms = joincurves(surface.PerimeterCurves())\r\n\t\t\t\t\t\tfinalsub = dg.Surface.TrimWithEdgeLoops(nurbs,joinedperms)\r\n\t\t\t\t\t\tif almostsame(finalsub,surface):\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef trimloopmethodSimplified(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tif surface.Closed:\r\n\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tjoinedperms = [dg.PolyCurve.ByJoinedCurves(surface.PerimeterCurves())]\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tjoinedperms = joincurves(surface.PerimeterCurves())\r\n\t\t\t\t\t\tjoinedperms = simplifypolycurve(joinedperms)\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tfinalsub = dg.Surface.TrimWithEdgeLoops(nurbs,joinedperms)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\tpulledPerms = []\r\n\t\t\t\t\t\t\tfor joinedperm in joinedperms:\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\tpulled = dg.Curve.PullOntoSurface(joinedperm,nurbs)\r\n\t\t\t\t\t\t\t\t\tif pulled.NumberOfCurves == joinedperm.NumberOfCurves:\r\n\t\t\t\t\t\t\t\t\t\tpulledPerms.append(pulled)\r\n\t\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\t\tpulledPerms.append(joinedperm)\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\tpulledPerms.append(joinedperm)\r\n\t\t\t\t\t\t\tfinalsub = dg.Surface.TrimWithEdgeLoops(nurbs,pulledPerms)\r\n\t\t\t\t\t\tif almostsame(finalsub,surface,1):\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\ttmp_thicken = dg.Surface.Thicken(surface,pointOneMeter,True)\r\n\t\t\t\t\t\tisplanar = isplanarsurf(surface)\r\n\t\t\t\t\t\tif isplanar:\r\n\t\t\t\t\t\t\ttmp_pt = dg.Surface.PointAtParameter(surface,0.5,0.5)\r\n\t\t\t\t\t\t\ttmp_norm = dg.Surface.NormalAtPoint(surface,tmp_pt)\r\n\t\t\t\t\t\t\tintersecter = dg.Plane.ByOriginNormal(tmp_pt,tmp_norm)\r\n\t\t\t\t\t\t\tfinalsub = dg.Geometry.Intersect(intersecter,tmp_thicken)\r\n\t\t\t\t\t\t\tfor f in finalsub:\r\n\t\t\t\t\t\t\t\tif isinstance(f,dg.Surface):\r\n\t\t\t\t\t\t\t\t\tfinalsub = f\r\n\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\ttmp_thicken.Dispose()\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfinalsub = dg.Geometry.Intersect(nurbs,tmp_thicken)\r\n\t\t\t\t\t\t\tfor f in finalsub:\r\n\t\t\t\t\t\t\t\tif isinstance(f,dg.Surface):\r\n\t\t\t\t\t\t\t\t\tfinalsub = f\r\n\t\t\t\t\t\t\t\t\tbreak\r\n\t\t\t\t\t\t\ttmp_thicken.Dispose()\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\treturn revitOP(finalsub,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\treturn None,finalsub\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef inithickenMethod(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tsafearea = metersurfarea(surface)/10\r\n\t\t\t\t\t\tif safearea > meternumber(0.1):\r\n\t\t\t\t\t\t\tmaxthicken = meternumber(0.1)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tmaxthicken = safearea\r\n\t\t\t\t\t\tthickeninit = dg.Surface.Thicken(surface,maxthicken,True)\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.SubtractFrom(nurbs,thickeninit)[0]\r\n\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\tif \"index out of range\" in str(e) and almostsame(nurbs,surface):\r\n\t\t\t\t\t\t\t\tsubtractnurbs = []\r\n\t\t\t\t\t\t\telif \"index out of range\" in str(e):\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\r\n\t\t\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\r\n\t\t\t\t\t\t\t\t\t\tsubtractnurbs = []\r\n\t\t\t\t\t\tthickeninit.Dispose()\r\n\t\t\t\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\r\n\t\t\t\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\r\n\t\t\t\t\t\tif tryall[0] != None:\r\n\t\t\t\t\t\t\treturn tryall\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn None,tryall[1]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\tdef simplesubmethod(surface,nurbs,geometrymode):\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\tsubtractnurbs = dg.Surface.Difference(nurbs,[surface])\r\n\t\t\t\t\t\texcept Exception as e:\r\n\t\t\t\t\t\t\tif str(e) == \"Unable to get FACE from BODY: no faces in BODY\":\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\t\treturn revitOP(nurbs,None,None,scaleup,True,geometrymode)\r\n\t\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\t\treturn None,nurbs\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\treturn [None]\r\n\t\t\t\t\t\tcleanexplodes = gencleanexplodes(subtractnurbs)\r\n\t\t\t\t\t\ttryall = tryingforall(surface,nurbs,cleanexplodes,geometrymode)\r\n\t\t\t\t\t\tif tryall[0] != None:\r\n\t\t\t\t\t\t\treturn tryall\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\treturn None,tryall[1]\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\treturn [None]\r\n\t\t\t\teasy = easymethod(surface,geometrymode)\r\n\t\t\t\tpointOneMeter = unitconverter(0.3280,doc,True)\r\n\t\t\t\tif easy[0] != None:\r\n\t\t\t\t\treturn easy[1]\r\n\t\t\t\telif easy[0] == None and easy[1] == None:\r\n\t\t\t\t\treturn None\r\n\t\t\t\telse:\r\n\t\t\t\t\tnurbs = easy[1]\r\n\t\t\t\tfailsafesurfs = []\r\n\t\t\t\ttrimloop = trimloopmethod(surface,nurbs,geometrymode)\r\n\t\t\t\tif trimloop[0] != None:\r\n\t\t\t\t\treturn trimloop\r\n\t\t\t\ttrimloopSimplified = trimloopmethodSimplified(surface,nurbs,geometrymode)\r\n\t\t\t\tif trimloopSimplified[0] != None:\r\n\t\t\t\t\treturn trimloopSimplified\r\n\t\t\t\tsimple = simplesubmethod(surface,nurbs,geometrymode)\r\n\t\t\t\tif simple[0] != None:\r\n\t\t\t\t\treturn simple\r\n\t\t\t\telse:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfailsafesurfs.append(simple[1])\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\t\tinithick = inithickenMethod(surface,nurbs,geometrymode)\r\n\t\t\t\tif inithick[0] != None:\r\n\t\t\t\t\treturn inithick\r\n\t\t\t\telse:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfailsafesurfs.append(inithick[1])\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\t\tthickeninter = thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter)\r\n\t\t\t\tif thickeninter[0] != None:\r\n\t\t\t\t\treturn thickeninter\r\n\t\t\t\telse:\r\n\t\t\t\t\ttry:\r\n\t\t\t\t\t\tfailsafesurfs.append(thickeninter[1])\r\n\t\t\t\t\texcept:\r\n\t\t\t\t\t\tpass\r\n\t\t\t\tfor failsurf in failsafesurfs:\r\n\t\t\t\t\tsurface = failsurf\r\n\t\t\t\t\teasy = easymethod(surface,geometrymode)\r\n\t\t\t\t\tif easy[0] != None:\r\n\t\t\t\t\t\treturn easy[1]\r\n\t\t\t\t\telif easy[0] == None and easy[1] == None:\r\n\t\t\t\t\t\treturn None\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tnurbs = easy[1]\r\n\t\t\t\t\ttrimloop = trimloopmethod(surface,nurbs,geometrymode)\r\n\t\t\t\t\tif trimloop[0] != None:\r\n\t\t\t\t\t\treturn trimloop\r\n\t\t\t\t\tsimple = simplesubmethod(surface,nurbs,geometrymode)\r\n\t\t\t\t\tif simple[0] != None:\r\n\t\t\t\t\t\treturn simple\r\n\t\t\t\t\tinithick = inithickenMethod(surface,nurbs,geometrymode)\r\n\t\t\t\t\tif inithick[0] != None:\r\n\t\t\t\t\t\treturn inithick\r\n\t\t\t\t\tthickeninter = thickenintersectMethod(surface,nurbs,geometrymode,pointOneMeter)\r\n\t\t\t\t\tif thickeninter[0] != None:\r\n\t\t\t\t\t\treturn thickeninter\r\n\t\t\t\treturn None\r\n\t\t\tsendmessage = False\r\n\t\t\tis_sat = False\r\n\t\t\tif isinstance(surfs,str) == False:\r\n\t\t\t\tsurfs = flatten(tolist(surfs))\r\n\t\t\t\tx_scaledown = round(unitconverter(0.3048,doc,False),8)\r\n\t\t\t\tx_pure = []\r\n\t\t\t\tfor xs in surfs:\r\n\t\t\t\t\tif isinstance(xs,dg.Solid) or isinstance(xs,dg.Surface) or isinstance(xs,dg.PolySurface) or isinstance(xs,dg.Cuboid):\r\n\t\t\t\t\t\tif x_scaledown != 1:\r\n\t\t\t\t\t\t\tx_pure.append(xs.Scale(x_scaledown))\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tx_pure.append(xs)\r\n\t\t\t\tsurfs = x_pure\r\n\t\t\t\tbOP = batchattempt(temp_path,surfs,importinstance,bypasscheck,scaleup,sendmessage)\r\n\t\t\t\tif bOP[0] == False:\r\n\t\t\t\t\tpass\r\n\t\t\t\telse:\r\n\t\t\t\t\treturn bOP\r\n\t\t\tif isinstance(surfs,str):\r\n\t\t\t\tif \".sat\" in surfs.lower():\r\n\t\t\t\t\tfinalsurfaces = quickSATcheck(surfs,scaleup,importinstance,True,False,bypasscheck)\r\n\t\t\t\t\tif finalsurfaces[0] == False:\r\n\t\t\t\t\t\tsurfs = dg.Geometry.ImportFromSAT(surfs)\r\n\t\t\t\t\t\tx_pure = []\r\n\t\t\t\t\t\tfor xs in surfs:\r\n\t\t\t\t\t\t\tif isinstance(xs,dg.Solid) or isinstance(xs,dg.Surface) or isinstance(xs,dg.PolySurface) or isinstance(xs,dg.Cuboid):\r\n\t\t\t\t\t\t\t\tx_pure.append(xs)\r\n\t\t\t\t\t\tsurfs = x_pure\r\n\t\t\t\t\t\tis_sat = True\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tchoppedfinal = []\r\n\t\t\t\t\t\tfor f in finalsurfaces:\r\n\t\t\t\t\t\t\tchoppedfinal.append([f])\r\n\t\t\t\t\t\treturn choppedfinal,sendmessage,True\r\n\t\t\t\telse:\r\n\t\t\t\t\treturn [],sendmessage\r\n\t\t\t\tscaledown = 1\r\n\t\t\telse:\r\n\t\t\t\tscaledown = round(unitconverter(0.3048,doc,False),8)\r\n\t\t\tsurfs = flatten(tolist(surfs))\r\n\t\t\tfinalsurfaces = []\r\n\t\t\tprecheck = []\r\n\t\t\tfor s in surfs:\r\n\t\t\t\ttry:\r\n\t\t\t\t\tif isinstance(s,dg.Surface):\r\n\t\t\t\t\t\texploded = dg.Geometry.Explode(s)\r\n\t\t\t\t\t\tif disposeinit:\r\n\t\t\t\t\t\t\ts.Dispose()\r\n\t\t\t\t\t\tif len(exploded) > 1:\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tprecheck.append(dg.PolySurface.ByJoinedSurfaces(exploded))\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\t\tprecheck.append(exp)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfor exp in exploded:\r\n\t\t\t\t\t\t\t\tprecheck.append(exp)\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tprecheck.append(s)\r\n\t\t\t\texcept:\r\n\t\t\t\t\tprecheck.append(s)\r\n\t\t\tsurfs = precheck\r\n\t\t\tbOP = batchattempt(temp_path,surfs,importinstance,bypasscheck,scaleup,sendmessage)\r\n\t\t\tif bOP[0] == False:\r\n\t\t\t\tpass\r\n\t\t\telse:\r\n\t\t\t\treturn bOP\r\n\t\t\tfor s in surfs:\r\n\t\t\t\tsurface = s\r\n\t\t\t\tsafe = True\r\n\t\t\t\tif safemode:\r\n\t\t\t\t\tif isinstance(surface,dg.Solid) or isinstance(surface,dg.PolySurface):\r\n\t\t\t\t\t\tnicesurfaces = []\r\n\t\t\t\t\t\texplodedcheck = dg.Geometry.Explode(surface)\r\n\t\t\t\t\t\tfor explocheck in explodedcheck:\r\n\t\t\t\t\t\t\tif isbellowarea(explocheck):\r\n\t\t\t\t\t\t\t\tsafe = False\r\n\t\t\t\t\t\t\t\texplocheck.Dispose()\r\n\t\t\t\t\t\t\t\tsendmessage = True\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\tnicesurfaces.append(explocheck)\r\n\t\t\t\t\t\tif safe:\r\n\t\t\t\t\t\t\tfor n in nicesurfaces:\r\n\t\t\t\t\t\t\t\tn.Dispose()\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tif isbellowarea(surface):\r\n\t\t\t\t\t\t\ts.Dispose()\r\n\t\t\t\t\t\t\tif scaledown != 1 and geometrymode == False:\r\n\t\t\t\t\t\t\t\tsurface.Dispose()\r\n\t\t\t\t\t\t\tsendmessage = True\r\n\t\t\t\t\t\t\tcontinue\r\n\t\t\t\tif safe == False:\r\n\t\t\t\t\ttmp = []\r\n\t\t\t\t\tfor mini_s in nicesurfaces:\r\n\t\t\t\t\t\ttestit = checkcompatible(mini_s,scaleup,False,geometrymode)\r\n\t\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\t\tcleanedup = cleanupSurface(mini_s)\r\n\t\t\t\t\t\t\tif cleanedup != None:\r\n\t\t\t\t\t\t\t\ttmp.append(cleanedup)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\ttmp.append(testit)\r\n\t\t\t\t\t\tif geometrymode == False and testit[0] != False:\r\n\t\t\t\t\t\t\tmini_s.Dispose()\r\n\t\t\t\t\tif len(tmp) != 0:\r\n\t\t\t\t\t\tfinalsurfaces.append(flatten(tmp))\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tfinalsurfaces.append([\"FAILED\"])\r\n\t\t\t\t\tif (disposeinit or is_sat) and geometrymode == False:\r\n\t\t\t\t\t\ts.Dispose()\r\n\t\t\t\t\tif scaledown != 1 and geometrymode == False:\r\n\t\t\t\t\t\tif isinstance(surface,list):\r\n\t\t\t\t\t\t\tfor surf in surface:\r\n\t\t\t\t\t\t\t\tsurf.Dispose()\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tsurface.Dispose()\r\n\t\t\t\t\tcontinue\r\n\t\t\t\ttestit = checkcompatible(surface,scaleup,True,geometrymode)\r\n\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\tisexploded = False\r\n\t\t\t\t\tif isinstance(surface,dg.Solid) or isinstance(surface,dg.PolySurface):\r\n\t\t\t\t\t\tsurface = list(dg.Geometry.Explode(surface))\r\n\t\t\t\t\t\tisexploded = True\r\n\t\t\t\t\tif isexploded:\r\n\t\t\t\t\t\ttmp = []\r\n\t\t\t\t\t\tfor mini_s in surface:\r\n\t\t\t\t\t\t\ttestit = checkcompatible(mini_s,scaleup,False,geometrymode)\r\n\t\t\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\t\t\tcleanedup = cleanupSurface(mini_s)\r\n\t\t\t\t\t\t\t\tif cleanedup != None:\r\n\t\t\t\t\t\t\t\t\ttmp.append(cleanedup)\r\n\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\ttmp.append(testit)\r\n\t\t\t\t\t\t\tif geometrymode == False and testit[0] != False:\r\n\t\t\t\t\t\t\t\tmini_s.Dispose()\r\n\t\t\t\t\t\tif len(tmp) != 0:\r\n\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\tsoljoin = polysurfaceOP(flatten(tmp))\r\n\t\t\t\t\t\t\t\ttry:\r\n\t\t\t\t\t\t\t\t\tsol = dg.Solid.ByJoinedSurfaces([soljoin])\r\n\t\t\t\t\t\t\t\t\tsoljoin.Dispose()\r\n\t\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\t\tsol = soljoin\r\n\t\t\t\t\t\t\t\ttestit = checkcompatible(sol,scaleup,True,geometrymode)\r\n\t\t\t\t\t\t\t\tif testit[0] == False:\r\n\t\t\t\t\t\t\t\t\tsol.Dispose()\r\n\t\t\t\t\t\t\t\t\tfinalsurfaces.append(flatten(tmp))\r\n\t\t\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\t\t\tfinalsurfaces.append([sol])\r\n\t\t\t\t\t\t\texcept:\r\n\t\t\t\t\t\t\t\tfinalsurfaces.append(flatten(tmp))\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfinalsurfaces.append([\"FAILED\"])\r\n\t\t\t\t\t\tsendmessage = True\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tcleanedup = cleanupSurface(surface)\r\n\t\t\t\t\t\tif cleanedup != None:\r\n\t\t\t\t\t\t\tfinalsurfaces.append(cleanedup)\r\n\t\t\t\t\t\telse:\r\n\t\t\t\t\t\t\tfinalsurfaces.append([\"FAILED\"])\r\n\t\t\t\telse:\r\n\t\t\t\t\tfinalsurfaces.append(testit)\r\n\t\t\t\tif (disposeinit or is_sat) and geometrymode == False:\r\n\t\t\t\t\ts.Dispose()\r\n\t\t\t\tif scaledown != 1 and geometrymode == False:\r\n\t\t\t\t\tif isinstance(surface,list):\r\n\t\t\t\t\t\tfor surf in surface:\r\n\t\t\t\t\t\t\tsurf.Dispose()\r\n\t\t\t\t\telse:\r\n\t\t\t\t\t\tsurface.Dispose()\r\n\t\t\treturn finalsurfaces,sendmessage\r\n\t\tforms = []\r\n\t\tlaundryMain = SurfacesLaundry(surfs,doc,importinstance,geometrymode,temp_path)\r\n\t\tresult = laundryMain[0]\r\n\t\tsendmessage = laundryMain[1]\r\n\t\tfor rlist in result:\r\n\t\t\ttmp = []\r\n\t\t\tfor r in rlist:\r\n\t\t\t\ttmp.append(r)\r\n\t\t\tif len(tmp) != 0:\r\n\t\t\t\tforms.append(tmp)\r\n\t\tif len(laundryMain) == 3:\r\n\t\t\treturn forms,sendmessage,True\r\n\t\telse:\r\n\t\t\treturn forms,sendmessage\r\n\tif geoms == [] or geoms == None:\r\n\t\treturn [],None,False\r\n\tgeometrymode = True\r\n\tdisposeinit = False\r\n\tTransactionManager.Instance.ForceCloseTransaction()\r\n\tif importinstance:\r\n\t\ttrans = Transaction(doc, 'Create ImportInstance')\r\n\telse:\r\n\t\tif doc.IsFamilyDocument:\r\n\t\t\ttrans = Transaction(doc, 'Create FreeForm')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Create DirectShape')\r\n\ttrans.Start()\r\n\twarnhandle = WarnSwallowImport()\r\n\tfoptions = trans.GetFailureHandlingOptions()\r\n\tfoptions.SetFailuresPreprocessor(warnhandle)\r\n\tfoptions.SetClearAfterRollback(True)\r\n\ttrans.SetFailureHandlingOptions(foptions)\r\n\ttry:\r\n\t\tsmartrevitsolidMain = smartrevitsolid(geoms,doc,importinstance,safemode,geometrymode,disposeinit,temp_path)\r\n\texcept:\r\n\t\ttrans.RollBack()\r\n\t\treturn [],None,False\r\n\tif len(smartrevitsolidMain) == 3:\r\n\t\ttrans.Commit()\r\n\telse:\r\n\t\ttrans.RollBack()\r\n\tfreeformslists = smartrevitsolidMain[0]\r\n\tsendmessage = smartrevitsolidMain[1]\r\n\tresult = [] \r\n\tsinglelist = []\r\n\tTransactionManager.Instance.ForceCloseTransaction()\r\n\tif importinstance:\r\n\t\tif singlefinalprocess:\r\n\t\t\ttrans = Transaction(doc, 'Create ImportInstance')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Create ImportInstances')\r\n\telse:\r\n\t\tif doc.IsFamilyDocument:\r\n\t\t\ttrans = Transaction(doc, 'Create FreeForms')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Create DirectShape')\r\n\tif len(smartrevitsolidMain) == 3:\r\n\t\tif singlefinalprocess:\r\n\t\t\ttrans = Transaction(doc, 'Move ImportInstance')\r\n\t\telse:\r\n\t\t\ttrans = Transaction(doc, 'Move ImportInstances')\r\n\ttrans.Start()\r\n\tsatopt = SATImportOptions()\r\n\tfor slist in freeformslists:\r\n\t\ttmp = []\r\n\t\ttmpexport = []\r\n\t\tfor s in slist:\r\n\t\t\tif s == \"FAILED\":\r\n\t\t\t\tif returnfailures:\r\n\t\t\t\t\ttmp.append(None)\r\n\t\t\t\tcontinue\r\n\t\t\tcompare = s.ToString()\r\n\t\t\tif compare == \"Autodesk.Revit.DB.FreeFormElement\" or compare == \"Autodesk.Revit.DB.Solid\" or compare == \"Autodesk.Revit.DB.ImportInstance\" or compare == \"Autodesk.Revit.DB.DirectShape\":\r\n\t\t\t\ttmp.append(s)\r\n\t\t\telse:\r\n\t\t\t\tif singlefinalprocess:\r\n\t\t\t\t\tsinglelist.append(s)\r\n\t\t\t\telse:\r\n\t\t\t\t\ttmpexport.append(s)\r\n\t\tif len(tmp) != 0:\r\n\t\t\tresult.append(tmp)\r\n\t\tif len(tmpexport) != 0:\r\n\t\t\tresult.append(finalimport(importinstance,tmpexport,satopt,singlefinalprocess))\r\n\tif len(singlelist) != 0:\r\n\t\tresult.append(finalimport(importinstance,singlelist,satopt,singlefinalprocess))\r\n\tsatopt.Dispose()\r\n\tmainvec = None\r\n\tif len(result) != 0 and centermode:\r\n\t\tdoc.Regenerate()\r\n\t\tmainvec = movecenter(doc,result)\r\n\ttrans.Commit()\r\n\tif importinstance or (singlefinalprocess and doc.IsFamilyDocument == False):\r\n\t\tcleanresult = []\r\n\t\tfor r in result:\r\n\t\t\tcleanresult.append(r[0])\r\n\t\tresult  = cleanresult\r\n\t\tif (singlefinalprocess and importinstance) or (singlefinalprocess and doc.IsFamilyDocument == False):\r\n\t\t\tresult = result[0]\r\n\treturn result,mainvec,sendmessage\r\n\r\n# Inputs\r\nsafegeom = True\r\nif IN[0] == [] or IN[0] == None:\r\n\tsafegeom = False\r\ngeoms = UnwrapElement(flatten(tolist(IN[0])))\r\noverwrite = IN[1]\r\nonefam = IN[2]\r\nautoavoidconflict = IN[3]\r\ndynaproc = IN[4]\r\njoinsurfs = IN[5]\r\njoinsolids = IN[6]\r\nfamname = IN[7]\r\nfamnumber = int(IN[8])\r\nfamcategory = UnwrapElement(IN[9])\r\nfam_path = IN[10]\r\nisShared = IN[11]\r\nisWorkplane = IN[12]\r\nisVertical = IN[13]\r\nisCuts = IN[14]\r\ntovoid = IN[15]\r\nmaterial = IN[16]\r\nisonemat = IN[17]\r\nismatinstance = IN[18]\r\nmatparamname = IN[19]\r\nsubcategory = IN[20]\r\nsubcategorymat = IN[21]\r\nselforigin = IN[22]\r\nseparator = IN[23]\r\ndoublefamilies = IN[24]\r\nautoalternative = IN[25]\r\nrecommended = IN[26]\r\nshowmessages = IN[27]\r\ndocimportmethod = IN[28]\r\nimportinstance = IN[29]\r\nbypasscheck = IN[30]\r\n\r\nif tovoid:\r\n\tfilteredGeoms = []\r\n\tfor geom in geoms:\r\n\t\tif isinstance(geom,dg.Surface) == False:\r\n\t\t\tfilteredGeoms.append(geom)\r\n\tgeoms = filteredGeoms\r\n\r\ncleanlist = [\"Dynamo Wall Intersects Family\",\"Dynamo K-Paneling\",\"Dynamo Solid or Void Family\",\"Dynamo Splitted Mass\",\"Dynamo Converted Element\",\"Dynamo Converted Face\",\"Dynamo Loft Family\",\"Dynamo Scaled Mass\",\"Dynamo Generated Patch\",\"Dynamo Sliced Pieces\",\"Dynamo Chamfered Element\",\"Dynamo Filleted Element\",\"Dynamo Stairs K-Fill\",\"Dynamo Room Family\",\"Dynamo Topography Stepped\",\"Dynamo Model Text\",\"Dynamo Converted Project\",\"Dynamo Converted Site\",\"Dynamo Free Form Family\",\"Dynamo Subergion\",\"Dynamo Smart Voider\",\"Dynamo T-Spline Form\",\"Dynamo Water Family\",\"Dynamo Adaptive Offset\"]\r\n\r\n# Windows Temp Path\r\ntemp_path = System.IO.Path.GetTempPath()\r\n\r\n# Project Document and UI\r\nprojectdoc = DocumentManager.Instance.CurrentDBDocument\r\nuiapp = DocumentManager.Instance.CurrentUIApplication\r\n\r\n# Filter Geometry List\r\ngeoms = cleangeomlist(geoms)\r\n\r\n# Stabelizing Category Name\r\ntry:\r\n\tfamcategory = famcategory.Name\r\nexcept:\r\n\tpass\r\n\r\nif importinstance:\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2022:\r\n\t\tresult = []\r\n\t\tif type(geoms[0]) is str:\r\n\t\t\tgeoms = betteimport(projectdoc,geoms[0],temp_path)\r\n\t\tif onefam:\r\n\t\t\tgeoms = Array[dg.Geometry](geoms)\r\n\t\t\tresult.append(Revit.Elements.ImportInstance.ByGeometries(geoms))\r\n\t\telse:\r\n\t\t\tfor geom in geoms:\r\n\t\t\t\tresult.append(Revit.Elements.ImportInstance.ByGeometry(geom))\r\n\t\tOUT = None,None,result\r\n\telse:\r\n\t\tif type(geoms[0]) is str:\r\n\t\t\tgeoms = geoms[0]\r\n\t\tOUT = None,None,smartFreeForm(geoms,[1,1,1],projectdoc,False,famcategory,True,onefam,False,temp_path,True)[0]\r\nelif safegeom:\r\n\t# Unit Factor\r\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\t\tunitfactor = UnitUtils.ConvertToInternalUnits(1,projectdoc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits)\r\n\telse:\r\n\t\tunitfactor = UnitUtils.ConvertToInternalUnits(1,projectdoc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\r\n\t\r\n\t# Dynamo Version\r\n\tversion = Dynamo.Applications.DynamoRevit().RevitDynamoModel.Version\r\n\tversion = int(version.split(\".\")[0])\r\n\t\r\n\t# Revit Version\r\n\trevitversion = int(uiapp.Application.VersionNumber)\r\n\t\r\n\t# Check If SAT and One Family Is Disabled\r\n\tonefam_message = False\r\n\tif onefam == False:\r\n\t\tif type(geoms[0]) is str:\r\n\t\t\tgeoms = betteimport(projectdoc,geoms[0],temp_path)\r\n\t\t\tonefam_message = \"Switched To Alternative Sync Method Due To Request Of Multiple Families For SAT file\"\r\n\t\t\tcount = len(geoms)\r\n\t\t\tfamnumbers = range(famnumber,famnumber + count,1)\r\n\t\telse:\r\n\t\t\tcount = len(geoms)\r\n\t\t\tfamnumbers = range(famnumber,famnumber + count,1)\r\n\t\r\n\t# Applying Recommended Settings\r\n\toldrevitmessage = False\r\n\tif recommended:\r\n\t\tif projectdoc.IsFamilyDocument:\r\n\t\t\tcurrentcat = projectdoc.OwnerFamily.FamilyCategory.Name\r\n\t\telse:\r\n\t\t\tcurrentcat = \"Project\"\r\n\t\tif tovoid:\r\n\t\t\tisCuts = True\r\n\t\tif famcategory == \"Mass\":\r\n\t\t\tif subcategory == \"\" or subcategory == None:\r\n\t\t\t\tsubcategory = \"Form\"\r\n\t\t\t\tsubcategorymat = None\r\n\t\tif currentcat == \"Mass\" and famcategory != \"Mass\":\r\n\t\t\tisShared = True\r\n\t\t\tdoublefamilies = False\r\n\t\telif currentcat == \"Mass\" and famcategory == \"Mass\":\r\n\t\t\tisShared = False\r\n\t\t\tdoublefamilies = False\r\n\t\telif currentcat == \"Project\" and famcategory != \"Mass\":\r\n\t\t\tdoublefamilies = False\r\n\t\telif currentcat == \"Project\" and famcategory == \"Mass\":\r\n\t\t\tdoublefamilies = True\r\n\t\tif revitversion < 2021 and autoalternative:\r\n\t\t\tdynaproc = True\r\n\t\t\toldrevitmessage = \"You Are Using Old Revit Version\\nForced Alternative Sync Method\\n\\nYou Can Disable Forcing By Disabling\\n'Auto Alternative Sync Method' Option\"\r\n\r\n\t# Force Disable Double Families If Not In Project\r\n\tif projectdoc.IsFamilyDocument:\r\n\t\tdoublefamilies = False\r\n\t\r\n\t# Force Unshare If Double Families Is On\r\n\tif doublefamilies:\r\n\t\tisShared = False\r\n\t\r\n\t# Check If Input Geometry is Safe\t\r\n\tif geoms[0] != None and geoms[0] != []:\r\n\t\t#TransactionManager.Instance.ForceCloseTransaction()\r\n\t\t#tGroup = TransactionGroup(projectdoc, 'K-Inserting Families')\r\n\t\t#tGroup.Start()\r\n\t\t\r\n\t\t# Family Saving Options\r\n\t\tSaveAsOpt = SaveAsOptions()\r\n\t\tSaveAsOpt.OverwriteExistingFile = True\r\n\t\t\r\n\t\t# Import and Geometry Options\r\n\t\timpOpt = SATImportOptions()\r\n\t\topt1 = Options()\r\n\t\t\t\r\n\t\t# Main Run\r\n\t\tdanger_status = []\r\n\t\tmessage = False\r\n\t\tif onefam:\r\n\t\t\toperate = mainOP(geoms,dynaproc,famname,famnumber,autoavoidconflict,famcategory,fam_path,isShared,isWorkplane,isVertical,isCuts,tovoid,material,isonemat,ismatinstance,matparamname,subcategory,subcategorymat,overwrite,projectdoc,SaveAsOpt,impOpt,opt1,temp_path,separator,selforigin,unitfactor,doublefamilies,joinsurfs,joinsolids,version,autoalternative,docimportmethod,bypasscheck)\r\n\t\t\tdanger_rep = operate[-1]\r\n\t\t\toperate = operate[:-1]\r\n\t\t\tif danger_rep:\r\n\t\t\t\tif revitversion < 2022:\r\n\t\t\t\t\tdanger_status.append(\"Detected Geometry Problem\\nForced Alternative Sync Method\\n\\nYou Can Disable Forcing By Disabling\\n'Auto Alternative Sync Method' Option\\n\\nAffected Family:\")\r\n\t\t\t\telse:\r\n\t\t\t\t\tdanger_status.append(\"Detected Geometry Problem\\nSome Geometry Got Exploded\\n\\nAffected Family:\")\r\n\t\t\t\tdanger_status.append(operate[0].Name)\r\n\t\t\t\tdanger_status = danger_status\r\n\t\t\t\tmessage = \"\\n\".join(danger_status)\r\n\t\t\telif onefam_message:\r\n\t\t\t\tmessage = onefam_message\r\n\t\t\telif oldrevitmessage:\r\n\t\t\t\tmessage = oldrevitmessage\r\n\t\telse:\r\n\t\t\toperate = []\r\n\t\t\tdan_names = []\r\n\t\t\tcount = 0\r\n\t\t\tfor famnumber in famnumbers:\r\n\t\t\t\tgeom = [geoms[count]]\r\n\t\t\t\tcount += 1\r\n\t\t\t\tmainoperate = mainOP(geom,dynaproc,famname,famnumber,autoavoidconflict,famcategory,fam_path,isShared,isWorkplane,isVertical,isCuts,tovoid,material,isonemat,ismatinstance,matparamname,subcategory,subcategorymat,overwrite,projectdoc,SaveAsOpt,impOpt,opt1,temp_path,separator,selforigin,unitfactor,doublefamilies,joinsurfs,joinsolids,version,autoalternative,docimportmethod,bypasscheck)\r\n\t\t\t\tdanger_rep = mainoperate[-1]\r\n\t\t\t\tif danger_rep:\r\n\t\t\t\t\tdan_names.append(mainoperate[0].Name)\r\n\t\t\t\toperate.append(mainoperate[:-1])\r\n\t\t\tif len(dan_names) != 0:\r\n\t\t\t\tif revitversion < 2022:\r\n\t\t\t\t\tdanger_status.append(\"Detected Geometry Problem\\nForced Alternative Sync Method\\n\\nYou Can Disable Forcing By Disabling\\n'Auto Alternative Sync Method' Option\\n\\nAffected Families:\")\r\n\t\t\t\telse:\r\n\t\t\t\t\tdanger_status.append(\"Detected Geometry Problem\\nSome Geometry Got Exploded\\n\\nAffected Families:\")\r\n\t\t\t\tdanger_status = danger_status + dan_names\r\n\t\t\t\tmessage = \"\\n\".join(danger_status)\r\n\t\t\telif onefam_message:\r\n\t\t\t\tmessage = onefam_message\r\n\t\t\telif oldrevitmessage:\r\n\t\t\t\tmessage = oldrevitmessage\r\n\t\t\toperate = [list(i) for i in zip(*operate)]\r\n\t\t# House Clean Up\r\n\t\thousecleanup(projectdoc,cleanlist)\r\n\t\t\r\n\t\t# Check If There Is Message\r\n\t\tif message and showmessages:\r\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\r\n\t\t\ttrans1 = Transaction(projectdoc, 'Show Message')\r\n\t\t\ttrans1.Start()\r\n\t\t\tTaskDialog.Show(\"AECedx - Karam\", message)\r\n\t\t\ttrans1.Commit()\r\n\t\t#tGroup.Assimilate()\r\n\t\tSaveAsOpt.Dispose()\r\n\t\timpOpt.Dispose()\r\n\t\topt1.Dispose()\r\n\t\tOUT = operate\r\n\telse:\r\n\t\tOUT = \"ERROR\"\r\nelse:\r\n\tOUT = IN[0]",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "05bfbf40cefb4cd994f96a1f86b4ac52",
+      "Inputs": [
+        {
+          "Id": "839b1f0ebbbf4b52838405d1b876632b",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e27f06e849e041268276d3c994674374",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "13cef72d097241e5a9ece39374f27029",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4488cf1978a54914aecc08b1e1aea0b1",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "965b2d4c06cb4fafad65e90e855d05ef",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1dbac12c9fcd4738a2764df681135be9",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4c21181818fa4342ae7e9ad6cdf51a6e",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "30e5d377eb124d95a83d7c99a8e629a4",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "e1118ec6171e455ca9f8cd88b5af61c6",
+          "Name": "IN[8]",
+          "Description": "Input #8",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "8c452d214d5943e2985d7d4edc17f975",
+          "Name": "IN[9]",
+          "Description": "Input #9",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "03be895b0cc5469e84be9c699a7788b9",
+          "Name": "IN[10]",
+          "Description": "Input #10",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3e452970fa5c4e90bd33b8271a13c76d",
+          "Name": "IN[11]",
+          "Description": "Input #11",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "26b820313a3b409ea0cf8a416c5642ff",
+          "Name": "IN[12]",
+          "Description": "Input #12",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ba7cf47e1ef341c4b5211e558f8d6bb4",
+          "Name": "IN[13]",
+          "Description": "Input #13",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "946a287ac23e408591bce4d67175d64b",
+          "Name": "IN[14]",
+          "Description": "Input #14",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9e1ac10d2c6841188503ae6f43b6edc6",
+          "Name": "IN[15]",
+          "Description": "Input #15",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b283f900d45e4df0857061ec9b9eb932",
+          "Name": "IN[16]",
+          "Description": "Input #16",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "bd77ffdf109041bf8ccc49529dc2a3a8",
+          "Name": "IN[17]",
+          "Description": "Input #17",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "656cd336bc954232971fce62d46a00ee",
+          "Name": "IN[18]",
+          "Description": "Input #18",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "7e6519929a1b420d8a3528f8b747a3a9",
+          "Name": "IN[19]",
+          "Description": "Input #19",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6c844145b60545f2abe91a29ed567149",
+          "Name": "IN[20]",
+          "Description": "Input #20",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3edcccf8b38344e2b85d759cdf597fa3",
+          "Name": "IN[21]",
+          "Description": "Input #21",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "968611c1b9724963a3f6f10fa7c5d8f5",
+          "Name": "IN[22]",
+          "Description": "Input #22",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1cfbc7f7e04a4c53a1a5cdb3a26d4e84",
+          "Name": "IN[23]",
+          "Description": "Input #23",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ca817fa4eb33477691980e4baed5f7fe",
+          "Name": "IN[24]",
+          "Description": "Input #24",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f503ae1ad0da4938aeda6b03d63bb9de",
+          "Name": "IN[25]",
+          "Description": "Input #25",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f944b20a3f95407796565989380f40e9",
+          "Name": "IN[26]",
+          "Description": "Input #26",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d4f0b3c6731841dc8233e2cb5ad79df9",
+          "Name": "IN[27]",
+          "Description": "Input #27",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "123d3742622d4b4eaacac2a6db033a67",
+          "Name": "IN[28]",
+          "Description": "Input #28",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c263ca88ef84401aa58e5b18408eed42",
+          "Name": "IN[29]",
+          "Description": "Input #29",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "907d9122d47b4c679100f5797ae4aa83",
+          "Name": "IN[30]",
+          "Description": "Input #30",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "c769e66bd91e4108948aa7b639353a50",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARGeometryorSAT",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "b86c8c9ec91944e19be41a419e799c7e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d6b0fd1d8a774a6fab226c3edb464552",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VAROverwriteParams",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "f6ee0a78f4424418a0b670e402fabf2a",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b0c6145b9607429da943b2dfb1be5c83",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VAROneFamily",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "4df791efbf874fb4896166c05a6f1570",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3a22a800c4ce4bc596c672a2eec74693",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARAvoidConfilct",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "9be5a69b3ede46899fc42d0970802f25",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "76e60e003d864da0b1633c1aeaf40b60",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDynamoProcessSAT",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "d727988c2a4947c7b701ad30198becdd",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1602e9043c3f4336bb4fe71e0667b431",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFamily",
+      "Id": "0722a49b553947ec8927dc43339677d8",
+      "Inputs": [
+        {
+          "Id": "5c2c507085c348ffb1602155adcdacfb",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "NodeType": "CodeBlockNode",
+      "Code": "a[0];\na[1];\na[2];\na[3];",
+      "Id": "9081499203ae4dd4866aa9cf54a44982",
+      "Inputs": [
+        {
+          "Id": "b7941ea1a26c4f6e8ba3de53794fe0b1",
+          "Name": "a",
+          "Description": "a",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "74e529be9d4e41239085a14f798a0f7d",
+          "Name": "",
+          "Description": "Value of expression at line 1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1d5c4c973f584bbe81a1c06eb60b0c7a",
+          "Name": "",
+          "Description": "Value of expression at line 2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fb31987a3d1d4a069e2b8157fb173bfc",
+          "Name": "",
+          "Description": "Value of expression at line 3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "857b2785d0b14e379e1519d380edd40a",
+          "Name": "",
+          "Description": "Value of expression at line 4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Allows for DesignScript code to be authored directly"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFamilyType",
+      "Id": "e84d604ca30a4175a28ceef6324ea64c",
+      "Inputs": [
+        {
+          "Id": "3a5b8f3366f24d1ab3bcba1a47223f70",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFamilyInstancesOrImportSymbols",
+      "Id": "5be181c3aa774416b956c6a2b6e56665",
+      "Inputs": [
+        {
+          "Id": "324530d51f974f41b6b0f93f3321a480",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "330d6a06-076a-4112-9cc1-d5e601b646c6",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "2d5f7284be8a48db93e45e235ea96980",
+      "Inputs": [
+        {
+          "Id": "38038fa8c41048b3b3afb6b8836c5ec1",
+          "Name": "VARRFTFile",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "046e5207091d43e9878474ee69e09d87",
+          "Name": "VARCategory",
+          "Description": "var[]..[]\nDefault value : Revit.Elements.Category.ByName(\"OST_GenericModel\")",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "634308970a2649d198b3a31667de665c",
+          "Name": "VARout",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Smart RFT Path"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARJoinAdjacentSurfacesForcesDynamoProcessSAT",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "b3bfac2b1bd145d99558c32e6e6d6747",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "dc02f1df22a04f36989739dd2e708c06",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARJoinAdjacentSolidsForcesDynamoProcessSAT",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "0a26753de6ca4baeafd67dbb73cf0432",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e2bad8143cb74adb985ede8e419576a4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyName",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"Dynamo Family\"",
+        "Description": ""
+      },
+      "Id": "10c9ed6d1e4548ae8abd4c53d6b57dff",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d29dff004c3c4a2bb917e87b5eb7c686",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyNumber",
+        "TypeName": "int",
+        "TypeRank": 0,
+        "DefaultValue": "1",
+        "Description": ""
+      },
+      "Id": "9a222153c2bd4ab3950d8c0c7235890e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "6764e64022b849b497f2c57fc1cd6fcd",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyCategory",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "Revit.Elements.Category.ByName(\"OST_GenericModel\")",
+        "Description": ""
+      },
+      "Id": "0bc47799d83c4bd992278a1fe7f4a6f7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "aa3e2e921a7e4382bf27bf6aeeb0f71b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyTemplatePath",
+        "TypeName": "var",
+        "TypeRank": 0,
+        "DefaultValue": "null",
+        "Description": ""
+      },
+      "Id": "c7214c4dd2884de79697744b21efaa63",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f04b38f1196949b6b2a5859fe70910c7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIsShared",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "6cd08843e6264d96b1b65300f85496c4",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "cd3a00af2a924acf96ebad9366ba5568",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIsWorkplane",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "4d76272cb04a48c4bda806e2ebf102e8",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5f73afa8fac8440cac91f85a61e6bb99",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "597def74-6997-4484-bb18-67a97819c8bd",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "e4260d9ed81443bb9e8fa90f4d017e7a",
+      "Inputs": [
+        {
+          "Id": "88a8614b944a493585924a3ab4603858",
+          "Name": "VARtest",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fe511074f0b240b79688b170e0b517cd",
+          "Name": "VARtrue",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "89bcb8acbeec44d1ab18fee2ad4f3566",
+          "Name": "VARfalse",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "aafa07e13e254d8f9db6a79b3764d2b5",
+          "Name": "VARresult",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "A (hopefully) more robust implementation of ScopeIf. Tests a single boolean and returns a value accordingly."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.Object.IsNull@var",
+      "Id": "f2f138b9d6e14099ba7cb00a7a92f614",
+      "Inputs": [
+        {
+          "Id": "d7227da5e6b3426fa05bd025d2000e75",
+          "Name": "object",
+          "Description": "Object to test.\n\nvar",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1b47f678872c4fa4bfdb944e49ba34fa",
+          "Name": "bool",
+          "Description": "Whether object is null.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Determines if the given object is null.\n\nObject.IsNull (object: var): bool"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "C:\\ProgramData\\Autodesk\\RVT 2020\\Family Templates\\English\\Metric Generic Model.rft",
+      "Id": "8b515dc3e8154235bab83e424cff8c2e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c3ba185989444ac1be66684a1357c131",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFamilyNumber",
+      "Id": "5093ff2e51544daf8e083b6bf732e70c",
+      "Inputs": [
+        {
+          "Id": "0acd8073c93f4e86b10c6db7a6542027",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIsAlwaysVertical",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "80244ef487f44e1c88287b01635591d4",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4be7ff6fd6ec4db082aa349def44c5f4",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARToVoid",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "7190eaa537174d1fb78b6678232a7144",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "783f07c7c56045c79397a04838d5e828",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARMaterialName",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"\"",
+        "Description": ""
+      },
+      "Id": "88d5a4467c044e42ae2a6c8a7963c72c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "259b67f754084ed7bef4c776e8bcdec1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIsOneMaterial",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "f5dfee6d82154f10a6c165bebb80f3e7",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f6e39c62f6634276a8191fafc696ed8a",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIsMaterialInstance",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "05df4cd0e76041ca991d9446ef7a5daf",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0fd131a2abb2403a85bb02d1cc68f199",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARMaterialParameter",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"Material\"",
+        "Description": ""
+      },
+      "Id": "7b6f07e17c9b4d29bb28c830918a68b6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "c4d10afe961749d283252c79b0740cdc",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSubcategory",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"\"",
+        "Description": ""
+      },
+      "Id": "f65bc281a55b46feb812fdf37840ae61",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a817d31a9cf2406e844cdbc92cdfb0aa",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSubcategoryMaterial",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\"\"",
+        "Description": ""
+      },
+      "Id": "47f0b5b829aa4b6797bc428bf4098141",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2afb8bc5eb40476d96a4763394194dd1",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSelfOrigin",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "5dc31a5832244037a4edaf57e6853124",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7cb4af753d414093b78e3fd27bd988d7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARNamingSeparator",
+        "TypeName": "string",
+        "TypeRank": 0,
+        "DefaultValue": "\" \"",
+        "Description": ""
+      },
+      "Id": "323f13c999e0476da0b85b2f94219ada",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bc50ce89c73b48b8b145a12f8d39d046",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDoubleFamiliesInProjectOnly",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "7ed4adf8279c4f8d9c2cffa667597feb",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1d1862a8e3804d648f17a8907a981756",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARAutoAlternative",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "d005c027fdbc45c2bc4653da25712c76",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "cce95c2f8cb54a0d89ad7b5c2cf9315b",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARRecommendedSettings",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "true",
+        "Description": ""
+      },
+      "Id": "38fe4f7d32674249979931e3b9f0474b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "08d8213af1294cf7b4ec0db99e771fc7",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARShowMessages",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "3abd9f176706441484897ad4d26ccb98",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3dae8fcfcd8940d99c246ed73d5ab20e",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARDocumentImportMethod",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "1f68511ab38e48d39ce2e1344020874b",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "10fc4c7ed088401c9f19a1f476eb0f76",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARImportInstanceInstead",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "83caa7bf0d88401c9bbd0eea596bd372",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0c510d30c09447be89701863e12f3d2d",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARByPassGeometryCheck",
+        "TypeName": "bool",
+        "TypeRank": 0,
+        "DefaultValue": "false",
+        "Description": ""
+      },
+      "Id": "129cea4175dc46c59662ddf0a8c8fc60",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e7c3ebd619d94ddb962aa63e1e492ae8",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "c769e66bd91e4108948aa7b639353a50",
+      "End": "b7941ea1a26c4f6e8ba3de53794fe0b1",
+      "Id": "3f90d6c49b944fcbadaecc65e0de2fc8",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "d6b0fd1d8a774a6fab226c3edb464552",
+      "End": "839b1f0ebbbf4b52838405d1b876632b",
+      "Id": "f054e6cbf2b2408286426af81a9673b4",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b0c6145b9607429da943b2dfb1be5c83",
+      "End": "e27f06e849e041268276d3c994674374",
+      "Id": "ebc5321eabee468b8a4ebf3db8e1d7de",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "3a22a800c4ce4bc596c672a2eec74693",
+      "End": "13cef72d097241e5a9ece39374f27029",
+      "Id": "57647943e3d64da3b9388b1baec3c26a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "76e60e003d864da0b1633c1aeaf40b60",
+      "End": "4488cf1978a54914aecc08b1e1aea0b1",
+      "Id": "e3eb55df6dd3481ea1a89b3a6ff03ac4",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1602e9043c3f4336bb4fe71e0667b431",
+      "End": "965b2d4c06cb4fafad65e90e855d05ef",
+      "Id": "9507db5a546c4f74afd418b7c5a03050",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "74e529be9d4e41239085a14f798a0f7d",
+      "End": "5c2c507085c348ffb1602155adcdacfb",
+      "Id": "5d4b42eb0ed341c78d173508a5f9b230",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1d5c4c973f584bbe81a1c06eb60b0c7a",
+      "End": "3a5b8f3366f24d1ab3bcba1a47223f70",
+      "Id": "ca68403b0cc34dc9b0d6b15f00cbe04b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "fb31987a3d1d4a069e2b8157fb173bfc",
+      "End": "324530d51f974f41b6b0f93f3321a480",
+      "Id": "47a84189b2594b19beb1d357c3606c2f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "857b2785d0b14e379e1519d380edd40a",
+      "End": "0acd8073c93f4e86b10c6db7a6542027",
+      "Id": "499c6f99be614375873066f9aaf79042",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "634308970a2649d198b3a31667de665c",
+      "End": "03be895b0cc5469e84be9c699a7788b9",
+      "Id": "37486dcadb1e429680cddd864434559b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "dc02f1df22a04f36989739dd2e708c06",
+      "End": "1dbac12c9fcd4738a2764df681135be9",
+      "Id": "128ca3a54d504b9da2dfb41a7e57785f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "e2bad8143cb74adb985ede8e419576a4",
+      "End": "4c21181818fa4342ae7e9ad6cdf51a6e",
+      "Id": "78112a7f5ab94f8b99efe8634bbbfebc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "d29dff004c3c4a2bb917e87b5eb7c686",
+      "End": "30e5d377eb124d95a83d7c99a8e629a4",
+      "Id": "6aaf92e6270a4d42b9d2bbb7d481814e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6764e64022b849b497f2c57fc1cd6fcd",
+      "End": "e1118ec6171e455ca9f8cd88b5af61c6",
+      "Id": "26fe51c853344a83ab2c1cbe5715a48c",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "aa3e2e921a7e4382bf27bf6aeeb0f71b",
+      "End": "8c452d214d5943e2985d7d4edc17f975",
+      "Id": "87b05eceadca4d31b02ead9da255d93f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "aa3e2e921a7e4382bf27bf6aeeb0f71b",
+      "End": "046e5207091d43e9878474ee69e09d87",
+      "Id": "3b3acfccdee44b6ba2d724c27769d710",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f04b38f1196949b6b2a5859fe70910c7",
+      "End": "d7227da5e6b3426fa05bd025d2000e75",
+      "Id": "42652f33bbf64895ab692197a217ea54",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f04b38f1196949b6b2a5859fe70910c7",
+      "End": "89bcb8acbeec44d1ab18fee2ad4f3566",
+      "Id": "10a088701db540c49f8d2941d1d342fb",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cd3a00af2a924acf96ebad9366ba5568",
+      "End": "3e452970fa5c4e90bd33b8271a13c76d",
+      "Id": "667ba643e7e84901a696b7445edaf76d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "5f73afa8fac8440cac91f85a61e6bb99",
+      "End": "26b820313a3b409ea0cf8a416c5642ff",
+      "Id": "9a634e938f694e878d2e6d05bd0c86f9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "aafa07e13e254d8f9db6a79b3764d2b5",
+      "End": "38038fa8c41048b3b3afb6b8836c5ec1",
+      "Id": "b24328be575d4619b508db93d58eaffb",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1b47f678872c4fa4bfdb944e49ba34fa",
+      "End": "88a8614b944a493585924a3ab4603858",
+      "Id": "65c2d818123b41038301199254c0a7c3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "c3ba185989444ac1be66684a1357c131",
+      "End": "fe511074f0b240b79688b170e0b517cd",
+      "Id": "d3abf83f1c634ab5b699144d15cc8f63",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4be7ff6fd6ec4db082aa349def44c5f4",
+      "End": "ba7cf47e1ef341c4b5211e558f8d6bb4",
+      "Id": "817929713ed546b2886188461a34a24c",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "783f07c7c56045c79397a04838d5e828",
+      "End": "946a287ac23e408591bce4d67175d64b",
+      "Id": "8bca1ebbfd6e4fd5b4930786649d1696",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "783f07c7c56045c79397a04838d5e828",
+      "End": "9e1ac10d2c6841188503ae6f43b6edc6",
+      "Id": "a091b1068b674b42b440df22fa705d5d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "259b67f754084ed7bef4c776e8bcdec1",
+      "End": "b283f900d45e4df0857061ec9b9eb932",
+      "Id": "2dcdd3aee1ce41cb9c0ec90f21c65881",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f6e39c62f6634276a8191fafc696ed8a",
+      "End": "bd77ffdf109041bf8ccc49529dc2a3a8",
+      "Id": "8ce6d5d0dbb146b7b362461558746a59",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "0fd131a2abb2403a85bb02d1cc68f199",
+      "End": "656cd336bc954232971fce62d46a00ee",
+      "Id": "a99dfcf4ffc841d49776f73c8c35d991",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "c4d10afe961749d283252c79b0740cdc",
+      "End": "7e6519929a1b420d8a3528f8b747a3a9",
+      "Id": "5939976a1e7046ddb0203c626d4b39e1",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "a817d31a9cf2406e844cdbc92cdfb0aa",
+      "End": "6c844145b60545f2abe91a29ed567149",
+      "Id": "fa23206b93a64635b86ac2138f8df116",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2afb8bc5eb40476d96a4763394194dd1",
+      "End": "3edcccf8b38344e2b85d759cdf597fa3",
+      "Id": "1f9981cba05748e49d12594bc7e986f4",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7cb4af753d414093b78e3fd27bd988d7",
+      "End": "968611c1b9724963a3f6f10fa7c5d8f5",
+      "Id": "af61b4531e674f87b42b6a0460ea3997",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "bc50ce89c73b48b8b145a12f8d39d046",
+      "End": "1cfbc7f7e04a4c53a1a5cdb3a26d4e84",
+      "Id": "be870b7c91da4a6fbeffa2d3b585d84f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1d1862a8e3804d648f17a8907a981756",
+      "End": "ca817fa4eb33477691980e4baed5f7fe",
+      "Id": "b822811a9e7a4d028b7917f838acb7ee",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cce95c2f8cb54a0d89ad7b5c2cf9315b",
+      "End": "f503ae1ad0da4938aeda6b03d63bb9de",
+      "Id": "3d6d20c05fe248638f4579bca7469513",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "08d8213af1294cf7b4ec0db99e771fc7",
+      "End": "f944b20a3f95407796565989380f40e9",
+      "Id": "57f307119ecb451c8ac07e75d2a3be1f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "3dae8fcfcd8940d99c246ed73d5ab20e",
+      "End": "d4f0b3c6731841dc8233e2cb5ad79df9",
+      "Id": "0bba09586e1a498585efe1bfe45959c0",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "10fc4c7ed088401c9f19a1f476eb0f76",
+      "End": "123d3742622d4b4eaacac2a6db033a67",
+      "Id": "9d5b319c471346ccb08b9054d442b66f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "0c510d30c09447be89701863e12f3d2d",
+      "End": "c263ca88ef84401aa58e5b18408eed42",
+      "Id": "1d0e9cf8b08f4b939ccd0bdabafab287",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "e7c3ebd619d94ddb962aa63e1e492ae8",
+      "End": "907d9122d47b4c679100f5797ae4aa83",
+      "Id": "d36301f333d7410989131cc1b233584d",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "330d6a06-076a-4112-9cc1-d5e601b646c6",
+    "597def74-6997-4484-bb18-67a97819c8bd"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Synthesize toolkit",
+      "Version": "12.6.3",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "2d5f7284be8a48db93e45e235ea96980",
+        "e4260d9ed81443bb9e8fa90f4d017e7a"
+      ]
+    }
+  ],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": 7.6773543357849121,
+      "EyeY": 9.3893346786499023,
+      "EyeZ": -2.7869243621826172,
+      "LookX": -2.6059415340423584,
+      "LookY": -6.7969937324523926,
+      "LookZ": -2.5958976745605469,
+      "UpX": -0.5363088846206665,
+      "UpY": 0.65342056751251221,
+      "UpZ": -0.534241795539856
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "05bfbf40cefb4cd994f96a1f86b4ac52",
+        "IsSetAsInput": false,
+        "X": 1037.91961328249,
+        "Y": 820.69093246389
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "b86c8c9ec91944e19be41a419e799c7e",
+        "IsSetAsInput": false,
+        "X": -1113.00441592981,
+        "Y": -284.396471084776
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "f6ee0a78f4424418a0b670e402fabf2a",
+        "IsSetAsInput": false,
+        "X": -1166.60441592981,
+        "Y": -144.886221634377
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "4df791efbf874fb4896166c05a6f1570",
+        "IsSetAsInput": false,
+        "X": -1137.80441592981,
+        "Y": -5.37597218397894
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "9be5a69b3ede46899fc42d0970802f25",
+        "IsSetAsInput": false,
+        "X": -1153.80441592981,
+        "Y": 134.13427726642
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "d727988c2a4947c7b701ad30198becdd",
+        "IsSetAsInput": false,
+        "X": -1170.60441592981,
+        "Y": 273.644526716818
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "0722a49b553947ec8927dc43339677d8",
+        "IsSetAsInput": false,
+        "X": 1842.30839057206,
+        "Y": 987.641769967736
+      },
+      {
+        "Name": "Code Block",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "9081499203ae4dd4866aa9cf54a44982",
+        "IsSetAsInput": false,
+        "X": 1328.17505723874,
+        "Y": 938.641769967736
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "e84d604ca30a4175a28ceef6324ea64c",
+        "IsSetAsInput": false,
+        "X": 1826.30839057206,
+        "Y": 1055.44176996774
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "5be181c3aa774416b956c6a2b6e56665",
+        "IsSetAsInput": false,
+        "X": 1805.50839057206,
+        "Y": 1123.24176996774
+      },
+      {
+        "Name": "Smart RFT Path",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "2d5f7284be8a48db93e45e235ea96980",
+        "IsSetAsInput": false,
+        "X": -160.292359643544,
+        "Y": 1054.88900852046
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "b3bfac2b1bd145d99558c32e6e6d6747",
+        "IsSetAsInput": false,
+        "X": -1277.80441592981,
+        "Y": 413.154776167217
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "0a26753de6ca4baeafd67dbb73cf0432",
+        "IsSetAsInput": false,
+        "X": -1269.00441592981,
+        "Y": 552.665025617615
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "10c9ed6d1e4548ae8abd4c53d6b57dff",
+        "IsSetAsInput": false,
+        "X": -1195.40441592981,
+        "Y": 692.175275068014
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "9a222153c2bd4ab3950d8c0c7235890e",
+        "IsSetAsInput": false,
+        "X": -1133.00441592981,
+        "Y": 831.685524518412
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "0bc47799d83c4bd992278a1fe7f4a6f7",
+        "IsSetAsInput": false,
+        "X": -1343.40441592981,
+        "Y": 971.195773968811
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "c7214c4dd2884de79697744b21efaa63",
+        "IsSetAsInput": false,
+        "X": -1170.60441592981,
+        "Y": 1110.70602341921
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "6cd08843e6264d96b1b65300f85496c4",
+        "IsSetAsInput": false,
+        "X": -1137.80441592981,
+        "Y": 1250.21627286961
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "4d76272cb04a48c4bda806e2ebf102e8",
+        "IsSetAsInput": false,
+        "X": -1149.80441592981,
+        "Y": 1389.72652232001
+      },
+      {
+        "Name": "CW.ScopeIf+",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "e4260d9ed81443bb9e8fa90f4d017e7a",
+        "IsSetAsInput": false,
+        "X": -375.949112891859,
+        "Y": 1126.62032406422
+      },
+      {
+        "Name": "Object.IsNull",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "f2f138b9d6e14099ba7cb00a7a92f614",
+        "IsSetAsInput": false,
+        "X": -701.106719841262,
+        "Y": 1235.00619304736
+      },
+      {
+        "Name": "Default Family Template",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "8b515dc3e8154235bab83e424cff8c2e",
+        "IsSetAsInput": true,
+        "X": -720.560593761312,
+        "Y": 1330.67300793995
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "5093ff2e51544daf8e083b6bf732e70c",
+        "IsSetAsInput": false,
+        "X": 1813.17927001181,
+        "Y": 1211.02958054995
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "80244ef487f44e1c88287b01635591d4",
+        "IsSetAsInput": false,
+        "X": -1145.80441592981,
+        "Y": 1529.2367717704
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "7190eaa537174d1fb78b6678232a7144",
+        "IsSetAsInput": false,
+        "X": -1129.00441592981,
+        "Y": 1668.7470212208
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "88d5a4467c044e42ae2a6c8a7963c72c",
+        "IsSetAsInput": false,
+        "X": -1149.80441592981,
+        "Y": 1808.2572706712
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "f5dfee6d82154f10a6c165bebb80f3e7",
+        "IsSetAsInput": false,
+        "X": -1153.80441592981,
+        "Y": 1947.7675201216
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "05df4cd0e76041ca991d9446ef7a5daf",
+        "IsSetAsInput": false,
+        "X": -1174.60441592981,
+        "Y": 2087.277769572
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "7b6f07e17c9b4d29bb28c830918a68b6",
+        "IsSetAsInput": false,
+        "X": -1203.40441592981,
+        "Y": 2226.7880190224
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "f65bc281a55b46feb812fdf37840ae61",
+        "IsSetAsInput": false,
+        "X": -1145.80441592981,
+        "Y": 2366.2982684728
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "47f0b5b829aa4b6797bc428bf4098141",
+        "IsSetAsInput": false,
+        "X": -1178.60441592981,
+        "Y": 2505.80851792319
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "5dc31a5832244037a4edaf57e6853124",
+        "IsSetAsInput": false,
+        "X": -1141.80441592981,
+        "Y": 2645.31876737359
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "323f13c999e0476da0b85b2f94219ada",
+        "IsSetAsInput": false,
+        "X": -1166.60441592981,
+        "Y": 2784.82901682399
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "7ed4adf8279c4f8d9c2cffa667597feb",
+        "IsSetAsInput": false,
+        "X": -1215.40441592981,
+        "Y": 2924.33926627439
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "d005c027fdbc45c2bc4653da25712c76",
+        "IsSetAsInput": false,
+        "X": -1161.80441592981,
+        "Y": 3063.84951572479
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "38fe4f7d32674249979931e3b9f0474b",
+        "IsSetAsInput": false,
+        "X": -1178.60441592981,
+        "Y": 3203.35976517519
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "3abd9f176706441484897ad4d26ccb98",
+        "IsSetAsInput": false,
+        "X": -1153.80441592981,
+        "Y": 3342.87001462559
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "1f68511ab38e48d39ce2e1344020874b",
+        "IsSetAsInput": false,
+        "X": -1186.60441592981,
+        "Y": 3482.38026407598
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "83caa7bf0d88401c9bbd0eea596bd372",
+        "IsSetAsInput": false,
+        "X": -1191.40441592981,
+        "Y": 3621.89051352638
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "IsSetAsOutput": false,
+        "Id": "129cea4175dc46c59662ddf0a8c8fc60",
+        "IsSetAsInput": false,
+        "X": -1186.60441592981,
+        "Y": 3761.40076297678
+      }
+    ],
+    "Annotations": [],
+    "X": 455.10469419188911,
+    "Y": 113.47055599424419,
+    "Zoom": 0.173300531583858
+  }
+}

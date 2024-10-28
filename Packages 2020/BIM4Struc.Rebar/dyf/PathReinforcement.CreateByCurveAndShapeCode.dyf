@@ -1,0 +1,231 @@
+<Workspace Version="1.2.0.2831" X="522.528808171167" Y="195.706187585815" zoom="0.655550655894326" Name="PathReinforcement.CreateByCurveAndShapeCode" Description="Create a path reinforcement based on a list of curves and a predefined Rebar Shape Code." ID="f9a60ed9-46cf-41f5-87d4-9f3c3c472cbd" Category="BIM4Struc.Rebar.Creation">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Element" resolvedName="Revit.Elements.Element" assemblyName="RevitNodes.dll" />
+    <ClassMap partialName="Vector" resolvedName="Autodesk.DesignScript.Geometry.Vector" assemblyName="ProtoGeometry.dll" />
+    <ClassMap partialName="Curves" resolvedName="Geometry.Curves" assemblyName="LunchBox.dll" />
+    <ClassMap partialName="DesignScript.Curve" resolvedName="Autodesk.DesignScript.Geometry.Curve" assemblyName="ProtoGeometry.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <PythonNodeModels.PythonNode guid="49c423dd-b545-448d-9452-9d0e76fc1bb2" type="PythonNodeModels.PythonNode" nickname="Create Path Reinforcement" x="53.407463653716" y="-147.338001443959" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="8">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <PortInfo index="3" default="False" />
+      <PortInfo index="4" default="False" />
+      <PortInfo index="5" default="False" />
+      <PortInfo index="6" default="False" />
+      <PortInfo index="7" default="False" />
+      <Script>#Create path reinforcement based on curves and a rebar shape
+#Authored by Dieter Vermeulen, Autodesk, 2016
+#http://revitbeyondbim.wordpress.com
+
+import clr
+
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.Structure import *
+
+clr.AddReference("System")
+from System.Collections.Generic import List
+
+clr.AddReference('RevitNodes')
+import Revit
+clr.ImportExtensions(Revit.GeometryConversion)
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference('RevitServices')
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+
+#Preparing input from dynamo to revit
+host = UnwrapElement(IN[0])
+if type(IN[1])==list:
+	curves=List[Curve]([c.ToRevitType(True) for c in IN[1]])
+else:
+	curves=[]
+	curves.append(IN[1].ToRevitType(True))
+flip=IN[2]
+bartype = UnwrapElement(IN[3])
+startRebarHookType = UnwrapElement(IN[4])
+endRebarHookType = UnwrapElement(IN[5])
+rebarShape = UnwrapElement(IN[6])
+
+#Toggle that indicates if a new element has to be created
+new=IN[7]
+
+TransactionManager.Instance.EnsureInTransaction(doc)
+# Get the host analytical profile whose curves will define the boundary of the the area reinforcement 
+analytical = host.GetAnalyticalModel()
+if not analytical:
+    rebar= "The selected element can't \nhost Path Reinforcement"
+
+else:  	
+	#Obtain the default Path Reinforcement Type
+	defaultPathReinforcementTypeId = doc.GetDefaultElementTypeId(ElementTypeGroup.PathReinforcementType)
+	if str(defaultPathReinforcementTypeId) == "-1":
+		rebar= "There is no Path Reinforcement Family Type \ndefined in the Revit project"
+	else:
+		try:
+			rebar = PathReinforcement.Create(doc, host, curves, flip, defaultPathReinforcementTypeId, bartype.Id, startRebarHookType.Id, endRebarHookType.Id, rebarShape.Id).ToDSType(new);
+		except:
+			rebar= "The Path Reinforcement could \nnot be created"
+
+#Assign your output to the OUT variable
+
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT=rebar
+</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="1e7af9c1-fd46-4657-8763-11e2a0768405" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="1219.27818610959" y="-196.596253322936" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="PathReinforcement" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="ff31454a-3e99-49a8-8931-08a9a28d4886" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-645.281088011149" y="-192.817412072495" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Select a Floor or Wall as host&#xD;&#xA;//The sketch geometry of the floor or wall&#xD;&#xA;//will be used as boundaries for the area&#xD;&#xA;HostElement:Element;" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="9333c871-d8e1-462f-be47-53793b37a81d" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-647.692315375386" y="-67.9397844065315" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//The Major Direction vector for the area reinforcement.&#xD;&#xA;//By default the first sketch line of the Floor or Wall boundary is taken.&#xD;&#xA;PathCurves:DesignScript.Curve[];" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="85537f6c-b4a0-4069-b699-7ba6ab955145" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-645.469048671053" y="35.7568547023303" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Toggle to flip the side of the path reinforcement&#xD;&#xA;Flip:bool=false" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="02adb36b-2463-4d9a-b22c-5bf5494f3661" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-647.692315375386" y="123.890626880851" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Rebar Bar Type&#xD;&#xA;BarType:Element" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="3b3b6a47-214e-4805-97d2-51dd3c078506" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-647.692315375386" y="239.168933598038" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Rebar Start Hook Type&#xD;&#xA;RebarStartHookType:Element" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="afca7707-13f6-4a12-b014-ded859632fd3" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-647.692315375386" y="356.205172932898" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Rebar End Hook Type&#xD;&#xA;RebarEndHookType:Element" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="39d12eb2-3487-4894-aede-c2dda7c3e4d8" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-647.692315375386" y="473.241412267758" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Rebar Bar Shape&#xD;&#xA;RebarShape:Element" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="caf3d24c-6b54-40fd-850d-4c0da236f36f" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-653.074454839791" y="552.688738960316" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Placement face in Floor or Wall&#xD;&#xA;//0 = Top&#xD;&#xA;//1 = Bottom&#xD;&#xA;PlacementFace:int=0" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="b31026d3-7e8a-438c-8f42-87defb9dd1f7" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-651.072969712802" y="666.074085928465" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Length of the primary bars&#xD;&#xA;BarLength:double" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="baf18762-394f-4491-ab5d-152346ec6827" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-652.187025734273" y="743.579864704593" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Primary Bar Spacing&#xD;&#xA;BarSpacing:double" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="6cb33de8-41ae-4a7f-8a1b-c77748e8f0c5" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-660.697732126283" y="826.114374143042" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Input the value in mm (true) or feet (false)&#xD;&#xA;InputInMM: bool = true" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="cd790af0-3f74-40c9-9287-403b676da3c7" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="-662.650437430275" y="893.482707130767" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//Create a new element for each run of Dynamo (true)&#xD;&#xA;//or update the generated element (false)&#xD;&#xA;CreateNew:bool=false" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="202e4d4d-4067-4bdf-85e1-967cfbb0b313" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Element.SetParameterByName" x="635.797347033735" y="314.866648849045" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="RevitNodes.dll" function="Revit.Elements.Element.SetParameterByName@string,var">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Formula guid="bc51010f-df69-4767-b457-8b6bdc5a8eeb" type="CoreNodeModels.Formula" nickname="Formula" x="106.171907399534" y="592.510349282198" isVisible="true" isUpstreamVisible="true" lacing="Auto" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <FormulaText>if(metric,x/304.8,x)</FormulaText>
+    </CoreNodeModels.Formula>
+    <CoreNodeModels.Formula guid="6d4801ee-1052-47b3-8aa4-07762f3b872e" type="CoreNodeModels.Formula" nickname="Formula" x="106.433948821721" y="706.849688803527" isVisible="true" isUpstreamVisible="true" lacing="Auto" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <FormulaText>if(metric,x/304.8,x)</FormulaText>
+    </CoreNodeModels.Formula>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="424402f2-c037-44b4-ba62-1435b1ef051c" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="46.4497694350807" y="355.487649498411" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="&quot;Primary Bar - Start Hook Type&quot;;&#xA;&quot;Primary Bar - End Hook Type&quot;;&#xA;&quot;Face&quot;;&#xA;&quot;Primary Bar - Length&quot;;&#xA;&quot;Bar Spacing&quot;;" ShouldFocus="false" />
+    <CoreNodeModels.CreateList guid="95ac070d-63a4-4c72-b2a1-7fad55849ed8" type="CoreNodeModels.CreateList" nickname="List.Create" x="392.093523008582" y="348.993897208147" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="5">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <PortInfo index="3" default="False" />
+      <PortInfo index="4" default="False" />
+    </CoreNodeModels.CreateList>
+    <CoreNodeModels.CreateList guid="293ccd64-7ba2-449c-92c9-de33415c23fc" type="CoreNodeModels.CreateList" nickname="List.Create" x="393.731843928164" y="521.928648180045" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="5">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <PortInfo index="3" default="False" />
+      <PortInfo index="4" default="False" />
+    </CoreNodeModels.CreateList>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="b0f4ac23-a885-45bb-a4cb-0d2ff8e2286d" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Element.Id" x="594.095321871384" y="-202.301208912496" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="RevitNodes.dll" function="Revit.Elements.Element.Id">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <CoreNodeModels.Logic.If guid="14dff5f5-1c18-4985-a358-c9fb731906ab" type="CoreNodeModels.Logic.If" nickname="If" x="1011.49617010538" y="-170.258863313419" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+    </CoreNodeModels.Logic.If>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="fd7829ab-920f-46e8-9be6-b3b053c8e37e" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Object.IsNull" x="804.298538898734" y="-204.982954955864" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="DSCoreNodes.dll" function="DSCore.Object.IsNull@var">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <Dynamo.Graph.Nodes.ZeroTouch.DSFunction guid="0a5823ca-d049-4e50-b47c-7893872fc4df" type="Dynamo.Graph.Nodes.ZeroTouch.DSFunction" nickname="Transaction.End" x="273.862958521165" y="-142.899214487455" isVisible="true" isUpstreamVisible="true" lacing="Shortest" isSelectedInput="False" IsFrozen="false" isPinned="false" assembly="RevitNodes.dll" function="Revit.Transaction.Transaction.End@var">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.ZeroTouch.DSFunction>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="9f6161d2-89ef-4903-a223-e9fded467b31" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="913" y="314" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="a[0];" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="49c423dd-b545-448d-9452-9d0e76fc1bb2" start_index="0" end="0a5823ca-d049-4e50-b47c-7893872fc4df" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="ff31454a-3e99-49a8-8931-08a9a28d4886" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9333c871-d8e1-462f-be47-53793b37a81d" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="85537f6c-b4a0-4069-b699-7ba6ab955145" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="02adb36b-2463-4d9a-b22c-5bf5494f3661" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="3" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3b3b6a47-214e-4805-97d2-51dd3c078506" start_index="0" end="293ccd64-7ba2-449c-92c9-de33415c23fc" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3b3b6a47-214e-4805-97d2-51dd3c078506" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="4" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="afca7707-13f6-4a12-b014-ded859632fd3" start_index="0" end="293ccd64-7ba2-449c-92c9-de33415c23fc" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="afca7707-13f6-4a12-b014-ded859632fd3" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="5" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="39d12eb2-3487-4894-aede-c2dda7c3e4d8" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="6" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="caf3d24c-6b54-40fd-850d-4c0da236f36f" start_index="0" end="293ccd64-7ba2-449c-92c9-de33415c23fc" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="b31026d3-7e8a-438c-8f42-87defb9dd1f7" start_index="0" end="bc51010f-df69-4767-b457-8b6bdc5a8eeb" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="baf18762-394f-4491-ab5d-152346ec6827" start_index="0" end="6d4801ee-1052-47b3-8aa4-07762f3b872e" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="6cb33de8-41ae-4a7f-8a1b-c77748e8f0c5" start_index="0" end="bc51010f-df69-4767-b457-8b6bdc5a8eeb" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="6cb33de8-41ae-4a7f-8a1b-c77748e8f0c5" start_index="0" end="6d4801ee-1052-47b3-8aa4-07762f3b872e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="cd790af0-3f74-40c9-9287-403b676da3c7" start_index="0" end="49c423dd-b545-448d-9452-9d0e76fc1bb2" end_index="7" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="202e4d4d-4067-4bdf-85e1-967cfbb0b313" start_index="0" end="9f6161d2-89ef-4903-a223-e9fded467b31" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="bc51010f-df69-4767-b457-8b6bdc5a8eeb" start_index="0" end="293ccd64-7ba2-449c-92c9-de33415c23fc" end_index="3" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="6d4801ee-1052-47b3-8aa4-07762f3b872e" start_index="0" end="293ccd64-7ba2-449c-92c9-de33415c23fc" end_index="4" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="424402f2-c037-44b4-ba62-1435b1ef051c" start_index="0" end="95ac070d-63a4-4c72-b2a1-7fad55849ed8" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="424402f2-c037-44b4-ba62-1435b1ef051c" start_index="1" end="95ac070d-63a4-4c72-b2a1-7fad55849ed8" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="424402f2-c037-44b4-ba62-1435b1ef051c" start_index="2" end="95ac070d-63a4-4c72-b2a1-7fad55849ed8" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="424402f2-c037-44b4-ba62-1435b1ef051c" start_index="3" end="95ac070d-63a4-4c72-b2a1-7fad55849ed8" end_index="3" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="424402f2-c037-44b4-ba62-1435b1ef051c" start_index="4" end="95ac070d-63a4-4c72-b2a1-7fad55849ed8" end_index="4" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="95ac070d-63a4-4c72-b2a1-7fad55849ed8" start_index="0" end="202e4d4d-4067-4bdf-85e1-967cfbb0b313" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="293ccd64-7ba2-449c-92c9-de33415c23fc" start_index="0" end="202e4d4d-4067-4bdf-85e1-967cfbb0b313" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="b0f4ac23-a885-45bb-a4cb-0d2ff8e2286d" start_index="0" end="fd7829ab-920f-46e8-9be6-b3b053c8e37e" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="14dff5f5-1c18-4985-a358-c9fb731906ab" start_index="0" end="1e7af9c1-fd46-4657-8763-11e2a0768405" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="fd7829ab-920f-46e8-9be6-b3b053c8e37e" start_index="0" end="14dff5f5-1c18-4985-a358-c9fb731906ab" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="0a5823ca-d049-4e50-b47c-7893872fc4df" start_index="0" end="202e4d4d-4067-4bdf-85e1-967cfbb0b313" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="0a5823ca-d049-4e50-b47c-7893872fc4df" start_index="0" end="b0f4ac23-a885-45bb-a4cb-0d2ff8e2286d" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="0a5823ca-d049-4e50-b47c-7893872fc4df" start_index="0" end="14dff5f5-1c18-4985-a358-c9fb731906ab" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="9f6161d2-89ef-4903-a223-e9fded467b31" start_index="0" end="14dff5f5-1c18-4985-a358-c9fb731906ab" end_index="2" portType="0" />
+  </Connectors>
+  <Notes>
+    <Dynamo.Graph.Notes.NoteModel guid="5e5bc2ac-81a9-4b2b-b8dc-03dcd94fbddd" text="*****************************************************&#xD;&#xA;Create a Path Reinforcement in Revit based on a list of curves and a predefined Rebar Shape Code.&#xD;&#xA;&#xD;&#xA;Authored by Dieter Vermeulen, Autodesk, 2016&#xD;&#xA;http://revitbeyondbim.wordpress.com&#xD;&#xA;*****************************************************" x="-654.935635692717" y="-391.176340433832" />
+    <Dynamo.Graph.Notes.NoteModel guid="ecca65f0-23b2-4800-98f9-8fdd12fa57c9" text="If the Python node returns an error message (as a string) then this should be passed. Else the AreaReinforcement element can be passed. &#xD;&#xA;Checking if the output of the Python node has a value for Element.Id is a test for that." x="589.155751669127" y="-310.874847401941" />
+  </Notes>
+  <Annotations>
+    <Dynamo.Graph.Annotations.AnnotationModel guid="b7ae0d3b-4f73-42ad-865f-87760736d309" annotationText="Input" left="-657.692315375386" top="-245.817412072495" width="662" height="796.058824340253" fontSize="36" InitialTop="-192.817412072495" InitialHeight="1098.16754234482" TextblockHeight="43" backgrouund="#FFB5B5B5">
+      <Models ModelGuid="ff31454a-3e99-49a8-8931-08a9a28d4886" />
+      <Models ModelGuid="9333c871-d8e1-462f-be47-53793b37a81d" />
+      <Models ModelGuid="85537f6c-b4a0-4069-b699-7ba6ab955145" />
+      <Models ModelGuid="02adb36b-2463-4d9a-b22c-5bf5494f3661" />
+      <Models ModelGuid="3b3b6a47-214e-4805-97d2-51dd3c078506" />
+      <Models ModelGuid="afca7707-13f6-4a12-b014-ded859632fd3" />
+      <Models ModelGuid="39d12eb2-3487-4894-aede-c2dda7c3e4d8" />
+    </Dynamo.Graph.Annotations.AnnotationModel>
+    <Dynamo.Graph.Annotations.AnnotationModel guid="4d2d538f-ce16-4e84-b0e8-629bd214b30c" annotationText="Error Catching" left="579.155751669127" top="-363.874847401941" width="564.340418436253" height="313.615984088522" fontSize="36" InitialTop="-310.874847401941" InitialHeight="290.615984088522" TextblockHeight="43" backgrouund="#FFC1D676">
+      <Models ModelGuid="b0f4ac23-a885-45bb-a4cb-0d2ff8e2286d" />
+      <Models ModelGuid="14dff5f5-1c18-4985-a358-c9fb731906ab" />
+      <Models ModelGuid="fd7829ab-920f-46e8-9be6-b3b053c8e37e" />
+      <Models ModelGuid="ecca65f0-23b2-4800-98f9-8fdd12fa57c9" />
+    </Dynamo.Graph.Annotations.AnnotationModel>
+  </Annotations>
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

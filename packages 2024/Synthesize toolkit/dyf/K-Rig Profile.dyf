@@ -1,0 +1,364 @@
+{
+  "Uuid": "5cb8c297-ce97-4d32-9bf0-52cdd7d0f62d",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Family",
+  "Description": "K-Rig Profile",
+  "Name": "K-Rig Profile",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Proudly Created By Karam Baki : karam@aecedx.com\n# Enable Python support and load DesignScript library\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\nimport clr\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript import Geometry as dg\n\n# EXTENSION Enable ToDSType\nclr.AddReference('RevitNodes')\nimport Revit\nclr.ImportExtensions(Revit.Elements)\n\n# Enable Revit Elements\nfrom Revit.Elements import *\n\n# EXTENSION Enable Geometry Conversion Methods\nclr.ImportExtensions(Revit.GeometryConversion)\n\n# Enable Revit API\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Enable DocumentManager and TransactionManager\nclr.AddReference('RevitServices')\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\n# Enable ICollection List Translate\nclr.AddReference(\"System\")\nimport System.Collections.Generic\nfrom System.Collections.Generic import List\nimport System\nimport sys\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nimport re\n\nSaveAsOpt = SaveAsOptions()\nSaveAsOpt.OverwriteExistingFile = True\n\n# Transfer Document Units\ndef transferunit(doc,famdoc):\n\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\tunit = famdoc.GetUnits()\n\t\tcurrectformat = doc.GetUnits().GetFormatOptions(UnitType.UT_Length)\n\t\taccuracy = currectformat.Accuracy\n\t\tunit.SetFormatOptions(UnitType.UT_Length,FormatOptions(currectformat.DisplayUnits,accuracy))\n\t\tfamdoc.SetUnits(unit)\n\telse:\n\t\tunit = famdoc.GetUnits()\n\t\tcurrectformat = doc.GetUnits().GetFormatOptions(SpecTypeId.Length)\n\t\tunit.SetFormatOptions(SpecTypeId.Length,currectformat)\n\t\tfamdoc.SetUnits(unit)\n\ndef tolist(obj1):\n\tif hasattr(obj1,'__iter__'): return obj1\n\telse: return [obj1]\n\ndef flatten(x):\n    result = []\n    for el in x:\n        if hasattr(el, \"__iter__\") and not isinstance(el, basestring):\n            result.extend(flatten(el))\n        else:\n            result.append(el)\n    return result\n\nclass FamOpt1(IFamilyLoadOptions):\n\tdef __init__(self):\n\t\tpass\n\tdef OnFamilyFound(self,familyInUse, overwriteParameterValues):\n\t\treturn True\n\tdef OnSharedFamilyFound(self,familyInUse, source, overwriteParameterValues):\n\t\treturn True\n\nclass WarnSwallow(IFailuresPreprocessor):\n\tdef PreprocessFailures(self, failuresAccessor):\n\t\tfailuresAccessor.DeleteAllWarnings()\n\t\treturn FailureProcessingResult.Continue\n\ntemp_path = System.IO.Path.GetTempPath()\n\ndataEnteringNode = IN\n# Use UnwrapElement(IN[0]) When Translating From Dynamo to Revit\ncurves=UnwrapElement(flatten(tolist(IN[0])))\nfam_path=UnwrapElement(IN[1])\nfam_path_adaptive=UnwrapElement(IN[2])\nisInstance=IN[3]\nname=IN[4]\n\ntmpscale = \"tmpscale\"\nfinalscale = \"Scale\"\n\n# Choose The Current Document\ndoc = DocumentManager.Instance.CurrentDBDocument\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\nuiapp = DocumentManager.Instance.CurrentUIApplication\napp = uiapp.Application\n\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\tunit_type = UnitType.UT_Length\n\tformatoptions = doc.GetUnits().GetFormatOptions(unit_type)\n\tdispunits = formatoptions.DisplayUnits\n\tfactor = UnitUtils.ConvertToInternalUnits(1,dispunits)\nelse:\n\tfactor = UnitUtils.ConvertToInternalUnits(1,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId())\n\n# Create Empty List\nresult = []\ndef sketchplane(doc):\n\tcollector = SketchPlane.Create(doc,doc.GetElement(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Levels).WhereElementIsNotElementType().FirstElementId()).GetPlaneReference())\n\treturn collector\n\t\ndef modelcurves(doc,curvelist):\n\tsketch = sketchplane(doc)\n\tcurvearr = CurveArray()\n\tfor c in curvelist:\n\t\ttry:\n\t\t\tcurvearr.Append(c.ToRevitType())\n\t\texcept:\n\t\t\tpass\n\ttry:\n\t\tresult = doc.FamilyCreate.NewModelCurveArray(curvearr,sketch)\n\texcept:\n\t\tresult = None\n\treturn result\n\ndef initialfamily(fam_path,doc,famname,famcategory,createcurves,curves,loadit,placeit,isShared,isWorkplane,isVertical,tmpscale):\n\tsave_path = '%s%s.rfa' % (temp_path, re.sub(r'[\\\\/*?:\"<>|]',\"\",famname))\n\tfamdoc = doc.Application.NewFamilyDocument(fam_path)\n\ttry:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(famdoc, 'New ' + famname + ' Family')\n\t\ttrans1.Start()\n\t\ttransferunit(doc,famdoc)\n\t\tfam_cat = famdoc.Settings.Categories.get_Item(famcategory)\n\t\tfamdoc.OwnerFamily.FamilyCategory = fam_cat\n\t\ttry:\n\t\t\tfamtype = famdoc.FamilyManager.NewType(famname)\n\t\t\tfamdoc.FamilyManager.CurrentType = famtype\n\t\texcept:\n\t\t\tpass\n\t\tparms = famdoc.FamilyManager.GetParameters()\n\t\tcreatescale = True\n\t\tfor epms in parms:\n\t\t\tpname = epms.Definition.Name\n\t\t\tif pname == \"Height\":\n\t\t\t\tfamdoc.FamilyManager.Set(epms, factor)\n\t\t\t\tcreatescale = False\n\t\tif createcurves == True:\n\t\t\tmodelcurves(famdoc,curves)\n\t\tif createscale == True:\n\t\t\tscaleparm = famdoc.FamilyManager.AddParameter(tmpscale,BuiltInParameterGroup.INVALID,ParameterType.Length,False)\n\t\t\tfamdoc.FamilyManager.Set(scaleparm, factor)\n\t\tif isShared == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED).Set(0)\n\t\t\texcept:pass\n\t\tif isWorkplane == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_WORK_PLANE_BASED).Set(0)\n\t\t\texcept:pass\n\t\tif isVertical == True:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(1)\n\t\t\texcept:pass\n\t\telse:\n\t\t\ttry:famdoc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_ALWAYS_VERTICAL).Set(0)\n\t\t\texcept:pass\n\t\ttrans1.Commit()\n\t\tfamdoc.SaveAs(save_path, SaveAsOpt)\n\t\tif loadit == True:\n\t\t\tloaded = famdoc.LoadFamily(doc,FamOpt1())\n\t\t\tsymbols = loaded.GetFamilySymbolIds().GetEnumerator()\n\t\t\tsymbols.MoveNext()\n\t\t\tsymbol1 = doc.GetElement(symbols.Current)\n\t\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\t\ttrans1 = Transaction(doc, 'Placing Family')\n\t\t\ttrans1.Start()\n\t\t\tif not symbol1.IsActive: symbol1.Activate()\n\t\t\tfindplantings = doc.GetElement(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Planting).WhereElementIsNotElementType().FirstElementId())\n\t\t\tif findplantings == None and placeit == True:\n\t\t\t\tdoc.FamilyCreate.NewFamilyInstance(XYZ.Zero, symbol1, Structure.StructuralType.NonStructural)\n\t\t\ttrans1.Commit()\n\t\t\tfamdoc.Close(False)\n\t\t\tSystem.IO.File.Delete(save_path)\n\t\telse:\n\t\t\tloaded = famdoc\n\texcept:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:famdoc.Close(False)\n\t\texcept:pass\n\t\ttry:System.IO.File.Delete(save_path)\n\t\texcept:pass\n\t\tloaded = None\n\treturn loaded\n\ndef adaptiveop(doc,isInstance,tmpscale,finalscale):\n\tpt = doc.FamilyCreate.NewReferencePoint(XYZ.Zero)\n\tparms = pt.GetOrderedParameters()\n\tfor par in parms:\n\t\tname =  par.Definition.Name\n\t\tif name == \"Point\":\n\t\t\tpar.Set(1)\n\t\t\tbreak\n\tparms = pt.GetOrderedParameters()\n\tfor par in parms:\n\t\tname =  par.Definition.Name\n\t\tif name == \"Orients to\":\n\t\t\tpar.Set(2)\n\t\t\tbreak\n\tplane = pt.GetCoordinatePlaneReferenceXY()\n\tptonplane = app.Create.NewPointOnPlane(plane,UV(),UV(),0)\n\trefpt1 = doc.FamilyCreate.NewReferencePoint(ptonplane)\n\t\n\tplane = refpt1.GetCoordinatePlaneReferenceXZ()\n\tptonplane = app.Create.NewPointOnPlane(plane,UV(),UV(),0)\n\trefpt2 = doc.FamilyCreate.NewReferencePoint(ptonplane)\n\t\n\tplane = refpt2.GetCoordinatePlaneReferenceXZ()\n\tptonplane = app.Create.NewPointOnPlane(plane,UV(),UV(),0)\n\trefpt3 = doc.FamilyCreate.NewReferencePoint(ptonplane)\n\t\n\tgetscale = False\n\tgetscalenum = False\n\tgetself = False\n\tgetX = False\n\tgetY = False\n\tgetXoffset = False\n\tgetYoffset = False\n\tgetZoffset = False\n\ttry:P_Scale = doc.FamilyManager.AddParameter(tmpscale,BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Length,isInstance)\n\texcept:getscale = True\n\ttry:P_ScaleNum = doc.FamilyManager.AddParameter(finalscale,BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Number,isInstance)\n\texcept:getscalenum = True\n\ttry:P_rotself = doc.FamilyManager.AddParameter(\"Rotate Self\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Angle,isInstance)\n\texcept:getself = True\n\ttry:P_rotX = doc.FamilyManager.AddParameter(\"Rotate X\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Angle,isInstance)\n\texcept:getX = True\n\ttry:P_rotY = doc.FamilyManager.AddParameter(\"Rotate Y\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Angle,isInstance)\n\texcept:getY = True\t\n\ttry:P_offsetX = doc.FamilyManager.AddParameter(\"Offset X\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Length,isInstance)\n\texcept:getXoffset = True\n\ttry:P_offsetY = doc.FamilyManager.AddParameter(\"Offset Y\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Length,isInstance)\n\texcept:getYoffset = True\n\ttry:P_offsetZ = doc.FamilyManager.AddParameter(\"Offset Z\",BuiltInParameterGroup.PG_GEOMETRY,ParameterType.Length,isInstance)\n\texcept:getZoffset = True\n\t\n\tif getscale == True or getself == True or getX == True or getY == True:\n\t\tallparms = doc.FamilyManager.Parameters\n\t\tfor a in allparms:\n\t\t\tpass\n\t\t\tpname = a.Definition.Name\n\t\t\tif pname == tmpscale and getscale == True:\n\t\t\t\tP_Scale = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_Scale)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_Scale)\n\t\t\tif pname == finalscale and getscalenum == True:\n\t\t\t\tP_ScaleNum = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_ScaleNum)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_ScaleNum)\n\t\t\tif pname == \"Rotate Self\" and getself == True:\n\t\t\t\tP_rotself = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_rotself)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_rotself)\n\t\t\tif pname == \"Rotate X\" and getX == True:\n\t\t\t\tP_rotX = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_rotX)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_rotX)\n\t\t\tif pname == \"Rotate Y\" and getY == True:\n\t\t\t\tP_rotY = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_rotY)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_rotY)\n\t\t\tif pname == \"Offset X\" and getXoffset == True:\n\t\t\t\tP_offsetX = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_offsetX)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_offsetX)\n\t\t\tif pname == \"Offset Y\" and getYoffset == True:\n\t\t\t\tP_offsetY = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_offsetY)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_offsetY)\n\t\t\tif pname == \"Offset Z\" and getZoffset == True:\n\t\t\t\tP_offsetZ = a\n\t\t\t\tif isInstance:\n\t\t\t\t\tdoc.FamilyManager.MakeInstance(P_offsetZ)\n\t\t\t\telse:\n\t\t\t\t\tdoc.FamilyManager.MakeType(P_offsetZ)\n\t\t\t\t\t\n\tparms = refpt1.GetOrderedParameters()\n\tfor e in parms:\n\t\tpname = e.Definition.Name\n\t\tif pname == \"Rotation Angle\":\n\t\t\trotparm1 = e\n\t\tif pname == \"Offset\":\n\t\t\toffparm1 = e\n\t\n\tparms = refpt2.GetOrderedParameters()\n\tfor e in parms:\n\t\tpname = e.Definition.Name\n\t\tif pname == \"Rotation Angle\":\n\t\t\trotparm2 = e\n\t\tif pname == \"Offset\":\n\t\t\toffparm2 = e\n\t\t\t\n\tparms = refpt3.GetOrderedParameters()\n\tfor e in parms:\n\t\tpname = e.Definition.Name\n\t\tif pname == \"Rotation Angle\":\n\t\t\trotparm3 = e\n\t\tif pname == \"Offset\":\n\t\t\toffparm3 = e\n\t\t\t\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(rotparm1,P_rotself)\n\texcept:pass\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(rotparm2,P_rotX)\n\texcept:pass\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(rotparm3,P_rotY)\n\texcept:pass\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(offparm3,P_offsetX)\n\texcept:pass\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(offparm2,P_offsetY)\n\texcept:pass\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(offparm1,P_offsetZ)\n\texcept:pass\n\t\n\tfamsymboltoplace = doc.GetElement(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericModel).WhereElementIsElementType().FirstElementId())\n\treference = refpt3.GetCoordinatePlaneReferenceXZ()\n\tif not famsymboltoplace.IsActive: famsymboltoplace.Activate()\n\tplacedfam = doc.FamilyCreate.NewFamilyInstance(reference,XYZ.Zero,XYZ.Zero,famsymboltoplace)\n\t\n\tparms = famsymboltoplace.GetOrderedParameters()\n\tfor e in parms:\n\t\tpname = e.Definition.Name\n\t\tif pname == tmpscale:\n\t\t\tscaleparm = e\n\ttry:doc.FamilyManager.AssociateElementParameterToFamilyParameter(scaleparm,P_Scale)\n\texcept:pass\n\tdoc.FamilyManager.Set(P_ScaleNum, 1)\n\tdoc.FamilyManager.SetFormula(P_Scale,finalscale + \"*1\")\n\treordered  = []\n\treordered.append(P_ScaleNum)\n\treordered.append(P_rotself)\n\treordered.append(P_rotX)\n\treordered.append(P_rotY)\n\treordered.append(P_offsetX)\n\treordered.append(P_offsetY)\n\treordered.append(P_offsetZ)\n\treordered.append(P_Scale)\n\tttt = []\n\tallparms = doc.FamilyManager.Parameters\n\tfor a in allparms:\n\t\tna = a.Definition.Name\n\t\tif na == tmpscale or na == finalscale or na == \"Rotate Self\" or na == \"Rotate X\" or na == \"Rotate Y\" or na == \"Offset X\" or na == \"Offset Y\" or na == \"Offset Z\":\n\t\t\tpass\n\t\telse:\n\t\t\treordered.append(a)\n\tdoc.FamilyManager.ReorderParameters(List[FamilyParameter](reordered))\n\treturn doc\n\ncurves = [x for x in curves if x]\n\nif len(curves) == 0:\n\tOUT = None\nelse:\n\ttry:\n\t\tname = name + \" K-Rig Profile\"\n\t\tadaptivedoc = initialfamily(fam_path_adaptive,doc,name,\"Generic Models\",False,curves,False,False,False,False,False,tmpscale)\n\t\tgenericdoc = initialfamily(fam_path,adaptivedoc,name + \" Scalable\",\"Generic Models\",False,curves,False,False,False,True,False,tmpscale)\n\t\tsecondplant = initialfamily(fam_path,genericdoc,name + \" Second\",\"Planting\",False,curves,True,True,False,False,False,tmpscale)\n\t\tseconddoc = genericdoc.EditFamily(secondplant)\n\t\tfirstplant = initialfamily(fam_path,seconddoc,name + \" First\",\"Planting\",True,curves,True,True,False,False,False,tmpscale)\n\t\tfirstdoc = seconddoc.EditFamily(firstplant)\n\t\t\n\t\tfirstdoc.LoadFamily(seconddoc,FamOpt1())\n\t\tseconddoc.LoadFamily(genericdoc,FamOpt1())\n\t\tgenericdoc.LoadFamily(adaptivedoc,FamOpt1())\n\t\tgenericparams = genericdoc.FamilyManager.Parameters\n\t\tplantingelements = genericdoc.GetElement(FilteredElementCollector(genericdoc).OfCategory(BuiltInCategory.OST_Planting).WhereElementIsElementType().FirstElementId())\n\t\tfor epms in genericparams:\n\t\t\tpname = epms.Definition.Name\n\t\t\tif pname == tmpscale:\n\t\t\t\tgenparm = epms\n\t\t\n\t\tplantingparams = plantingelements.GetOrderedParameters()\n\t\tfor e in plantingparams:\n\t\t\tpname = e.Definition.Name\n\t\t\tif pname == \"Height\":\n\t\t\t\tplantparm = e\n\t\t\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(genericdoc, 'Associate Parameter')\n\t\ttrans1.Start()\n\t\tgenericdoc.FamilyManager.AssociateElementParameterToFamilyParameter(plantparm,genparm)\n\t\ttrans1.Commit()\n\t\tgenericdoc.LoadFamily(adaptivedoc,FamOpt1())\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(adaptivedoc, 'Working in Adaptive Family')\n\t\ttrans1.Start()\n\t\tfoptions = trans1.GetFailureHandlingOptions()\n\t\tfoptions.SetFailuresPreprocessor(WarnSwallow())\n\t\ttrans1.SetFailureHandlingOptions(foptions)\n\t\tadaptiveop(adaptivedoc,isInstance,tmpscale,finalscale)\n\t\ttrans1.Commit()\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\tadaptivefam = adaptivedoc.LoadFamily(doc,FamOpt1())\n\t\tfirstdoc.Close(False)\n\t\tseconddoc.Close(False)\n\t\tgenericdoc.Close(False)\n\t\tadaptivedoc.Close(False)\n\t\t\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttrans1 = Transaction(doc, 'Refresh Document')\n\t\ttrans1.Start()\n\t\tsymbols = adaptivefam.GetFamilySymbolIds().GetEnumerator()\n\t\tsymbols.MoveNext()\n\t\tsymbol1 = doc.GetElement(symbols.Current)\n\t\tif not symbol1.IsActive: symbol1.Activate()\n\t\tdoc.Regenerate()\n\t\ttrans1.Commit()\n\texcept:\n\t\tTransactionManager.Instance.ForceCloseTransaction()\n\t\ttry:firstdoc.Close(False)\n\t\texcept:pass\n\t\ttry:seconddoc.Close(False)\n\t\texcept:pass\n\t\ttry:genericdoc.Close(False)\n\t\texcept:pass\n\t\ttry:adaptivedoc.Close(False)\n\t\texcept:pass\n\t\tsymbol1 = None\n\tOUT = symbol1",
+      "VariableInputPorts": true,
+      "Id": "17cbf49bbe274cd6a15ff48914f66706",
+      "Inputs": [
+        {
+          "Id": "affb2d3207634c2e825b01e98bdd0e60",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9f1cc40b2b504c62a3e3259c6c1a8c6c",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "df975880c47a443bad1749f9e8be9bed",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3ddb1621aa9d409cbd6df99643cc6426",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "abae0bf864a548f08700ea9f69a80688",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "8cf7c94e444e4f8989f442e03d26d298",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARProfile",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "1ab4131f7e494989af17f8655751dd56",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3351035aaa0548f196d426300e59c927",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARGenricModelTemplatePath",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "35b93b54cdcf4555aa5a0213562a82d0",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "5dd676844bf74ed286a52c3850429550",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARGenricModelAdaptiveTemplatePath",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "2e6b85baafd7444f8af2c9c786813160",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "66b3a51f9376494ba8209c45c7f29bf0",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARIsInstance",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "5a0d450d99224eb89af40f5b13deb3d3",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "fbf71249bcdb4a6a85691905c0b03419",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARFamilyName",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "eaef40d209514dcdb27db27df99f7a00",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f930df0f37b7434cb4fb901fa428b815",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARFamilyType",
+      "Id": "975b7755a5804b1b95620d9fd0bc23e3",
+      "Inputs": [
+        {
+          "Id": "49e0e4192e9447089b3c2764ef415d38",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "8cf7c94e444e4f8989f442e03d26d298",
+      "End": "49e0e4192e9447089b3c2764ef415d38",
+      "Id": "8c338c80dc2f4df0abe9ebacfa994aa7"
+    },
+    {
+      "Start": "3351035aaa0548f196d426300e59c927",
+      "End": "affb2d3207634c2e825b01e98bdd0e60",
+      "Id": "77edd783c17d49008c2355278d524e6a"
+    },
+    {
+      "Start": "5dd676844bf74ed286a52c3850429550",
+      "End": "9f1cc40b2b504c62a3e3259c6c1a8c6c",
+      "Id": "63fa4ea95082487a9bb9ccc399ebd663"
+    },
+    {
+      "Start": "66b3a51f9376494ba8209c45c7f29bf0",
+      "End": "df975880c47a443bad1749f9e8be9bed",
+      "Id": "2f86abd5fe8d4bb2ba028c877fa3d6df"
+    },
+    {
+      "Start": "fbf71249bcdb4a6a85691905c0b03419",
+      "End": "3ddb1621aa9d409cbd6df99643cc6426",
+      "Id": "c660e2532db54060a32ffc74b7ace375"
+    },
+    {
+      "Start": "f930df0f37b7434cb4fb901fa428b815",
+      "End": "abae0bf864a548f08700ea9f69a80688",
+      "Id": "8c652fbf621e41d98775d019ab68d64c"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "Id": "17cbf49bbe274cd6a15ff48914f66706",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 321.551335311573,
+        "Y": 127.470623145401
+      },
+      {
+        "Id": "1ab4131f7e494989af17f8655751dd56",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -225.044510385757,
+        "Y": -18.0415430267062
+      },
+      {
+        "Id": "35b93b54cdcf4555aa5a0213562a82d0",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -225.044510385757,
+        "Y": 131.958456973294
+      },
+      {
+        "Id": "2e6b85baafd7444f8af2c9c786813160",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -225.044510385757,
+        "Y": 281.958456973294
+      },
+      {
+        "Id": "5a0d450d99224eb89af40f5b13deb3d3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -225.044510385757,
+        "Y": 431.958456973294
+      },
+      {
+        "Id": "eaef40d209514dcdb27db27df99f7a00",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": -225.044510385757,
+        "Y": 581.958456973294
+      },
+      {
+        "Id": "975b7755a5804b1b95620d9fd0bc23e3",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Excluded": false,
+        "X": 502.6,
+        "Y": 116.8
+      }
+    ],
+    "Annotations": [],
+    "X": 251.200580598085,
+    "Y": 120.434769823325,
+    "Zoom": 0.53804629768857
+  }
+}

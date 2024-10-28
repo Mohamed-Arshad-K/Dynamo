@@ -1,0 +1,80 @@
+<Workspace Version="1.0.0.1180" X="41.3496772808808" Y="247.259663759925" zoom="1.78359936238281" Name="Get Rhino Mesh Face Center" Description="This node will query a mesh for a face center. " ID="dc665acc-e904-4a67-82e0-1557bbf0a375" Category="Archi-lab_MantisShrimp.Rhinoceros.Properties">
+  <NamespaceResolutionMap />
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="3a2081ca-5ab5-42bd-ab30-a06127855699" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="66.7190191417321" y="-1.68199207920333" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="RhinoObject" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="5c23f91b-3781-4f34-9e7b-de61062172ea" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="431.619415181566" y="-3.36398415840665" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <Symbol value="FaceCenter" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="ff1fddd0-a4f5-447f-a81d-66f118f6820a" type="PythonNodeModels.PythonNode" nickname="Python Script" x="244.277353170036" y="-2.52438022716333" isVisible="false" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" inputcount="1">
+      <Script># Copyright(c) 2015, Konrad Sobon
+# @arch_laboratory, http://archi-lab.net
+
+import clr
+import sys
+
+pyt_path = r'C:\Program Files (x86)\IronPython 2.7\Lib'
+sys.path.append(pyt_path)
+
+import os
+appDataPath = os.getenv('APPDATA')
+msPath = appDataPath + r'\Dynamo\Dynamo Revit\1.0\packages\Mantis Shrimp\extra'
+if msPath not in sys.path:
+	sys.path.append(msPath)
+rhDllPath = appDataPath + r'\Dynamo\Dynamo Revit\1.0\packages\Mantis Shrimp\bin\Rhino3dmIO.dll'
+clr.AddReferenceToFileAndPath(rhDllPath)
+
+import Rhino as rc
+from mantisshrimp import rhPoint3dToPoint
+
+#The inputs to this node will be stored as a list in the IN variable.
+dataEnteringNode = IN
+
+if isinstance(IN[0], list):
+	rhObjects = IN[0]
+else:
+	rhObjects = [IN[0]]
+
+def GetMeshFaceCenter(rhObj):
+	try:
+		points = []
+		geo = rhObj.Geometry
+		if geo.ToString() == "Rhino.Geometry.Mesh":
+			faces = geo.Faces
+			for i in range(0, faces.Count, 1):
+				points.append(rhPoint3dToPoint(faces.GetFaceCenter(i)))
+			return points
+	except:
+		pass
+
+def ProcessList(_func, _list):
+	return map(lambda x: ProcessList(_func, x) if type(x) == list else _func(x) , _list)
+
+#convert rhino/gh geometry to ds geometry
+try:
+	errorReport = None
+	dsPoints = ProcessList(GetMeshFaceCenter, rhObjects)
+except:
+	# if error accurs anywhere in the process catch it
+	import traceback
+	errorReport = traceback.format_exc()
+	
+#Assign your output to the OUT variable
+if errorReport == None:
+	OUT = dsPoints
+else:
+	OUT = errorReport</Script>
+    </PythonNodeModels.PythonNode>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="3a2081ca-5ab5-42bd-ab30-a06127855699" start_index="0" end="ff1fddd0-a4f5-447f-a81d-66f118f6820a" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="ff1fddd0-a4f5-447f-a81d-66f118f6820a" start_index="0" end="5c23f91b-3781-4f34-9e7b-de61062172ea" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

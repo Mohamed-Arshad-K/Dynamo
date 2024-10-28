@@ -1,0 +1,226 @@
+{
+  "Uuid": "f9b21008-d4e7-4f41-9220-2eb2c2edcc47",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Select",
+  "Description": "Advanced Parameter Type Translate",
+  "Name": "Advanced Parameter Type Translate",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "Math": {
+        "Key": "DSCore.Math",
+        "Value": "DSCoreNodes.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki : karam@aecedx.com\r\n# Enable Python support and load DesignScript library\r\n# IMPORTANT : ALL DYNAMO DESIGN SCRIPT NODES ARE AS (dg)\r\nimport clr\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript import Geometry as dg\r\n\r\n# EXTENSION Enable ToDSType\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Enable Revit Elements\r\nfrom Revit.Elements import *\r\n\r\n# EXTENSION Enable Geometry Conversion Methods\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\n# Enable Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\n\r\n# Enable DocumentManager and TransactionManager\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Enable ICollection List Translate\r\nclr.AddReference(\"System\")\r\nimport System.Collections.Generic\r\nfrom System.Collections.Generic import List\r\n\r\n# Choose The Current Document\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\nuidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\r\nuiapp = DocumentManager.Instance.CurrentUIApplication\r\napp = uiapp.Application\r\n\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\r\n\toldrevit = True\r\nelse:\r\n\toldrevit = False\r\n\r\n#The inputs to this node will be stored as a list in the IN variable.\r\ndata = UnwrapElement(IN[0]).strip()\r\nparameters = UnwrapElement(IN[1])\r\n\r\nresult = []\r\n\r\nfor par in parameters:\r\n\tif oldrevit:\r\n\t\ta = str(par.Definition.ParameterType)\r\n\telse:\r\n\t\ta = LabelUtils.GetLabelForSpec(par.Definition.GetDataType())\r\n\tif a == \"Invalid\":\r\n\t\tif \"level\" in par.Definition.Name.lower():\r\n\t\t\ta = \"Level\"\r\n\tif a == \"Wrapping at Ends\" or a == \"Wrapping at Inserts\" :\r\n\t\tstatus = []\r\n\t\tif data.lower() == \"none\" or data.lower() == \"do not wrap\":\r\n\t\t\twraptype = 0\r\n\t\t\tresult.append(wraptype)\r\n\t\t\tstatus.append(wraptype)\r\n\t\telif data.lower() == \"exterior\":\r\n\t\t\twraptype = 1\r\n\t\t\tresult.append(wraptype)\r\n\t\t\tstatus.append(wraptype)\r\n\t\telif data.lower() == \"interior\":\r\n\t\t\twraptype = 2\r\n\t\t\tresult.append(wraptype)\r\n\t\t\tstatus.append(wraptype)\r\n\t\telif data.lower() == \"both\":\r\n\t\t\twraptype = 3\r\n\t\t\tresult.append(wraptype)\r\n\t\t\tstatus.append(wraptype)\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\r\n\telif a == \"Rafter Cut\":\r\n\t\tstatus = []\r\n\t\tif data.lower() == \"plumb cut\":\r\n\t\t\traftype = EaveCutterType.PlumbCut.value__\r\n\t\t\tresult.append(raftype)\r\n\t\t\tstatus.append(raftype)\r\n\t\telif data.lower() == \"two cut - plumb\":\r\n\t\t\traftype = EaveCutterType.TwoCutPlumb.value__\r\n\t\t\tresult.append(raftype)\r\n\t\t\tstatus.append(raftype)\r\n\t\telif data.lower() == \"two cut - square\":\r\n\t\t\traftype = EaveCutterType.TwoCutSquare.value__\r\n\t\t\tresult.append(raftype)\r\n\t\t\tstatus.append(raftype)\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\t\t\t\r\n\telif a == \"Material\":\r\n\t\tstatus = []\r\n\t\tallData = FilteredElementCollector(doc).OfClass(Material).ToElements()\r\n\t\tfor each in allData:\r\n\t\t\tif each.Name.lower() == data.lower():\r\n\t\t\t\teachid = each.Id\r\n\t\t\t\tresult.append(eachid)\r\n\t\t\t\tstatus.append(eachid)\r\n\t\t\t\tbreak\r\n\t\t\telse: continue\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\t\t\t\r\n\telif a == \"Phase Created\" or a == \"Phase Demolished\":\r\n\t\tstatus = []\r\n\t\tallData = FilteredElementCollector(doc).OfClass(Phase).ToElements()\r\n\t\tfor each in allData:\r\n\t\t\tif each.Name.lower() == data.lower():\r\n\t\t\t\teachid = each.Id\r\n\t\t\t\tresult.append(eachid)\r\n\t\t\t\tstatus.append(eachid)\r\n\t\t\t\tbreak\r\n\t\t\telse: continue\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\t\t\t\r\n\telif a == \"Level\":\r\n\t\tstatus = []\r\n\t\tallData = FilteredElementCollector(doc).OfClass(Level).ToElements()\r\n\t\tfor each in allData:\r\n\t\t\tif each.Name.lower() == data.lower():\r\n\t\t\t\teachid = each.Id\r\n\t\t\t\tresult.append(eachid)\r\n\t\t\t\tstatus.append(eachid)\r\n\t\t\t\tbreak\r\n\t\t\telse: continue\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\t\t\t\r\n\telif a == \"FamilyType\":\r\n\t\tstatus = []\r\n\t\ttry:\r\n\t\t\tdatasplit = data.split(\":\")\r\n\t\t\tfamilyname = datasplit[0].strip()\r\n\t\t\ttypename = datasplit[1].strip()\r\n\t\t\tfamilytypes = Revit.Elements.FamilyType.ByFamilyNameAndTypeName(familyname,typename)\r\n\t\t\tfamilytypesid = familytypes.Id\r\n\t\t\tresult.append(familytypesid)\r\n\t\t\tstatus.append(familytypesid)\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\t\r\n\telif \"Text\" in a:\r\n\t\tstatus = []\r\n\t\ttry:\r\n\t\t\tresult.append(str(data))\r\n\t\t\tstatus.append(str(data))\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\r\n\telif \"YesNo\" in a:\r\n\t\tstatus = []\r\n\t\ttry:\r\n\t\t\tndata = int(data)\r\n\t\t\tresult.append(ndata)\r\n\t\t\tstatus.append(ndata)\r\n\t\texcept:\r\n\t\t\tpass\r\n\t\tif len(status) == 0:\r\n\t\t\tresult.append(None)\r\n\t\t\t\r\n\telif \"Integer\" in a:\r\n\t\ttry:\r\n\t\t\tndata = int(data)\r\n\t\t\tresult.append(ndata)\r\n\t\texcept:\r\n\t\t\tresult.append(ndata)\r\n\t\t\t\r\n\telse:\r\n\t\ttry:\r\n\t\t\tif oldrevit:\r\n\t\t\t\tunit_type = par.Definition.UnitType\r\n\t\t\t\tformatoptions = doc.GetUnits().GetFormatOptions(unit_type)\r\n\t\t\t\tdispunits = formatoptions.DisplayUnits\r\n\t\t\t\tndata = float(data)\r\n\t\t\t\tconverted = UnitUtils.ConvertToInternalUnits(ndata,dispunits)\r\n\t\t\t\tndata = converted\r\n\t\t\t\tresult.append(ndata)\r\n\t\t\telse:\r\n\t\t\t\tunit_type = par.Definition.GetDataType()\r\n\t\t\t\tndata = float(data)\r\n\t\t\t\tconverted = UnitUtils.ConvertToInternalUnits(ndata,doc.GetUnits().GetFormatOptions(unit_type).GetUnitTypeId())\r\n\t\t\t\tndata = converted\r\n\t\t\t\tresult.append(ndata)\r\n\t\texcept:\r\n\t\t\tresult.append(data)\r\n\r\nOUT = result",
+      "Engine": "IronPython2",
+      "VariableInputPorts": true,
+      "Id": "1d6497a544254f5597dbe87bf7f87ea9",
+      "Inputs": [
+        {
+          "Id": "dffad13d4e7346f28a21b3ebd3326406",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "04a7eda6e182431284c33640477ebe0b",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "7384f6cc2bf4497ebc4df40675379160",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARParameterToSet",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "01279b7d74224c7ba63cf4d2b8463d3c",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "31e30da42e054a758197a0fc3f53c070",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARParameters",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "d0ed940f583a414d8d6905bd2d64bde6",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e4809039493c468cbef1fba0494647ca",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VARTranslatedParameters",
+      "Id": "f9528a3fbe444b6298d9ceb501ae7881",
+      "Inputs": [
+        {
+          "Id": "10eb96c644524ebb9dc42866776784bf",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "7384f6cc2bf4497ebc4df40675379160",
+      "End": "10eb96c644524ebb9dc42866776784bf",
+      "Id": "3b1875d1abc74d44b3695135403633c1",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "31e30da42e054a758197a0fc3f53c070",
+      "End": "dffad13d4e7346f28a21b3ebd3326406",
+      "Id": "f4532a99aa014ead90b78caa6507baf7",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "e4809039493c468cbef1fba0494647ca",
+      "End": "04a7eda6e182431284c33640477ebe0b",
+      "Id": "ce2a83ee2d5048fab9fd0b4e6ae60e95",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.13.1.3887",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "1d6497a544254f5597dbe87bf7f87ea9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "01279b7d74224c7ba63cf4d2b8463d3c",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Name": "Input",
+        "ShowGeometry": true,
+        "Id": "d0ed940f583a414d8d6905bd2d64bde6",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": -69.3223121369298,
+        "Y": 105.338882503453
+      },
+      {
+        "Name": "Output",
+        "ShowGeometry": true,
+        "Id": "f9528a3fbe444b6298d9ceb501ae7881",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 219.337090456772,
+    "Y": 221.969682552988,
+    "Zoom": 0.803321593462598
+  }
+}

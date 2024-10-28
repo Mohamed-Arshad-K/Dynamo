@@ -1,0 +1,112 @@
+<Workspace Version="1.3.3.4651" X="13.2879999999999" Y="27.55" zoom="0.8425" ScaleFactor="1" Name="Create and Apply View Filter" Description="Create a new View Filter with a BuiltInParameter string and apply it to the list of views." ID="1df08df4-5315-4b6d-8b55-dd08b341af19" Category="GeniusLoci.View">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Numbers" resolvedName="Rutabaga.Numbers" assemblyName="Rutabaga.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="c7e66b7c-7542-4194-9461-0d309e4f8a59" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="187.969139465875" y="194.777448071217" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//As list&#xD;&#xA;Category" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="97b55e05-75f9-4dcb-a81d-35175112b751" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="129.362611275965" y="277.151335311572" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//As string list&#xD;&#xA;bipName" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="975a5308-cedc-4a86-9987-4a998be8d66c" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="143.551335311573" y="349.951335311573" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="ParameterValue" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="3d2d2986-ad7e-4b35-931a-d755b0ff0169" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="692.942433234421" y="253.80178041543" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="Views" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+    <PythonNodeModels.PythonNode guid="de0aad5c-5e1a-45c7-94ca-34cd6399586a" type="PythonNodeModels.PythonNode" nickname="Create Filter for View" x="389.6" y="252" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="true" inputcount="5">
+      <PortInfo index="0" default="False" />
+      <PortInfo index="1" default="False" />
+      <PortInfo index="2" default="False" />
+      <PortInfo index="3" default="False" />
+      <PortInfo index="4" default="False" />
+      <Script>#From Luke Johnson
+#From awilliams
+#From Jonathan.Olesen
+#From Alban de Chasteigner
+
+import clr
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+import System
+from System.Collections.Generic import List
+doc = DocumentManager.Instance.CurrentDBDocument
+
+
+cats = IN[0]
+paramName = IN[1]
+pValue = IN[2]
+views = UnwrapElement(IN[4])
+doc = DocumentManager.Instance.CurrentDBDocument
+TransactionManager.Instance.EnsureInTransaction(doc)
+castlst = []
+for i in cats:
+	castlst.append(ElementId(i.Id))
+
+typedCatList = List[ElementId](castlst)
+rules = []
+
+builtInParams = System.Enum.GetValues(BuiltInParameter)
+bipNames = []
+outview = []
+for i in builtInParams:
+	bipNames.append(str(i))
+bipDict = dict(zip(bipNames,builtInParams))
+bips = [bipDict.get(p, "none") for p in paramName]
+
+TransactionManager.Instance.EnsureInTransaction(doc)
+
+for bip in bips:
+	rules.append(ParameterFilterRuleFactory.CreateLessRule(ElementId(bip), pValue, 0.001))
+	filter = ParameterFilterElement.Create(doc, IN[3], typedCatList, rules)
+
+for view in views:
+	view.AddFilter(filter.Id)
+	outview.append(views)
+	
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = outview[0],filter</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="3b8f9741-86e4-4907-8e02-a0a4cd2be50d" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="93.4267062314541" y="424.923442136499" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="FilterName : string" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CustomNodes.Symbol guid="bbfbc726-5da3-40d4-add3-7a0dd0190817" type="Dynamo.Graph.Nodes.CustomNodes.Symbol" nickname="Input" x="175.233234421365" y="495.928783382789" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True" IsFrozen="false" isPinned="false">
+      <Symbol value="//As list&#xD;&#xA;Views" />
+    </Dynamo.Graph.Nodes.CustomNodes.Symbol>
+    <Dynamo.Graph.Nodes.CodeBlockNodeModel guid="bf9aa6bb-f5e0-4043-a5db-16c42d6c2c2d" type="Dynamo.Graph.Nodes.CodeBlockNodeModel" nickname="Code Block" x="568.142433234421" y="258.00178041543" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false" CodeText="x[0];&#xA;x[1];" ShouldFocus="false">
+      <PortInfo index="0" default="False" />
+    </Dynamo.Graph.Nodes.CodeBlockNodeModel>
+    <Dynamo.Graph.Nodes.CustomNodes.Output guid="686a7109-7b35-4fe3-a3b2-6149644587e0" type="Dynamo.Graph.Nodes.CustomNodes.Output" nickname="Output" x="686.942433234421" y="322.60178041543" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" IsFrozen="false" isPinned="false">
+      <PortInfo index="0" default="False" />
+      <Symbol value="View Filter" />
+    </Dynamo.Graph.Nodes.CustomNodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Graph.Connectors.ConnectorModel start="c7e66b7c-7542-4194-9461-0d309e4f8a59" start_index="0" end="de0aad5c-5e1a-45c7-94ca-34cd6399586a" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="97b55e05-75f9-4dcb-a81d-35175112b751" start_index="0" end="de0aad5c-5e1a-45c7-94ca-34cd6399586a" end_index="1" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="975a5308-cedc-4a86-9987-4a998be8d66c" start_index="0" end="de0aad5c-5e1a-45c7-94ca-34cd6399586a" end_index="2" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="de0aad5c-5e1a-45c7-94ca-34cd6399586a" start_index="0" end="bf9aa6bb-f5e0-4043-a5db-16c42d6c2c2d" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="3b8f9741-86e4-4907-8e02-a0a4cd2be50d" start_index="0" end="de0aad5c-5e1a-45c7-94ca-34cd6399586a" end_index="3" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="bbfbc726-5da3-40d4-add3-7a0dd0190817" start_index="0" end="de0aad5c-5e1a-45c7-94ca-34cd6399586a" end_index="4" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="bf9aa6bb-f5e0-4043-a5db-16c42d6c2c2d" start_index="0" end="3d2d2986-ad7e-4b35-931a-d755b0ff0169" end_index="0" portType="0" />
+    <Dynamo.Graph.Connectors.ConnectorModel start="bf9aa6bb-f5e0-4043-a5db-16c42d6c2c2d" start_index="1" end="686a7109-7b35-4fe3-a3b2-6149644587e0" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Aperçu en arrière-plan" eyeX="-17" eyeY="24" eyeZ="50" lookX="12" lookY="-13" lookZ="-58" upX="0" upY="1" upZ="0" />
+  </Cameras>
+</Workspace>

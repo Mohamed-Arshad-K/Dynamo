@@ -1,0 +1,164 @@
+{
+  "Uuid": "cd249020-5123-4f20-928f-a66eda5cf8e7",
+  "IsCustomNode": true,
+  "Category": "Synthesize.Automate.Geometry",
+  "Description": "Better Geometry.ImportFromSAT",
+  "Name": "Better Geometry.ImportFromSAT",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Created By Karam Baki, karam@aecedx.com\nimport clr\nimport System\n\npf_path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86)\nimport sys\nsys.path.append('%s\\IronPython 2.7\\Lib' %pf_path)\nimport random\nimport string\n\nclr.AddReference('ProtoGeometry')\nfrom Autodesk.DesignScript.Geometry import *\n\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nfrom Autodesk.DesignScript import Geometry as dg\n\nclr.AddReference('RevitServices')\nimport RevitServices\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\ndoc = DocumentManager.Instance.CurrentDBDocument\n\nclr.AddReference('RevitNodes')\nimport Revit\n\ndef betteimport(doc,sat,temp_path):\n\ttry:\n\t\tgeoms = dg.Geometry.ImportFromSAT(sat)\n\t\tif int(DocumentManager.Instance.CurrentUIApplication.Application.VersionNumber) < 2021:\n\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(UnitType.UT_Length).DisplayUnits),8) * 1000\n\t\telse:\n\t\t\tfactor = round(UnitUtils.ConvertFromInternalUnits(3.280839895,doc.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId()),8) * 1000\n\t\trandomname = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])\n\t\tsat_path = '%s%s.sat' % (temp_path, randomname)\n\t\tdg.Geometry.ExportToSAT(geoms,sat_path,factor)\n\t\tfor g in geoms:\n\t\t\tg.Dispose()\n\t\tscaledgeoms = dg.Geometry.ImportFromSAT(sat_path)\n\t\tSystem.IO.File.Delete(sat_path)\n\t\treturn scaledgeoms\n\texcept:\n\t\treturn sat\n\nsat = UnwrapElement(IN[0])\ntemp_path = System.IO.Path.GetTempPath()\n\nOUT = betteimport(doc,sat,temp_path)",
+      "VariableInputPorts": true,
+      "Id": "3e6838ef831a4945969a7f1f88b098c4",
+      "Inputs": [
+        {
+          "Id": "663f1dc106ef407d8da84f5ecd0db462",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4c8684e4ea51474793043b968ffdbc0b",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "NodeType": "InputNode",
+      "Parameter": {
+        "Name": "VARSATFile",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "c157854460684535beaeec43e38de488",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4ad1ed88686e4d969db5f6adb719ea48",
+          "Name": "",
+          "Description": "Symbol",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A function parameter, use with custom nodes.\r\n\r\nYou can specify the type and default value for parameter. E.g.,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "NodeType": "OutputNode",
+      "ElementResolver": null,
+      "Symbol": "VAROutput",
+      "Id": "47ea58f8692a4bf19d2f9122e198f78f",
+      "Inputs": [
+        {
+          "Id": "fa81fdc55e0d49bbbcf0bc79b7800055",
+          "Name": "",
+          "Description": "",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "A function output, use with custom nodes"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "4c8684e4ea51474793043b968ffdbc0b",
+      "End": "fa81fdc55e0d49bbbcf0bc79b7800055",
+      "Id": "d9c1c0600981440a8fe069ff972bb88d"
+    },
+    {
+      "Start": "4ad1ed88686e4d969db5f6adb719ea48",
+      "End": "663f1dc106ef407d8da84f5ecd0db462",
+      "Id": "d9f55ea8bcb64cf28025b52a94df64ce"
+    }
+  ],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.1.0.7500",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -94.359344482421875,
+      "EyeY": 22.652103424072266,
+      "EyeZ": -103.66090393066406,
+      "LookX": 94.359344482421875,
+      "LookY": -22.652103424072266,
+      "LookZ": 103.66090393066406,
+      "UpX": -0.037576217204332352,
+      "UpY": 0.99844074249267578,
+      "UpZ": -0.041280347853899
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "Python Script",
+        "Id": "3e6838ef831a4945969a7f1f88b098c4",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 250.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Input",
+        "Id": "c157854460684535beaeec43e38de488",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "ShowGeometry": true,
+        "Name": "Output",
+        "Id": "47ea58f8692a4bf19d2f9122e198f78f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 449.8,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 197.6,
+    "Y": 258.4,
+    "Zoom": 0.8425
+  }
+}

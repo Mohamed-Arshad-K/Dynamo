@@ -1,0 +1,138 @@
+<Workspace Version="0.9.0.3067" X="-367.189448055095" Y="765.178158059153" zoom="0.665291766472994" Name="Center_line_of_Revit_MEP_Pipe_Improved" Description="Returns centre line and end points of MEP Pipe" ID="7ddac032-a35c-492b-a7f3-0ae380ae90bc" Category="MGO">
+  <NamespaceResolutionMap>
+    <ClassMap partialName="Line" resolvedName="Autodesk.DesignScript.Geometry.Line" assemblyName="ProtoGeometry.dll" />
+    <ClassMap partialName="List" resolvedName="DSCore.List" assemblyName="DSCoreNodes.dll" />
+    <ClassMap partialName="AdaptiveComponent" resolvedName="Revit.Elements.AdaptiveComponent" assemblyName="RevitNodes.dll" />
+  </NamespaceResolutionMap>
+  <Elements>
+    <Dynamo.Nodes.Symbol guid="b09bda03-36b1-45bc-b069-9f7dbc22e6d4" type="Dynamo.Nodes.Symbol" nickname="Input" x="773.493621657763" y="-711.182982007583" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="True">
+      <Symbol value="Pipe Duct Cable Tray Element" />
+    </Dynamo.Nodes.Symbol>
+    <Dynamo.Nodes.Output guid="56bd3723-2b05-4600-9016-797d238349d3" type="Dynamo.Nodes.Output" nickname="Output" x="1949.87999933454" y="-788.650751169773" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="Centre line" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.Output guid="8310e87c-cc69-49da-9e8b-8e889677aaac" type="Dynamo.Nodes.Output" nickname="Output" x="1961.2373343218" y="-642.184249432414" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="Start point" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.Output guid="29c3fe17-7cb1-4973-a90a-ab2a85522b16" type="Dynamo.Nodes.Output" nickname="Output" x="1964.51550269668" y="-551.446989925004" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="End point" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.CodeBlockNodeModel guid="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" type="Dynamo.Nodes.CodeBlockNodeModel" nickname="Code Block" x="1503.21836916431" y="-721.924576086676" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" CodeText="//Centre line&#xA;lst[0];&#xA;//Start point&#xA;lst[1];&#xA;//End point&#xA;lst[2];&#xA;//Connector type&#xA;lst[3];&#xA;//Point of other connectors&#xA;lst[4];&#xA;//Start diameter&#xA;lst[5];&#xA;//End diameter&#xA;lst[6];" ShouldFocus="false" />
+    <PythonNodeModels.PythonNode guid="e04d31e9-fc39-45a4-a9c1-51752aa18f96" type="PythonNodeModels.PythonNode" nickname="MEP.Pipe" x="1188.16648871206" y="-715.269853511974" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False" inputcount="1">
+      <Script># Copyright(c) 2016, Michail Golubjev
+# @damgaard, www.damgaard-ri.dk
+
+import clr
+
+#Import RevitAPI
+clr.AddReference("RevitAPI")
+import Autodesk
+from Autodesk.Revit.DB import *
+
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+#Import Element wrapper extension methods
+clr.AddReference("RevitNodes")
+import Revit
+clr.ImportExtensions(Revit.Elements)
+clr.ImportExtensions(Revit.GeometryConversion)
+
+import sys
+pyt_path = r'C:\Program Files (x86)\IronPython 2.7\Lib'
+sys.path.append(pyt_path)
+
+from itertools import compress
+from itertools import repeat
+
+#The inputs to this node will be stored as a list in the IN variables.
+dataEnteringNode = IN
+
+def ProcessList(_func, _list):
+	return map( lambda x: ProcessList(_func, x) if type(x)==list else _func(x), _list )
+	
+def Unwrap(item):
+	return UnwrapElement(item)
+	
+def GetCons(item):
+	return item.ConnectorManager.Connectors
+
+def GetType(item):
+	return item.ConnectorType
+
+def GetDia(item):
+	return item.Radius * 2 * 304.8
+	
+def GetOrig(item):
+	return item.Origin.ToPoint()
+	
+if isinstance(IN[0], list):
+	items = ProcessList(Unwrap, IN[0])
+else:
+	items = [Unwrap(IN[0])]
+
+try:
+	errorReport = None
+	conset = ProcessList(GetCons, items)
+	
+	contype = [[str(GetType(i)) for i in j]for j in conset]
+	conmask = [[i == "End" for i in j]for j in contype]
+	endcons = [list(compress(i,j)) for i,j in zip(conset,conmask)]
+	
+	endconsorigin = [[GetOrig(i) for i in j]for j in endcons]
+	start = [i[0] for i in endconsorigin]
+	end = [i[1] for i in endconsorigin]
+	centreline = [Line.ByStartPointEndPoint(i,j) for i,j in zip(start,end)]
+	
+	conmask = [[i != "End" for i in j]for j in contype]
+	othercons = [list(compress(i,j)) for i,j in zip(conset,conmask)]
+	otherconsorigin = [[GetOrig(i) for i in j]for j in othercons]
+	
+	startdia = [GetDia(i[0]) for i in endcons]
+	enddia = [GetDia(i[1]) for i in endcons]
+		
+	output = centreline, start, end, contype, otherconsorigin, startdia, enddia
+
+except:
+	# if error occurs anywhere in the process catch it
+	import traceback
+	errorReport = traceback.format_exc()
+		
+#Assign your output to the OUT variable.
+if errorReport == None:
+	OUT = output
+	
+else:
+	OUT = errorReport</Script>
+    </PythonNodeModels.PythonNode>
+    <Dynamo.Nodes.Output guid="dc96bcab-a837-46bf-8e13-842020456829" type="Dynamo.Nodes.Output" nickname="Output" x="1979.19273894649" y="-437.027434563845" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="Connector type" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.Output guid="44b684b9-c597-41a7-a0eb-b46ca0e58bd7" type="Dynamo.Nodes.Output" nickname="Output" x="1975.12145823075" y="-356.958913820904" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="Point tap connector" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.Output guid="f3675603-f962-482f-ac5e-11127139109c" type="Dynamo.Nodes.Output" nickname="Output" x="1965.62180322735" y="-272.81911236222" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="Start diameter" />
+    </Dynamo.Nodes.Output>
+    <Dynamo.Nodes.Output guid="c9791cdb-a7ca-4d45-8fab-107dace1b48e" type="Dynamo.Nodes.Output" nickname="Output" x="1976.47855180266" y="-147.966503746109" isVisible="true" isUpstreamVisible="true" lacing="Disabled" isSelectedInput="False">
+      <Symbol value="End diameter" />
+    </Dynamo.Nodes.Output>
+  </Elements>
+  <Connectors>
+    <Dynamo.Models.ConnectorModel start="b09bda03-36b1-45bc-b069-9f7dbc22e6d4" start_index="0" end="e04d31e9-fc39-45a4-a9c1-51752aa18f96" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="0" end="56bd3723-2b05-4600-9016-797d238349d3" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="1" end="8310e87c-cc69-49da-9e8b-8e889677aaac" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="2" end="29c3fe17-7cb1-4973-a90a-ab2a85522b16" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="3" end="dc96bcab-a837-46bf-8e13-842020456829" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="4" end="44b684b9-c597-41a7-a0eb-b46ca0e58bd7" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="5" end="f3675603-f962-482f-ac5e-11127139109c" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" start_index="6" end="c9791cdb-a7ca-4d45-8fab-107dace1b48e" end_index="0" portType="0" />
+    <Dynamo.Models.ConnectorModel start="e04d31e9-fc39-45a4-a9c1-51752aa18f96" start_index="0" end="8427d2c2-3a2f-47db-a87f-1ccb28abe7e2" end_index="0" portType="0" />
+  </Connectors>
+  <Notes />
+  <Annotations />
+  <Presets />
+  <Cameras>
+    <Camera Name="Background Preview" eyeX="-30679.0761481216" eyeY="1947.93723477557" eyeZ="-50436.9118838817" lookX="30674.0761481216" lookY="-1936.93723477557" lookZ="50428.9118838817" upX="-0.0947037281212596" upY="0.983254907563956" upZ="-0.155695184997268" />
+  </Cameras>
+</Workspace>
